@@ -784,7 +784,10 @@ export default function MarkEntry() {
                   padding: 2px 4px !important; 
                   font-size: 12px !important; 
                 }
-                td, th { padding: 4px !important; }
+                .mark-input {
+                  padding: 0 !important;
+                  margin: 0 !important;
+                }
                 .sig-cell { height: 75px !important; }
               }
 
