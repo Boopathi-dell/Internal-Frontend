@@ -6,6 +6,7 @@ import { Eye, EyeOff } from "lucide-react";
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState("classes");
   const [classes, setClasses] = useState([]);
+  const [rosters, setRosters] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [showAllClassesDropdown, setShowAllClassesDropdown] = useState(false);
   const [formData, setFormData] = useState({
@@ -156,15 +157,27 @@ export default function AdminPanel() {
 
   useEffect(() => {
     loadClasses();
+    loadRosters();
     loadUsers();
     loadActivities();
   }, []);
 
   const loadClasses = async () => {
     try {
+      const rostersRes = await API.get("/api/rosters");
+      setRosters(rostersRes.data);
+      
       const res = await API.get("/api/classes");
       setClasses(res.data);
-      checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, formData.examName, res.data);
+      // Pass rostersRes.data to checkAndLoadExistingLocal since state might not have updated yet
+      checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, formData.examName, res.data, undefined, undefined, rostersRes.data);
+    } catch (err) { console.error(err); }
+  };
+
+  const loadRosters = async () => {
+    try {
+      const res = await API.get("/api/rosters");
+      setRosters(res.data);
     } catch (err) { console.error(err); }
   };
 
@@ -809,7 +822,7 @@ export default function AdminPanel() {
     return `${programme || formData.programme}-${department || formData.department} - ${year}/${semester}/${section} - ${examName}`;
   };
 
-  const checkAndLoadExistingLocal = (y, s, sec, exam, allClasses, prog, dept) => {
+  const checkAndLoadExistingLocal = (y, s, sec, exam, allClasses, prog, dept, providedRosters) => {
     let validatedSem = s;
     if (y === "I" && !["I", "II"].includes(s)) validatedSem = "I";
     else if (y === "II" && !["III", "IV"].includes(s)) validatedSem = "III";
@@ -817,6 +830,7 @@ export default function AdminPanel() {
     else if (y === "IV" && !["VII", "VIII"].includes(s)) validatedSem = "VII";
 
     const list = allClasses || classes;
+    const currentRosters = providedRosters || rosters;
     const currentProg = prog !== undefined ? prog : formData.programme;
     const currentDept = dept !== undefined ? dept : formData.department;
     const targetName = buildClassName(y, validatedSem, sec, exam, currentProg, currentDept);
@@ -841,8 +855,18 @@ export default function AdminPanel() {
           c.yearSemSec === targetYSS
         );
 
-        // Auto-load student roster from cohort
-        if (cohortMatch && cohortMatch.students && cohortMatch.students.length > 0) {
+        // Auto-load student roster from Master Roster or fallback to cohort
+        const rosterMatch = currentRosters.find(r => r.cohortName === `${currentProg}-${currentDept} - ${targetYSS}`);
+        if (rosterMatch && rosterMatch.students && rosterMatch.students.length > 0) {
+          setStudents(rosterMatch.students.map(std => ({
+            regNo: std.regNo,
+            name: std.name,
+            dob: std.dob || "",
+            gender: std.gender || "Boy",
+            studentType: std.studentType || "Day Scholar"
+          })));
+          setAutoLoadedFrom("Master Roster");
+        } else if (cohortMatch && cohortMatch.students && cohortMatch.students.length > 0) {
           setStudents(cohortMatch.students.map(std => ({
             regNo: std.regNo,
             name: std.name,
@@ -977,6 +1001,23 @@ export default function AdminPanel() {
 
   const handleManualClassSelect = (name) => {
     handleManualClassSelectLocal(name, classes);
+  };
+
+  const handleManualRosterSelect = (cohortName) => {
+    if (!cohortName) return;
+    const r = rosters.find(x => x.cohortName === cohortName);
+    if (r) {
+      setFormData(prev => ({
+        ...prev,
+        year: r.year,
+        semester: r.semester,
+        section: r.section,
+        department: r.department,
+        programme: r.programme
+      }));
+      setStudents(r.students || []);
+      setSelectedClassId(r.cohortName);
+    }
   };
 
   const handleFileUpload = (e) => {
@@ -1160,15 +1201,19 @@ export default function AdminPanel() {
 
   const handleSaveRoster = async () => {
     try {
+      const cohortName = `${formData.programme}-${formData.department} - ${formData.year}/${formData.semester}/${formData.section}`;
       const payload = {
+        cohortName,
         students,
         department: formData.department,
-        yearSemSec: `${formData.year}/${formData.semester}/${formData.section}`,
+        year: formData.year,
+        semester: formData.semester,
+        section: formData.section,
         programme: formData.programme
       };
-      await API.post("/api/classes/roster", payload);
+      await API.post("/api/rosters", payload);
       alert("Roster saved successfully!");
-      loadClasses();
+      loadRosters();
     } catch (err) {
       alert("Failed to save roster: " + err.message);
     }
@@ -2031,11 +2076,11 @@ export default function AdminPanel() {
             <select
               className="select-input"
               value={selectedClassId}
-              onChange={e => handleManualClassSelect(e.target.value)}
+              onChange={e => handleManualRosterSelect(e.target.value)}
             >
               <option value="">-- Choose Class to Update Roster --</option>
-              {classes.map(c => (
-                <option key={c.className} value={c.className}>{c.className}</option>
+              {rosters.map(r => (
+                <option key={r.cohortName} value={r.cohortName}>{r.cohortName}</option>
               ))}
             </select>
           </div>
