@@ -489,7 +489,7 @@ export default function ResultAnalysis() {
           <div style={{ textAlign: "right", fontSize: "10px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
             MEC/IQAC/2025-26/COE/003
           </div>
-          <img src={headerLogo} alt="MEC Header" style={{ width: "100%", maxWidth: "500px", height: "auto", display: "block", margin: "0 auto" }} />
+          <img src={headerLogo} alt="MEC Header" style={{ width: "100%", height: "85px", display: "block" }} />
 
           <div style={{ textAlign: "center", marginTop: "8px" }}>
             <h2 style={{ margin: "5px 0 2px", fontSize: "14px", fontWeight: "bold", color: "black" }}>OFFICE OF THE CONTROLLER OF EXAMINATIONS</h2>
