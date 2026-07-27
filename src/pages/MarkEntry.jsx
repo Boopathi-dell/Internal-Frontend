@@ -11,6 +11,7 @@ export default function MarkEntry() {
   const [classData, setClassData] = useState(null);
   const [showAll, setShowAll] = useState(false);
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
+  const [printEditAccess, setPrintEditAccess] = useState(true);
   const examNameOptions = [
     "Model Exam",
     "Model Practical Exam",
@@ -91,6 +92,13 @@ export default function MarkEntry() {
 
   useEffect(() => {
     loadClasses();
+    if (sessionStorage.getItem("role") === "printAdmin") {
+      API.get("/api/auth/admin/print-access", {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      })
+      .then(res => setPrintEditAccess(res.data.printEditAccess))
+      .catch(err => console.error(err));
+    }
   }, []);
 
   async function loadClasses() {
@@ -218,7 +226,7 @@ export default function MarkEntry() {
   };
 
   const handleMarkChange = (studentIndex, subjectIndex, value) => {
-    if (!classData || classData.allowEditing === false || isEditingLockedByDate().locked) return;
+    if (!classData || classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) return;
 
     const strVal = value.toUpperCase();
     
@@ -307,7 +315,7 @@ export default function MarkEntry() {
 
   const handleSave = async () => {
     if (!classData) return;
-    if (classData.allowEditing === false) {
+    if (classData.allowEditing === false || !printEditAccess) {
       alert("Entry is currently locked by Administrator.");
       return;
     }
@@ -703,13 +711,15 @@ export default function MarkEntry() {
           )}
 
           <div style={{ marginTop: "20px" }}>
-          {(classData.allowEditing === false || isEditingLockedByDate().locked) && (
+          {(classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) && (
             <div className="no-print" style={{ padding: "12px 20px", background: "rgba(239, 68, 68, 0.15)", color: "#e11d48", borderRadius: "8px", border: "1px solid #fb7185", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px", fontWeight: "700" }}>
               <span>🔒 ENTRY LOCKED:</span>
               <span style={{ fontWeight: "400", fontSize: "0.9rem", flex: 1 }}>
                 {classData.allowEditing === false 
                   ? "Administrator has restricted mark entry for this session. Changes cannot be saved."
-                  : isEditingLockedByDate().reason}
+                  : !printEditAccess
+                    ? "Read-only mode enabled by Administrator."
+                    : isEditingLockedByDate().reason}
               </span>
               { (classData.allowEditing === false || isEditingLockedByDate().locked) && (
                 <button
@@ -731,7 +741,7 @@ export default function MarkEntry() {
             </div>
           )}
 
-          {classData.allowEditing !== false && !isEditingLockedByDate().locked && (classData.editingStartDate || classData.editingEndDate) && (
+          {classData.allowEditing !== false && printEditAccess && !isEditingLockedByDate().locked && (classData.editingStartDate || classData.editingEndDate) && (
             <div className="no-print" style={{ padding: "12px 20px", background: "rgba(16, 185, 129, 0.15)", color: "#047857", borderRadius: "8px", border: "1px solid #34d399", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px", fontWeight: "700" }}>
               <span>📅 MARK ENTRY DURATION:</span>
               <span style={{ fontWeight: "400", fontSize: "0.9rem" }}>
@@ -741,6 +751,12 @@ export default function MarkEntry() {
                     ? `Allowed starting from ${formatDate(classData.editingStartDate)} ${classData.editingStartTime || "00:00"}.`
                     : `Allowed until ${formatDate(classData.editingEndDate)} ${classData.editingEndTime || "23:59"}.`}
               </span>
+            </div>
+          )}
+
+          {!printEditAccess && (
+            <div className="lock-banner" style={{ background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8", padding: "10px", textAlign: "center", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.3)", marginBottom: "15px", fontWeight: "bold" }}>
+              🖨️ View & Print Only Mode (Edit Access Disabled by Admin)
             </div>
           )}
           <style>{`
@@ -836,18 +852,18 @@ export default function MarkEntry() {
           <button
             className="print-btn"
             onClick={handleSave}
-            disabled={classData.allowEditing === false || isEditingLockedByDate().locked || isSaving}
+            disabled={classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess}
             style={{ 
               marginBottom: "20px", 
               padding: "10px 20px", 
-              background: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving) ? "#9ca3af" : "#4CAF50", 
+              background: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess) ? "#9ca3af" : "#4CAF50", 
               color: "white", 
-              cursor: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving) ? "not-allowed" : "pointer", 
+              cursor: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess) ? "not-allowed" : "pointer", 
               border: "none",
-              opacity: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving) ? 0.7 : 1
+              opacity: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess) ? 0.7 : 1
             }}
           >
-            {classData.allowEditing === false ? "🔒 Entry Locked" : isEditingLockedByDate().locked ? "🔒 Entry Expired/Not Started" : isSaving ? "Saving..." : "Save Marks"}
+            {classData.allowEditing === false ? "🔒 Entry Locked" : !printEditAccess ? "🔒 Read-only" : isEditingLockedByDate().locked ? "🔒 Entry Expired/Not Started" : isSaving ? "Saving..." : "Save Marks"}
           </button>
 
           <div className="printable-area" style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
@@ -949,7 +965,7 @@ export default function MarkEntry() {
                             textAlign: "center"
                           }}
                           value={(s.marks && s.marks[j]) || ""}
-                          readOnly={classData.allowEditing === false || isEditingLockedByDate().locked}
+                          readOnly={classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess}
                           onChange={(e) => handleMarkChange(i, j, e.target.value)}
                           onKeyDown={(e) => handleKeyDown(e, i, j)}
                           ref={(el) => inputRefs.current[`${i}_${j}`] = el}

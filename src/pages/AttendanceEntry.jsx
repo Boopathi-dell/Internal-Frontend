@@ -16,6 +16,7 @@ export default function AttendanceEntry() {
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "loading" });
+  const [printEditAccess, setPrintEditAccess] = useState(true);
   const fileInputRef = useRef(null);
 
   const getSemOptionsForYear = (year) => {
@@ -28,7 +29,16 @@ export default function AttendanceEntry() {
     }
   };
 
-  useEffect(() => { loadClasses(); }, []);
+  useEffect(() => {
+    loadClasses();
+    if (sessionStorage.getItem("role") === "printAdmin") {
+      API.get("/api/auth/admin/print-access", {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      })
+      .then(res => setPrintEditAccess(res.data.printEditAccess))
+      .catch(err => console.error(err));
+    }
+  }, []);
 
   async function loadClasses() {
     try {
@@ -87,14 +97,14 @@ export default function AttendanceEntry() {
   };
 
   const handleAttendanceChange = (studentIndex, value) => {
-    if (!classData || classData.allowEditing === false) return;
+    if (!classData || classData.allowEditing === false || !printEditAccess) return;
     const newStudents = [...classData.students];
     newStudents[studentIndex].attendance = value;
     setClassData({ ...classData, students: newStudents });
   };
 
   const handleSave = async () => {
-    if (!classData || classData.allowEditing === false) return;
+    if (!classData || classData.allowEditing === false || !printEditAccess) return;
     setIsSaving(true);
     setToast({ show: true, message: "Saving attendance... 🚀", type: "loading" });
     try {
@@ -247,14 +257,20 @@ export default function AttendanceEntry() {
               📥 Download Sample Excel
             </button>
             <input type="file" accept=".xlsx, .xls" ref={fileInputRef} onChange={handleFileUpload} style={{ display: "none" }} />
-            <button onClick={() => fileInputRef.current?.click()} disabled={classData.allowEditing === false} style={{ padding: "10px 20px", background: classData.allowEditing === false ? "#9ca3af" : "#8b5cf6", color: "white", cursor: classData.allowEditing === false ? "not-allowed" : "pointer", border: "none", borderRadius: "8px", fontWeight: "bold" }}>
+            <button onClick={() => fileInputRef.current?.click()} disabled={classData.allowEditing === false || !printEditAccess} style={{ padding: "10px 20px", background: (classData.allowEditing === false || !printEditAccess) ? "#9ca3af" : "#8b5cf6", color: "white", cursor: (classData.allowEditing === false || !printEditAccess) ? "not-allowed" : "pointer", border: "none", borderRadius: "8px", fontWeight: "bold" }}>
               📤 Upload Excel Data
             </button>
             <div style={{ flex: 1 }}></div>
-            <button onClick={handleSave} disabled={classData.allowEditing === false || isSaving} style={{ padding: "10px 30px", background: classData.allowEditing === false ? "#9ca3af" : "#10b981", color: "white", cursor: classData.allowEditing === false ? "not-allowed" : "pointer", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "1.1rem" }}>
-              {classData.allowEditing === false ? "🔒 Locked" : isSaving ? "Saving..." : "💾 Save Attendance"}
+            <button onClick={handleSave} disabled={classData.allowEditing === false || isSaving || !printEditAccess} style={{ padding: "10px 30px", background: (classData.allowEditing === false || isSaving || !printEditAccess) ? "#9ca3af" : "#10b981", color: "white", cursor: (classData.allowEditing === false || isSaving || !printEditAccess) ? "not-allowed" : "pointer", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "1.1rem" }}>
+              {isSaving ? "Saving..." : classData.allowEditing === false ? "🔒 Locked" : !printEditAccess ? "🔒 Read-only" : "💾 Save Attendance"}
             </button>
           </div>
+
+          {!printEditAccess && (
+            <div style={{ background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8", padding: "12px", textAlign: "center", borderRadius: "8px", border: "1px solid rgba(56, 189, 248, 0.3)", marginTop: "15px", fontWeight: "bold" }}>
+              🖨️ View & Print Only Mode (Edit Access Disabled by Admin)
+            </div>
+          )}
 
           <div style={{ marginTop: "20px", overflowX: "auto", background: "rgba(255,255,255,0.02)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", color: "white" }}>
@@ -276,7 +292,7 @@ export default function AttendanceEntry() {
                       <input
                         type="text"
                         value={s.attendance || ""}
-                        readOnly={classData.allowEditing === false}
+                        readOnly={classData.allowEditing === false || !printEditAccess}
                         onChange={(e) => handleAttendanceChange(i, e.target.value)}
                         placeholder="e.g. 85"
                         style={{

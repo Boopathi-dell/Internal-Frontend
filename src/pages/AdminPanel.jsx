@@ -102,6 +102,7 @@ export default function AdminPanel() {
 
   // User management states
   const [users, setUsers] = useState([]);
+  const [printEditAccess, setPrintEditAccess] = useState(false);
   const [activities, setActivities] = useState([]);
   const [yearApprovals, setYearApprovals] = useState([]);
 
@@ -989,6 +990,10 @@ export default function AdminPanel() {
     try {
       const res = await API.get("/api/auth/users");
       setUsers(res.data);
+      const printRes = await API.get("/api/auth/admin/print-access", {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      });
+      setPrintEditAccess(printRes.data.printEditAccess);
     } catch (err) { console.error(err); }
   };
 
@@ -1387,6 +1392,17 @@ export default function AdminPanel() {
       await API.delete(`/api/auth/users/${userId}`);
       loadUsers();
     } catch (err) { alert("Failed to delete user"); }
+  };
+
+  const handleTogglePrintAccess = async () => {
+    try {
+      const newVal = !printEditAccess;
+      await API.post("/api/auth/admin/print-access", { printEditAccess: newVal }, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      });
+      setPrintEditAccess(newVal);
+      alert("Print user edit access updated.");
+    } catch (err) { alert("Failed to update print user access"); }
   };
 
   const handleSaveSecurity = async (e) => {
@@ -2496,6 +2512,48 @@ export default function AdminPanel() {
       {activeTab === "users" && (
         <div className="glass-card fade-in">
           <h3 style={{ marginBottom: "1.5rem" }}>System Access Management</h3>
+          
+          {/* Print User Access Control */}
+          <div style={{
+            background: "rgba(15, 23, 42, 0.4)", border: "1px solid rgba(14, 165, 233, 0.3)",
+            padding: "1.5rem", borderRadius: "12px", marginBottom: "2rem", display: "flex", 
+            justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem"
+          }}>
+            <div>
+              <h4 style={{ margin: "0 0 0.5rem 0", color: "#38bdf8", fontSize: "1.1rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                🖨️ Print User Edit Access
+              </h4>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                Allow the print admin account to edit marks and attendance. If disabled, they can only view and print.
+              </p>
+            </div>
+            <label className="toggle-switch" style={{ display: "flex", alignItems: "center", cursor: "pointer" }}>
+              <input 
+                type="checkbox" 
+                checked={printEditAccess} 
+                onChange={handleTogglePrintAccess} 
+                style={{ display: "none" }}
+              />
+              <div style={{
+                width: "48px", height: "24px", 
+                background: printEditAccess ? "#10b981" : "rgba(255,255,255,0.1)", 
+                borderRadius: "12px", position: "relative",
+                transition: "all 0.3s ease",
+                border: `1px solid ${printEditAccess ? "#10b981" : "rgba(255,255,255,0.2)"}`
+              }}>
+                <div style={{
+                  position: "absolute", top: "2px", left: printEditAccess ? "26px" : "2px",
+                  width: "18px", height: "18px", background: "#fff", borderRadius: "50%",
+                  transition: "all 0.3s ease", boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
+                }} />
+              </div>
+              <span style={{ marginLeft: "10px", fontSize: "0.9rem", fontWeight: "bold", color: printEditAccess ? "#10b981" : "var(--text-muted)" }}>
+                {printEditAccess ? "Edit Enabled" : "View & Print Only"}
+              </span>
+            </label>
+          </div>
+
+          <h4 style={{ marginBottom: "1rem", color: "#e2e8f0" }}>👨‍🏫 Faculty Approvals</h4>
           <div className="table-container">
             <table className="admin-table">
               <thead>
