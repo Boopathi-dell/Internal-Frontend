@@ -859,7 +859,7 @@ export default function MarkEntry() {
               <div style={{ textAlign: "right", fontSize: "9px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
                 MEC/IQAC/2025-26/COE/001
               </div>
-              <img src={headerLogo} alt="MEC Header" style={{ width: "100%", maxWidth: "700px", height: "auto", display: "block", margin: "0 auto" }} />
+              <img src={headerLogo} alt="MEC Header" style={{ width: "100%", maxWidth: "500px", height: "auto", display: "block", margin: "0 auto" }} />
 
               <div style={{ textAlign: "center", marginTop: "8px" }}>
                 <h2 style={{ margin: "5px 0 2px", fontSize: "14px", color: "black", fontWeight: "bold" }}>OFFICE OF THE CONTROLLER OF EXAMINATIONS</h2>
