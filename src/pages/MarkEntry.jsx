@@ -5,6 +5,64 @@ import headerLogo from "../assets/logo image.jpg";
 
 
 
+const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDate, handleMarkChange, handleKeyDown, i, inputRef }) => {
+  const initialValue = (s.marks && s.marks[j]) || "";
+  const [val, setVal] = useState(initialValue);
+
+  useEffect(() => {
+    setVal(initialValue);
+  }, [initialValue]);
+
+  const handleChange = (e) => {
+    setVal(e.target.value);
+  };
+
+  const handleBlur = () => {
+    if (val !== initialValue) {
+      handleMarkChange(i, j, val);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" || e.keyCode === 13 || e.key.startsWith("Arrow")) {
+      if (val !== initialValue) {
+        handleMarkChange(i, j, val);
+      }
+    }
+    handleKeyDown(e, i, j);
+  };
+
+  const isFailed = s.marks && (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark));
+
+  return (
+    <input
+      type="text"
+      className="mark-input"
+      enterKeyHint="next"
+      style={{
+        fontSize: "11px",
+        height: "100%",
+        width: "100%",
+        border: "none",
+        backgroundColor: "transparent",
+        color: "black",
+        WebkitPrintColorAdjust: "exact",
+        printColorAdjust: "exact",
+        display: "block",
+        padding: "4px 0",
+        fontWeight: isFailed ? "bold" : "normal",
+        textAlign: "center"
+      }}
+      value={val}
+      readOnly={classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKey}
+      ref={inputRef}
+    />
+  );
+};
+
 export default function MarkEntry() {
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
@@ -944,31 +1002,16 @@ export default function MarkEntry() {
                           printColorAdjust: "exact"
                         }}
                       >
-                        <input
-                          type="text"
-                          className="mark-input"
-                          enterKeyHint="next"
-                          style={{
-                            fontSize: "11px",
-                            height: "100%",
-                            width: "100%",
-                            border: "none",
-                            backgroundColor: "transparent",
-                            color: "black",
-                            WebkitPrintColorAdjust: "exact",
-                            printColorAdjust: "exact",
-                            display: "block",
-                            padding: "4px 0",
-                            fontWeight: (s.marks && (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark)))
-                              ? "bold"
-                              : "normal",
-                            textAlign: "center"
-                          }}
-                          value={(s.marks && s.marks[j]) || ""}
-                          readOnly={classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess}
-                          onChange={(e) => handleMarkChange(i, j, e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e, i, j)}
-                          ref={(el) => inputRefs.current[`${i}_${j}`] = el}
+                        <LocalMarkInput
+                          s={s}
+                          j={j}
+                          classData={classData}
+                          printEditAccess={printEditAccess}
+                          isEditingLockedByDate={isEditingLockedByDate}
+                          handleMarkChange={handleMarkChange}
+                          handleKeyDown={handleKeyDown}
+                          i={i}
+                          inputRef={(el) => inputRefs.current[`${i}_${j}`] = el}
                         />
                       </td>
                     ))}

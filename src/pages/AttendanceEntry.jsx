@@ -2,6 +2,50 @@ import { useState, useEffect, useRef } from "react";
 import API from "../api";
 import * as XLSX from "xlsx";
 
+const LocalAttendanceInput = ({ s, i, classData, printEditAccess, handleAttendanceChange }) => {
+  const initialValue = s.attendance || "";
+  const [val, setVal] = useState(initialValue);
+
+  useEffect(() => {
+    setVal(initialValue);
+  }, [initialValue]);
+
+  const handleChange = (e) => {
+    setVal(e.target.value);
+  };
+
+  const handleBlur = () => {
+    if (val !== initialValue) {
+      handleAttendanceChange(i, val);
+    }
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" || e.keyCode === 13) {
+      if (val !== initialValue) {
+        handleAttendanceChange(i, val);
+      }
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      value={val}
+      readOnly={classData.allowEditing === false || !printEditAccess}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKey}
+      placeholder="e.g. 85"
+      style={{
+        width: "80px", padding: "8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)",
+        background: "rgba(0,0,0,0.2)", color: "white", textAlign: "center", outline: "none",
+        fontWeight: "bold"
+      }}
+    />
+  );
+};
+
 export default function AttendanceEntry() {
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
@@ -289,17 +333,12 @@ export default function AttendanceEntry() {
                     <td style={{ padding: "12px", fontFamily: "monospace", fontSize: "1.1rem" }}>{s.regNo}</td>
                     <td style={{ padding: "12px", fontWeight: "500" }}>{s.name}</td>
                     <td style={{ padding: "8px", textAlign: "center" }}>
-                      <input
-                        type="text"
-                        value={s.attendance || ""}
-                        readOnly={classData.allowEditing === false || !printEditAccess}
-                        onChange={(e) => handleAttendanceChange(i, e.target.value)}
-                        placeholder="e.g. 85"
-                        style={{
-                          width: "80px", padding: "8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)",
-                          background: "rgba(0,0,0,0.2)", color: "white", textAlign: "center", outline: "none",
-                          fontWeight: "bold"
-                        }}
+                      <LocalAttendanceInput 
+                        s={s} 
+                        i={i} 
+                        classData={classData} 
+                        printEditAccess={printEditAccess} 
+                        handleAttendanceChange={handleAttendanceChange} 
                       />
                     </td>
                   </tr>
