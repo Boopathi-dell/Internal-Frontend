@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import API from "../api";
 import * as XLSX from "xlsx";
-import headerLogo from "../assets/logo image.png";
+import headerLogo from "../assets/logo image.jpg";
 
 
 

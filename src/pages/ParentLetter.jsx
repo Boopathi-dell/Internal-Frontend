@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import API from "../api";
-import headerLogo from "../assets/logo image.png";
+import headerLogo from "../assets/logo image.jpg";
 
 function getLetterGrade(mark, maxMark, passMark) {
   const m = String(mark).toUpperCase().trim();
