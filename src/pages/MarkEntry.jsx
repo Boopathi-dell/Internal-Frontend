@@ -889,7 +889,6 @@ export default function MarkEntry() {
                   <th rowSpan="2" style={{ padding: "3px" }}>S.No.</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Register<br />Number</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Name of the<br />Student</th>
-                  <th rowSpan="2" style={{ padding: "3px", width: "40px" }}>Att.<br />%</th>
                   {(classData.subjects || []).map((sub, idx) => (
                     <th key={idx} style={{ padding: "2px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px" }}>
                       {getCourseDetails()[idx]?.courseCode || sub}
@@ -914,21 +913,6 @@ export default function MarkEntry() {
                     <td style={{ padding: "4px" }}>{i + 1}</td>
                     <td style={{ padding: "4px" }}>{s.regNo}</td>
                     <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px", fontSize: "12px" }}>{s.name}</td>
-                    <td style={{ padding: "0" }}>
-                      <input
-                        type="text"
-                        className="mark-input"
-                        style={{
-                          fontSize: "11px", height: "100%", width: "100%", border: "none",
-                          backgroundColor: "transparent", color: "black", textAlign: "center", display: "block", padding: "4px 0"
-                        }}
-                        value={s.attendance || ""}
-                        readOnly={classData.allowEditing === false || isEditingLockedByDate().locked}
-                        onChange={(e) => handleAttendanceChange(i, e.target.value)}
-                        onKeyDown={(e) => handleKeyDown(e, i, -1)}
-                        ref={(el) => inputRefs.current[`${i}_-1`] = el}
-                      />
-                    </td>
                     {(classData.subjects || []).map((sub, j) => (
                       <td
                         key={j}
