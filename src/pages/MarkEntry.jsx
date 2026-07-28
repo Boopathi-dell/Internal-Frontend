@@ -1005,7 +1005,7 @@ export default function MarkEntry() {
                         key={j}
                         style={{
                           padding: "0",
-                          backgroundColor: (s.marks && (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark)))
+                          backgroundColor: (s.marks && (classData.examName === "ESE" ? (s.marks[j] === "AB" || s.marks[j] === "U" || s.marks[j] === "U*" || s.marks[j] === "FAIL") : (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark))))
                             ? "rgba(239, 68, 68, 0.45)"
                             : "transparent",
                           WebkitPrintColorAdjust: "exact",
