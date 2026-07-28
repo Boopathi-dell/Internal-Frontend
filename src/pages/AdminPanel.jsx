@@ -24,7 +24,8 @@ export default function AdminPanel() {
     editingStartDate: "",
     editingEndDate: "",
     editingStartTime: "",
-    editingEndTime: ""
+    editingEndTime: "",
+    eseGradingSystem: "System 2"
   });
   const [courseDetails, setCourseDetails] = useState([]);
   const [targetPassPercentage, setTargetPassPercentage] = useState("85");
@@ -85,7 +86,8 @@ export default function AdminPanel() {
     examName: "ESE",
     passMark: "50",
     markPerSubject: "100",
-    date: new Date().toLocaleDateString('en-GB').replace(/\//g, '.')
+    date: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
+    eseGradingSystem: "System 2"
   });
   const [eseUploading, setEseUploading] = useState(false);
   const [eseMessage, setEseMessage] = useState("");
@@ -946,7 +948,8 @@ export default function AdminPanel() {
         editingStartDate: cls.editingStartDate || "",
         editingEndDate: cls.editingEndDate || "",
         editingStartTime: cls.editingStartTime || "",
-        editingEndTime: cls.editingEndTime || ""
+        editingEndTime: cls.editingEndTime || "",
+        eseGradingSystem: cls.eseGradingSystem || "System 2"
       });
       let loadedCourseDetails = [];
       if (cls.courseDetails && cls.courseDetails.length > 0) {
@@ -1191,7 +1194,8 @@ export default function AdminPanel() {
         editingEndDate: formData.editingEndDate,
         editingStartTime: formData.editingStartTime || "",
         editingEndTime: formData.editingEndTime || "",
-        propagateRoster: propagateRoster
+        propagateRoster: propagateRoster,
+        eseGradingSystem: formData.eseGradingSystem
       };
       await API.post("/api/classes", payload);
       alert("Class saved successfully!");
@@ -1324,6 +1328,7 @@ export default function AdminPanel() {
             department: eseFormData.department,
             yearSemSec: `${eseFormData.year}/${eseFormData.semester}/${eseFormData.section}`,
             programme: eseFormData.programme,
+            eseGradingSystem: eseFormData.eseGradingSystem
           });
           setEseCourseDetails(minimalCourseDetails);
           setEseUploading(false);
@@ -1913,6 +1918,16 @@ export default function AdminPanel() {
                 ))}
               </select>
             </div>
+            
+            {formData.examName === "ESE" && (
+              <div className="input-group" style={{ marginTop: "1rem", marginBottom: "1rem" }}>
+                <label className="input-label" style={{ color: "#f59e0b" }}>ESE Grading System (Important!)</label>
+                <select value={formData.eseGradingSystem} onChange={e => setFormData({ ...formData, eseGradingSystem: e.target.value })} className="select-input" style={{ border: "1px solid #f59e0b" }}>
+                  <option value="System 1">System 1 (S:10, A+:9, A:8, B+:7, B:6.5, C+:6, C:5, U:0, U*:0)</option>
+                  <option value="System 2">System 2 (O:10, A+:9, A:8, B+:7, B:6, C:5, U:0, U*:0)</option>
+                </select>
+              </div>
+            )}
             
             <div className="input-row-2col">
               <div className="input-group">
@@ -3643,6 +3658,13 @@ export default function AdminPanel() {
                 <div className="input-group">
                   <label className="input-label">Exam Name</label>
                   <input type="text" className="text-input" value={eseFormData.examName} onChange={e => setEseFormData({ ...eseFormData, examName: e.target.value })} />
+                </div>
+                <div className="input-group">
+                  <label className="input-label" style={{ color: "#f59e0b" }}>Grading System</label>
+                  <select className="select-input" value={eseFormData.eseGradingSystem} onChange={e => setEseFormData({ ...eseFormData, eseGradingSystem: e.target.value })} style={{ border: "1px solid #f59e0b" }}>
+                    <option value="System 1">System 1 (S:10, A+:9, A:8, B+:7, B:6.5, C+:6, C:5, U:0, U*:0)</option>
+                    <option value="System 2">System 2 (O:10, A+:9, A:8, B+:7, B:6, C:5, U:0, U*:0)</option>
+                  </select>
                 </div>
                 <div className="input-group">
                   <label className="input-label">Programme</label>

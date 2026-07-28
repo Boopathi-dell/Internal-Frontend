@@ -171,10 +171,16 @@ export default function RankList() {
     let pass = 0;
     students.forEach(s => {
       const marks = s.marks || [];
-      const strVal = (marks[subjectIndex] || "").toString().toUpperCase();
-      if (strVal !== "A" && strVal !== "AB" && strVal !== "") {
-        const mark = Number(strVal);
-        if (!isNaN(mark) && mark >= (classData.passMark || 50)) pass++;
+      const strVal = String(marks[subjectIndex] || "").toUpperCase().trim();
+      if (classData.examName === "ESE") {
+        if (strVal !== "AB" && strVal !== "U" && strVal !== "U*" && strVal !== "FAIL" && strVal !== "") {
+          pass++;
+        }
+      } else {
+        if (strVal !== "A" && strVal !== "AB" && strVal !== "") {
+          const mark = Number(strVal);
+          if (!isNaN(mark) && mark >= (classData.passMark || 50)) pass++;
+        }
       }
     });
     return { total, pass, fail: total - pass, passPercent: total === 0 ? 0 : Math.round((pass / total) * 100) };

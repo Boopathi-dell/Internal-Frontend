@@ -214,18 +214,34 @@ export default function ResultAnalysis() {
     ? classData.courseDetails
     : classData.subjects.map(s => ({ courseCode: s, courseName: "", facultyName: "" }));
 
+  const isESE = classData.examName === "ESE";
+
+  const isAbsent = (val) => {
+    const v = (val || "").toUpperCase().trim();
+    if (isESE) return v === "AB";
+    return v === "AB" || v === "A";
+  };
+
+  const isFail = (val) => {
+    const v = (val || "").toUpperCase().trim();
+    if (isESE) {
+      return v === "U" || v === "U*" || v === "FAIL";
+    } else {
+      if (v === "AB" || v === "A") return false; 
+      const mark = Number(v);
+      return !isNaN(mark) && mark < classData.passMark;
+    }
+  };
+
   // Helper: Get subject stats
   const getSubjectStats = (subIdx) => {
     let total = 0, pass = 0, fail = 0, ab = 0;
     students.forEach(s => {
       total++;
       const val = (s.marks[subIdx] || "").toUpperCase();
-      if (val === "AB" || val === "A") { ab++; }
-      else {
-        const mark = Number(val);
-        if (!isNaN(mark) && mark >= classData.passMark) pass++;
-        else fail++;
-      }
+      if (isAbsent(val)) { ab++; }
+      else if (isFail(val)) { fail++; }
+      else { pass++; }
     });
     return { total, pass, fail, ab, passPercent: total > 0 ? Math.round((pass / total) * 100) : 0 };
   };
@@ -255,10 +271,7 @@ export default function ResultAnalysis() {
 
   // Course-wise absentees
   const getAbsenteesForSubject = (subIdx) => {
-    return students.filter(s => {
-      const val = (s.marks[subIdx] || "").toUpperCase();
-      return val === "AB" || val === "A";
-    });
+    return students.filter(s => isAbsent(s.marks[subIdx]));
   };
 
   // Students absent grouped by number of courses
@@ -266,7 +279,7 @@ export default function ResultAnalysis() {
     const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, all: 0 };
     students.forEach(s => {
       let abCount = 0;
-      s.marks.forEach(m => { if ((m || "").toUpperCase() === "AB" || (m || "").toUpperCase() === "A") abCount++; });
+      s.marks.forEach(m => { if (isAbsent(m)) abCount++; });
       if (abCount >= classData.subjects.length) counts.all++;
       else if (abCount >= 5) counts[5]++;
       else if (abCount >= 4) counts[4]++;
@@ -283,11 +296,7 @@ export default function ResultAnalysis() {
     students.forEach(s => {
       let failCount = 0;
       s.marks.forEach((m, idx) => {
-        const val = (m || "").toUpperCase();
-        if (val !== "AB" && val !== "A") {
-          const mark = Number(val);
-          if (!isNaN(mark) && mark < classData.passMark) failCount++;
-        }
+        if (isFail(m)) failCount++;
       });
       if (failCount >= 6) counts[6]++;
       else if (failCount >= 5) counts[5]++;
@@ -301,33 +310,21 @@ export default function ResultAnalysis() {
 
   // List of absentees (students who were absent in at least 1 subject)
   const absenteeList = students.filter(s => {
-    return s.marks.some(m => (m || "").toUpperCase() === "AB" || (m || "").toUpperCase() === "A");
+    return s.marks.some(m => isAbsent(m));
   }).map(s => {
     let abCount = 0;
-    s.marks.forEach(m => { if ((m || "").toUpperCase() === "AB" || (m || "").toUpperCase() === "A") abCount++; });
+    s.marks.forEach(m => { if (isAbsent(m)) abCount++; });
     return { ...s, absentCount: abCount };
   });
 
   // List of failed students (due to marks, not absence)
   const failedDueToMarks = students.filter(s => {
     let failCount = 0;
-    s.marks.forEach(m => {
-      const val = (m || "").toUpperCase();
-      if (val !== "AB" && val !== "A") {
-        const mark = Number(val);
-        if (!isNaN(mark) && mark < classData.passMark) failCount++;
-      }
-    });
+    s.marks.forEach(m => { if (isFail(m)) failCount++; });
     return failCount > 0;
   }).map(s => {
     let failCount = 0;
-    s.marks.forEach(m => {
-      const val = (m || "").toUpperCase();
-      if (val !== "AB" && val !== "A") {
-        const mark = Number(val);
-        if (!isNaN(mark) && mark < classData.passMark) failCount++;
-      }
-    });
+    s.marks.forEach(m => { if (isFail(m)) failCount++; });
     return { ...s, failCount };
   });
 

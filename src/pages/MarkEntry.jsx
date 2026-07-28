@@ -32,7 +32,11 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
     handleKeyDown(e, i, j);
   };
 
-  const isFailed = s.marks && (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark));
+  const isFailed = s.marks && (
+    classData.examName === "ESE" 
+      ? (s.marks[j] === "AB" || s.marks[j] === "U" || s.marks[j] === "U*" || s.marks[j] === "FAIL") 
+      : (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark))
+  );
 
   return (
     <input
@@ -124,12 +128,18 @@ export default function MarkEntry() {
     let pass = 0;
 
     students.forEach(s => {
-      const strVal = (s.marks[subjectIndex] || "").toUpperCase();
-      if (strVal === "A" || strVal === "AB") {
-        // absent = fail
+      const strVal = String((s.marks && s.marks[subjectIndex]) || "").toUpperCase().trim();
+      if (classData.examName === "ESE") {
+        if (strVal !== "AB" && strVal !== "U" && strVal !== "U*" && strVal !== "FAIL" && strVal !== "") {
+          pass++;
+        }
       } else {
-        const mark = Number(strVal);
-        if (!isNaN(mark) && mark >= classData.passMark) pass++;
+        if (strVal === "A" || strVal === "AB") {
+          // absent = fail
+        } else {
+          const mark = Number(strVal);
+          if (!isNaN(mark) && mark >= classData.passMark) pass++;
+        }
       }
     });
 
