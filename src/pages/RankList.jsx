@@ -223,7 +223,7 @@ export default function RankList() {
       classData.subjects.forEach((sub, j) => {
         headerRow.push(courseDetails[j]?.courseCode || sub);
       });
-      headerRow.push("Total Marks", "Pass %", "Pass/Fail");
+      headerRow.push(classData.examName === "ESE" ? "SGPA" : "Total Marks", "Pass %", "Pass/Fail");
       aoa.push(headerRow);
 
       // Student Data Rows
@@ -401,7 +401,7 @@ export default function RankList() {
                   {getCourseDetails().map((cd, idx) => (
                     <th key={idx} style={{ padding: "2px", width: "65px", wordWrap: "break-word", fontSize: "10px" }}>{cd.courseCode}</th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px", width: "60px" }}>Total<br />Marks</th>
+                  <th rowSpan="2" style={{ padding: "3px", width: "60px" }}>{classData.examName === "ESE" ? "SGPA" : <React.Fragment>Total<br />Marks</React.Fragment>}</th>
                   <th rowSpan="2" style={{ padding: "3px", width: "55px" }}>Pass %</th>
                   <th rowSpan="2" style={{ padding: "3px", width: "50px" }}>Pass/<br />Fail</th>
                 </tr>

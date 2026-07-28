@@ -700,9 +700,9 @@ export default function StudentDashboard() {
                 {/* Result Badges */}
                 <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
                   <div className="stats-badge">
-                    <div style={{ fontSize: "0.65rem", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>Total Marks</div>
+                    <div style={{ fontSize: "0.65rem", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>{examResult.examName === "ESE" ? "SGPA" : "Total Marks"}</div>
                     <div style={{ fontSize: "1.15rem", fontWeight: "800", color: "#0f172a" }}>
-                      {examResult.total} <span style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: "600" }}>/ {examResult.marks.length * examResult.markPerSubject}</span>
+                      {examResult.total} {examResult.examName !== "ESE" && <span style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: "600" }}>/ {examResult.marks.length * examResult.markPerSubject}</span>}
                     </div>
                   </div>
                   <div className="stats-badge">

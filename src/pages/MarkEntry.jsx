@@ -500,7 +500,7 @@ export default function MarkEntry() {
       classData.subjects.forEach((sub, j) => {
         headerRow.push(courseDetails[j]?.courseCode || sub);
       });
-      headerRow.push("Total Marks", "Pass %", "Pass/Fail");
+      headerRow.push(classData.examName === "ESE" ? "SGPA" : "Total Marks", "Pass %", "Pass/Fail");
       aoa.push(headerRow);
 
       // Student Data Rows
@@ -981,7 +981,7 @@ export default function MarkEntry() {
                       {getCourseDetails()[idx]?.courseCode || sub}
                     </th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px" }}>Total<br />Marks</th>
+                  <th rowSpan="2" style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <React.Fragment>Total<br />Marks</React.Fragment>}</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass %</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass/<br />Fail</th>
                 </tr>

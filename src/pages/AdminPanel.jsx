@@ -467,7 +467,7 @@ export default function AdminPanel() {
       const cd = courseDetails.find(d => d.courseCode === sub);
       headerRow.push(cd?.courseCode || sub);
     });
-    headerRow.push("Total Marks", "Pass %", "Pass/Fail");
+    headerRow.push(classData.examName === "ESE" ? "SGPA" : "Total Marks", "Pass %", "Pass/Fail");
     aoa.push(headerRow);
 
     classData.students.forEach((s, i) => {
@@ -1987,6 +1987,7 @@ export default function AdminPanel() {
                     <th>Full Course Title</th>
                     <th style={{ width: "120px" }}>Short Form</th>
                     <th>Assign Faculty</th>
+                    {formData.examName === "ESE" && <th style={{ width: "80px" }}>Credits</th>}
                     <th style={{ width: "40px" }}></th>
                   </tr>
                 </thead>
@@ -1997,13 +1998,16 @@ export default function AdminPanel() {
                       <td><input value={c.courseName} onChange={e => updateCourseDetail(i, 'courseName', e.target.value)} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
                       <td><input value={c.shortName || ""} onChange={e => updateCourseDetail(i, 'shortName', e.target.value)} placeholder="e.g. OS, DM" className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
                       <td><input value={c.facultyName} onChange={e => updateCourseDetail(i, 'facultyName', e.target.value)} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
+                      {formData.examName === "ESE" && (
+                        <td><input type="number" min="0" step="0.5" value={c.credits !== undefined ? c.credits : 3} onChange={e => updateCourseDetail(i, 'credits', Number(e.target.value))} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
+                      )}
                       <td><button className="btn-icon" onClick={() => setCourseDetails(courseDetails.filter((_, idx) => idx !== i))}>❌</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <button className="btn btn-secondary mt-2" style={{ width: "100%", marginTop: "1rem" }} onClick={() => setCourseDetails([...courseDetails, { courseCode: "", courseName: "", shortName: "", facultyName: "" }])}>➕ Add Course Entry</button>
+            <button className="btn btn-secondary mt-2" style={{ width: "100%", marginTop: "1rem" }} onClick={() => setCourseDetails([...courseDetails, { courseCode: "", courseName: "", shortName: "", facultyName: "", credits: 3 }])}>➕ Add Course Entry</button>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.5rem" }}>
               <input 
                 type="checkbox" 
@@ -3708,6 +3712,7 @@ export default function AdminPanel() {
                         <th style={{ width: "120px" }}>Code</th>
                         <th>Full Course Title</th>
                         <th style={{ width: "120px" }}>Short Form</th>
+                        <th style={{ width: "80px" }}>Credits</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3729,6 +3734,13 @@ export default function AdminPanel() {
                               newDetails[i].shortName = e.target.value;
                               setEseCourseDetails(newDetails);
                             }} placeholder="Optional" className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} />
+                          </td>
+                          <td>
+                            <input type="number" min="0" step="0.5" value={c.credits !== undefined ? c.credits : 3} onChange={e => {
+                              const newDetails = [...eseCourseDetails];
+                              newDetails[i].credits = Number(e.target.value);
+                              setEseCourseDetails(newDetails);
+                            }} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} />
                           </td>
                         </tr>
                       ))}
