@@ -1607,15 +1607,24 @@ export default function AdminPanel() {
         grid-template-columns: 1fr 1fr;
         gap: 2rem;
       }
+      .admin-grid-2col > div {
+        min-width: 0;
+      }
       .admin-grid-3col {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr;
         gap: 1.5rem;
       }
+      .admin-grid-3col > div {
+        min-width: 0;
+      }
       .admin-grid-4col {
         display: grid;
         grid-template-columns: 1fr 1fr 1fr 1fr;
         gap: 1rem;
+      }
+      .admin-grid-4col > div {
+        min-width: 0;
       }
       .input-row-2col {
         display: grid;

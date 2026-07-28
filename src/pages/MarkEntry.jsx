@@ -200,16 +200,75 @@ export default function MarkEntry() {
             courseCode: parts[0].trim(), 
             courseName: cd.courseName || parts[1]?.trim() || "", 
             shortName: cd.shortName || "",
-            facultyName: cd.facultyName || "" 
+            facultyName: cd.facultyName || "",
+            credits: cd.credits !== undefined ? cd.credits : 3
           };
         }
         return {
           ...cd,
-          shortName: cd.shortName || ""
+          shortName: cd.shortName || "",
+          credits: cd.credits !== undefined ? cd.credits : 3
         };
       });
 
-      setClassData({ ...res.data, students: updatedStudents, courseDetails: cleanedCourseDetails });
+      const fullClassData = { ...res.data, courseDetails: cleanedCourseDetails };
+
+      const getGradePoint = (grade, system) => {
+        const g = String(grade).toUpperCase().trim();
+        if (system === "System 1") {
+          const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+          return map[g] !== undefined ? map[g] : 0;
+        } else {
+          const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+          return map[g] !== undefined ? map[g] : 0;
+        }
+      };
+
+      updatedStudents = updatedStudents.map(s => {
+        let total = 0;
+        let totalGradePoints = 0;
+        let totalCredits = 0;
+        let fail = false;
+        const isESE = fullClassData.examName === "ESE";
+
+        s.marks.forEach((val, idx) => {
+          const markStr = String(val || "").toUpperCase().trim();
+          if (isESE) {
+            if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL") {
+              fail = true;
+            }
+            const gp = getGradePoint(markStr, fullClassData.eseGradingSystem || "System 2");
+            const credits = (fullClassData.courseDetails && fullClassData.courseDetails[idx] && fullClassData.courseDetails[idx].credits !== undefined) ? Number(fullClassData.courseDetails[idx].credits) : 3;
+            totalGradePoints += (gp * credits);
+            totalCredits += credits;
+          } else {
+            if (markStr === "AB" || markStr === "A") {
+              fail = true;
+            } else {
+              const numVal = Number(markStr || 0);
+              total += (isNaN(numVal) ? 0 : numVal);
+              if (numVal < fullClassData.passMark) fail = true;
+            }
+          }
+        });
+
+        const maxTotal = isESE ? fullClassData.subjects.length * 10 : fullClassData.subjects.length * fullClassData.markPerSubject;
+        let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+        if (isESE) {
+          total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+          percentage = Number((total * 10).toFixed(2));
+        }
+
+        return {
+          ...s,
+          total,
+          percentage: Number(percentage.toFixed(2)),
+          result: fail ? "Fail" : "Pass"
+        };
+      });
+
+      setClassData({ ...fullClassData, students: updatedStudents });
     } catch (err) {
       console.error(err);
     }
@@ -317,7 +376,60 @@ export default function MarkEntry() {
     }
 
     const newStudents = [...classData.students];
-    newStudents[studentIndex].marks[subjectIndex] = strVal;
+    const s = newStudents[studentIndex];
+    s.marks[subjectIndex] = strVal;
+
+    // Live calculation
+    let total = 0;
+    let totalGradePoints = 0;
+    let totalCredits = 0;
+    let fail = false;
+    const isESE = classData.examName === "ESE";
+
+    const getGradePoint = (grade, system) => {
+      const g = String(grade).toUpperCase().trim();
+      if (system === "System 1") {
+        const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      } else {
+        const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      }
+    };
+
+    s.marks.forEach((val, idx) => {
+      const markStr = String(val || "").toUpperCase().trim();
+      if (isESE) {
+        if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL") {
+          fail = true;
+        }
+        const gp = getGradePoint(markStr, classData.eseGradingSystem || "System 2");
+        const credits = (classData.courseDetails && classData.courseDetails[idx] && classData.courseDetails[idx].credits !== undefined) ? Number(classData.courseDetails[idx].credits) : 3;
+        totalGradePoints += (gp * credits);
+        totalCredits += credits;
+      } else {
+        if (markStr === "AB" || markStr === "A") {
+          fail = true;
+        } else {
+          const numVal = Number(markStr || 0);
+          total += (isNaN(numVal) ? 0 : numVal);
+          if (numVal < classData.passMark) fail = true;
+        }
+      }
+    });
+
+    const maxTotal = isESE ? classData.subjects.length * 10 : classData.subjects.length * classData.markPerSubject;
+    let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+    if (isESE) {
+      total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+      percentage = Number((total * 10).toFixed(2));
+    }
+
+    s.total = total;
+    s.percentage = Number(percentage.toFixed(2));
+    s.result = fail ? "Fail" : "Pass";
+
     setClassData({ ...classData, students: newStudents });
   };
 
