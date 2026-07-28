@@ -469,8 +469,14 @@ export default function RankList() {
                     <td style={{ padding: "4px" }}>{s.regNo}</td>
                     <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px", fontSize: "12px" }}>{s.name}</td>
                     {classData.subjects.map((sub, j) => {
-                      const m = s.marks ? s.marks[j] : "";
-                      const isFail = (m === "AB" || m === "A" || m === "U" || m === "U*" || m === "FAIL" || (m !== "" && !isNaN(Number(m)) && Number(m) < classData.passMark));
+                      const m = s.marks ? String(s.marks[j]).toUpperCase().trim() : "";
+                      const isESE = classData.examName === "ESE";
+                      let isFail = false;
+                      if (isESE) {
+                        isFail = (m === "AB" || m === "U" || m === "U*" || m === "FAIL");
+                      } else {
+                        isFail = (m === "AB" || m === "A" || (m !== "" && !isNaN(Number(m)) && Number(m) < classData.passMark));
+                      }
                       return (
                       <td 
                         key={j} 
