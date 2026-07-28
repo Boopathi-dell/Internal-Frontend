@@ -257,13 +257,13 @@ export default function MarkEntry() {
 
         if (isESE) {
           total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
-          percentage = Number((total * 10).toFixed(2));
+          percentage = Math.round(total * 10);
         }
 
         return {
           ...s,
           total,
-          percentage: Number(percentage.toFixed(2)),
+          percentage: Math.round(percentage),
           result: fail ? "Fail" : "Pass"
         };
       });
@@ -423,7 +423,7 @@ export default function MarkEntry() {
 
     if (isESE) {
       total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
-      percentage = Number((total * 10).toFixed(2));
+      percentage = Math.round(total * 10);
     }
 
     s.total = total;
