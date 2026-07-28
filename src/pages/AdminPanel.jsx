@@ -1983,11 +1983,11 @@ export default function AdminPanel() {
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "120px" }}>Code</th>
-                    <th>Full Course Title</th>
-                    <th style={{ width: "120px" }}>Short Form</th>
-                    <th>Assign Faculty</th>
-                    {formData.examName === "ESE" && <th style={{ width: "80px" }}>Credits</th>}
+                    <th style={{ minWidth: "150px" }}>Code</th>
+                    <th style={{ minWidth: "250px" }}>Full Course Title</th>
+                    <th style={{ minWidth: "120px" }}>Short Form</th>
+                    <th style={{ minWidth: "180px" }}>Assign Faculty</th>
+                    {formData.examName === "ESE" && <th style={{ minWidth: "80px" }}>Credits</th>}
                     <th style={{ width: "40px" }}></th>
                   </tr>
                 </thead>
@@ -3709,10 +3709,10 @@ export default function AdminPanel() {
                   <table className="admin-table">
                     <thead>
                       <tr>
-                        <th style={{ width: "120px" }}>Code</th>
-                        <th>Full Course Title</th>
-                        <th style={{ width: "120px" }}>Short Form</th>
-                        <th style={{ width: "80px" }}>Credits</th>
+                        <th style={{ minWidth: "150px" }}>Code</th>
+                        <th style={{ minWidth: "250px" }}>Full Course Title</th>
+                        <th style={{ minWidth: "120px" }}>Short Form</th>
+                        <th style={{ minWidth: "80px" }}>Credits</th>
                       </tr>
                     </thead>
                     <tbody>
