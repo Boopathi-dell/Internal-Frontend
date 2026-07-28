@@ -73,8 +73,57 @@ export default function ResultAnalysis() {
     if (!name) { setClassData(null); return; }
     try {
       const res = await API.get(`/api/classes/${encodeURIComponent(name)}`);
-      setClassData(res.data);
-      setProgressData(res.data.semesterProgress || {});
+      let loadedClassData = res.data;
+      if (loadedClassData && loadedClassData.students) {
+        const getGradePoint = (grade, system) => {
+          const g = String(grade).toUpperCase().trim();
+          if (system === "System 1") {
+            const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+            return map[g] !== undefined ? map[g] : 0;
+          } else {
+            const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+            return map[g] !== undefined ? map[g] : 0;
+          }
+        };
+
+        loadedClassData.students = loadedClassData.students.map(s => {
+          let total = 0;
+          let totalGradePoints = 0;
+          let totalCredits = 0;
+          let fail = false;
+          const isESE = loadedClassData.examName === "ESE";
+
+          (s.marks || []).forEach((val, idx) => {
+            const markStr = String(val || "").toUpperCase().trim();
+            if (isESE) {
+              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL") fail = true;
+              const gp = getGradePoint(markStr, loadedClassData.eseGradingSystem || "System 2");
+              const credits = (loadedClassData.courseDetails && loadedClassData.courseDetails[idx] && loadedClassData.courseDetails[idx].credits !== undefined) ? Number(loadedClassData.courseDetails[idx].credits) : 3;
+              totalGradePoints += (gp * credits);
+              totalCredits += credits;
+            } else {
+              if (markStr === "AB" || markStr === "A") fail = true;
+              else {
+                const numVal = Number(markStr || 0);
+                total += (isNaN(numVal) ? 0 : numVal);
+                if (numVal < loadedClassData.passMark) fail = true;
+              }
+            }
+          });
+
+          const maxTotal = isESE ? loadedClassData.subjects.length * 10 : loadedClassData.subjects.length * loadedClassData.markPerSubject;
+          let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+          if (isESE) {
+            total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+            percentage = Number((total * 10).toFixed(2));
+          }
+
+          return { ...s, total, percentage: Number(percentage.toFixed(2)), result: fail ? "Fail" : "Pass" };
+        });
+      }
+      setClassData(loadedClassData);
+      setProgressData(loadedClassData.semesterProgress || {});
     } catch (err) { console.error(err); }
   };
 

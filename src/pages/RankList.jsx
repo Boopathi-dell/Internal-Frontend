@@ -69,8 +69,58 @@ export default function RankList() {
     if (!name) { setClassData(null); return; }
     try {
       const res = await API.get(`/api/classes/${encodeURIComponent(name)}`);
-      const sortedStudents = (res.data.students || []).sort((a, b) => b.total - a.total);
-      let cleanedCourseDetails = (res.data.courseDetails || []).map(cd => {
+      let loadedClassData = res.data;
+      if (loadedClassData && loadedClassData.students) {
+        const getGradePoint = (grade, system) => {
+          const g = String(grade).toUpperCase().trim();
+          if (system === "System 1") {
+            const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+            return map[g] !== undefined ? map[g] : 0;
+          } else {
+            const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+            return map[g] !== undefined ? map[g] : 0;
+          }
+        };
+
+        loadedClassData.students = loadedClassData.students.map(s => {
+          let total = 0;
+          let totalGradePoints = 0;
+          let totalCredits = 0;
+          let fail = false;
+          const isESE = loadedClassData.examName === "ESE";
+
+          (s.marks || []).forEach((val, idx) => {
+            const markStr = String(val || "").toUpperCase().trim();
+            if (isESE) {
+              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL") fail = true;
+              const gp = getGradePoint(markStr, loadedClassData.eseGradingSystem || "System 2");
+              const credits = (loadedClassData.courseDetails && loadedClassData.courseDetails[idx] && loadedClassData.courseDetails[idx].credits !== undefined) ? Number(loadedClassData.courseDetails[idx].credits) : 3;
+              totalGradePoints += (gp * credits);
+              totalCredits += credits;
+            } else {
+              if (markStr === "AB" || markStr === "A") fail = true;
+              else {
+                const numVal = Number(markStr || 0);
+                total += (isNaN(numVal) ? 0 : numVal);
+                if (numVal < loadedClassData.passMark) fail = true;
+              }
+            }
+          });
+
+          const maxTotal = isESE ? loadedClassData.subjects.length * 10 : loadedClassData.subjects.length * loadedClassData.markPerSubject;
+          let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+          if (isESE) {
+            total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+            percentage = Number((total * 10).toFixed(2));
+          }
+
+          return { ...s, total, percentage: Number(percentage.toFixed(2)), result: fail ? "Fail" : "Pass" };
+        });
+      }
+
+      const sortedStudents = (loadedClassData.students || []).sort((a, b) => b.total - a.total);
+      let cleanedCourseDetails = (loadedClassData.courseDetails || []).map(cd => {
         if (cd.courseCode && cd.courseCode.includes(' & ')) {
           const parts = cd.courseCode.split(' & ');
           return { 
@@ -85,7 +135,7 @@ export default function RankList() {
           shortName: cd.shortName || ""
         };
       });
-      setClassData({ ...res.data, students: sortedStudents, courseDetails: cleanedCourseDetails });
+      setClassData({ ...loadedClassData, students: sortedStudents, courseDetails: cleanedCourseDetails });
     } catch (err) { console.error(err); }
   };
 
@@ -418,21 +468,24 @@ export default function RankList() {
                     <td style={{ padding: "4px" }}>{i + 1}</td>
                     <td style={{ padding: "4px" }}>{s.regNo}</td>
                     <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px", fontSize: "12px" }}>{s.name}</td>
-                    {classData.subjects.map((sub, j) => (
+                    {classData.subjects.map((sub, j) => {
+                      const m = s.marks ? s.marks[j] : "";
+                      const isFail = (m === "AB" || m === "A" || m === "U" || m === "U*" || m === "FAIL" || (m !== "" && !isNaN(Number(m)) && Number(m) < classData.passMark));
+                      return (
                       <td 
                         key={j} 
                         style={{ 
                           padding: "4px",
-                          backgroundColor: (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark)) ? "rgba(239, 68, 68, 0.45)" : "transparent",
+                          backgroundColor: isFail ? "rgba(239, 68, 68, 0.45)" : "transparent",
                           color: "black",
                           WebkitPrintColorAdjust: "exact",
                           printColorAdjust: "exact",
-                          fontWeight: (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark)) ? "bold" : "normal"
+                          fontWeight: isFail ? "bold" : "normal"
                         }}
                       >
-                        {s.marks ? s.marks[j] : "-"}
+                        {m || "-"}
                       </td>
-                    ))}
+                    )})}
                     <td style={{ padding: "4px", fontWeight: "bold" }}>{s.total}</td>
                     <td style={{ padding: "4px" }}>{s.percentage}</td>
                     <td style={{ padding: "4px", fontWeight: "bold" }}>
