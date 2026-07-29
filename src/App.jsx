@@ -19,6 +19,7 @@ import AttendanceEntry from "./pages/AttendanceEntry";
 import API from "./api";
 import { LayoutDashboard, Settings, FileEdit, BarChart, Trophy, LogOut, MessageSquareWarning, Menu, X, Bell } from "lucide-react";
 import './App.css';
+import ErrorBoundary from "./ErrorBoundary";
 
 const blinkAnimation = `
 @keyframes pulseBlink {
@@ -370,19 +371,21 @@ function App() {
 
       <main className="main-content">
         <div className="page-layout">
-          <Routes>
-            <Route path="/" element={isAdmin ? <Dashboard /> : (isPrintAdmin ? <MarkEntry /> : (isStudent ? <StudentDashboard /> : <MarkEntry />))} />
-            {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
-            <Route path="/attendance" element={isStudent ? <StudentDashboard /> : <AttendanceEntry />} />
-            <Route path="/entry" element={isStudent ? <StudentDashboard /> : <MarkEntry />} />
-            {(isAdmin || isPrintAdmin) && <Route path="/analysis" element={<ResultAnalysis />} />}
-            {(isAdmin || isPrintAdmin) && <Route path="/department-analysis" element={<DepartmentAnalysis />} />}
-            {(isAdmin || isPrintAdmin) && <Route path="/rank" element={<RankList />} />}
-            {(isAdmin || isPrintAdmin) && <Route path="/parent-letters" element={<ParentLetter />} />}
-            {isAdmin && <Route path="/requests" element={<CorrectionRequests />} />}
-            {isStudent && <Route path="/student-requests" element={<StudentRequests />} />}
-            {isStudent && <Route path="/notices" element={<StudentNotices />} />}
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={isAdmin ? <Dashboard /> : (isPrintAdmin ? <MarkEntry /> : (isStudent ? <StudentDashboard /> : <MarkEntry />))} />
+              {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
+              <Route path="/attendance" element={isStudent ? <StudentDashboard /> : <AttendanceEntry />} />
+              <Route path="/entry" element={isStudent ? <StudentDashboard /> : <MarkEntry />} />
+              {(isAdmin || isPrintAdmin) && <Route path="/analysis" element={<ResultAnalysis />} />}
+              {(isAdmin || isPrintAdmin) && <Route path="/department-analysis" element={<DepartmentAnalysis />} />}
+              {(isAdmin || isPrintAdmin) && <Route path="/rank" element={<RankList />} />}
+              {(isAdmin || isPrintAdmin) && <Route path="/parent-letters" element={<ParentLetter />} />}
+              {isAdmin && <Route path="/requests" element={<CorrectionRequests />} />}
+              {isStudent && <Route path="/student-requests" element={<StudentRequests />} />}
+              {isStudent && <Route path="/notices" element={<StudentNotices />} />}
+            </Routes>
+          </ErrorBoundary>
         </div>
       </main>
       {isStudent && (
