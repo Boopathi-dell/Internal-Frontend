@@ -91,19 +91,23 @@ export default function ResultAnalysis() {
           let totalGradePoints = 0;
           let totalCredits = 0;
           let fail = false;
+          let hasAbsent = false;
           const isESE = loadedClassData.examName === "ESE";
 
           (s.marks || []).forEach((val, idx) => {
             const markStr = String(val || "").toUpperCase().trim();
             if (isESE) {
+              if (markStr === "AB" || markStr === "U*") hasAbsent = true;
               if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") fail = true;
               const gp = getGradePoint(markStr, loadedClassData.eseGradingSystem || "System 2");
               const credits = (loadedClassData.courseDetails && loadedClassData.courseDetails[idx] && loadedClassData.courseDetails[idx].credits !== undefined) ? Number(loadedClassData.courseDetails[idx].credits) : 3;
               totalGradePoints += (gp * credits);
               totalCredits += credits;
             } else {
-              if (markStr === "AB" || markStr === "A") fail = true;
-              else {
+              if (markStr === "AB" || markStr === "A") {
+                fail = true;
+                hasAbsent = true;
+              } else {
                 const numVal = Number(markStr || 0);
                 total += (isNaN(numVal) ? 0 : numVal);
                 if (numVal < loadedClassData.passMark) fail = true;
@@ -118,8 +122,12 @@ export default function ResultAnalysis() {
             total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
             percentage = Math.round(total * 10);
           }
+          
+          let res = "Pass";
+          if (hasAbsent) res = "-";
+          else if (fail) res = "Fail";
 
-          return { ...s, total, percentage: Math.round(percentage), result: fail ? "Fail" : "Pass" };
+          return { ...s, total, percentage: Math.round(percentage), result: res };
         });
       }
       setClassData(loadedClassData);
