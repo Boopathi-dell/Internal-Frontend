@@ -488,6 +488,9 @@ export default function ResultAnalysis() {
                   padding: 0 !important;
                   margin: 0 !important;
                 }
+                .printable-analysis, .printable-analysis th, .printable-analysis td, .printable-analysis span, .printable-analysis div, .printable-analysis p, .printable-analysis h3 {
+                  font-weight: bold !important;
+                }
                 .no-print { display: none !important; }
               }
       `}</style>
