@@ -951,17 +951,27 @@ export default function AdminPanel() {
           setAutoLoadedFrom("");
         }
 
-        // Search for any existing class in the same Year/Sem (ignoring Section) to auto-fetch course details
+        // 1. Try to find a class with the exact same examName in the same year/sem (e.g. to copy ESE credits across sections)
+        const exactExamYearSemMatch = list.find(c => 
+          c.programme === currentProg &&
+          c.department === currentDept &&
+          c.examName === exam &&
+          c.yearSemSec && c.yearSemSec.startsWith(`${y}/${validatedSem}/`) &&
+          c.courseDetails && c.courseDetails.length > 0
+        );
+
+        // 2. Fallback to same year/sem (any exam)
         const yearSemMatch = list.find(c =>
           c.programme === currentProg &&
           c.department === currentDept &&
           c.yearSemSec && c.yearSemSec.startsWith(`${y}/${validatedSem}/`) &&
           c.courseDetails && c.courseDetails.length > 0
         );
+        
+        const bestCourseMatch = exactExamYearSemMatch || (cohortMatch && cohortMatch.courseDetails && cohortMatch.courseDetails.length > 0 ? cohortMatch : yearSemMatch);
 
-        // Auto-load course details from cohort or same Year/Sem
-        if (cohortMatch && cohortMatch.courseDetails && cohortMatch.courseDetails.length > 0) {
-          const loadedCourses = cohortMatch.courseDetails.map(cd => {
+        if (bestCourseMatch) {
+          const loadedCourses = bestCourseMatch.courseDetails.map(cd => {
             if (cd.courseCode && cd.courseCode.includes(' & ')) {
               const parts = cd.courseCode.split(' & ');
               return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
@@ -969,17 +979,7 @@ export default function AdminPanel() {
             return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
           });
           setCourseDetails(loadedCourses);
-          setCourseAutoLoadedFrom(cohortMatch.className);
-        } else if (yearSemMatch) {
-          const loadedCourses = yearSemMatch.courseDetails.map(cd => {
-            if (cd.courseCode && cd.courseCode.includes(' & ')) {
-              const parts = cd.courseCode.split(' & ');
-              return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
-            }
-            return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
-          });
-          setCourseDetails(loadedCourses);
-          setCourseAutoLoadedFrom(yearSemMatch.className);
+          setCourseAutoLoadedFrom(bestCourseMatch.className);
         } else if (cohortMatch && cohortMatch.subjects && cohortMatch.subjects.length > 0) {
           // Fallback: load from subjects array
           const loadedCourses = cohortMatch.subjects.map(s => {
