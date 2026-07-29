@@ -358,8 +358,8 @@ export default function MarkEntry() {
     const strVal = value.toUpperCase();
     
     if (classData.examName === "ESE") {
-      const sys1Grades = ["S", "A+", "A", "B+", "B", "C+", "C", "U", "U*", "W", "AB", "SA", "P", "F"];
-      const sys2Grades = ["O", "A+", "A", "B+", "B", "C", "U", "U*", "W", "AB", "SA", "P", "F"];
+      const sys1Grades = ["S", "A+", "A", "B+", "B", "C+", "C", "U", "U*", "AB"];
+      const sys2Grades = ["O", "A+", "A", "B+", "B", "C", "U", "U*", "AB"];
       const validGrades = classData.eseGradingSystem === "System 1" ? sys1Grades : sys2Grades;
       if (strVal !== "" && !validGrades.includes(strVal)) {
         alert(`Invalid grade '${strVal}' for ${classData.eseGradingSystem || "this system"}.\nAllowed grades: ${validGrades.join(", ")}`);
@@ -585,8 +585,8 @@ export default function MarkEntry() {
                 if (markVal === "UNDEFINED" || markVal === "NULL") markVal = "";
                 
                 if (classData.examName === "ESE" && markVal !== "") {
-                  const sys1Grades = ["S", "A+", "A", "B+", "B", "C+", "C", "U", "U*", "W", "AB", "SA", "P", "F"];
-                  const sys2Grades = ["O", "A+", "A", "B+", "B", "C", "U", "U*", "W", "AB", "SA", "P", "F"];
+                  const sys1Grades = ["S", "A+", "A", "B+", "B", "C+", "C", "U", "U*", "AB"];
+                  const sys2Grades = ["O", "A+", "A", "B+", "B", "C", "U", "U*", "AB"];
                   const validGrades = classData.eseGradingSystem === "System 1" ? sys1Grades : sys2Grades;
                   if (!validGrades.includes(markVal)) {
                     markVal = ""; // Reject invalid grade
