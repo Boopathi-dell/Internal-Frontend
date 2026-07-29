@@ -92,7 +92,7 @@ export default function RankList() {
           (s.marks || []).forEach((val, idx) => {
             const markStr = String(val || "").toUpperCase().trim();
             if (isESE) {
-              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL") fail = true;
+              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") fail = true;
               const gp = getGradePoint(markStr, loadedClassData.eseGradingSystem || "System 2");
               const credits = (loadedClassData.courseDetails && loadedClassData.courseDetails[idx] && loadedClassData.courseDetails[idx].credits !== undefined) ? Number(loadedClassData.courseDetails[idx].credits) : 3;
               totalGradePoints += (gp * credits);
@@ -473,7 +473,7 @@ export default function RankList() {
                       const isESE = classData.examName === "ESE";
                       let isFail = false;
                       if (isESE) {
-                        isFail = (m === "AB" || m === "U" || m === "U*" || m === "FAIL");
+                        isFail = (m === "AB" || m === "U" || m === "U*" || m === "FAIL" || m === "");
                       } else {
                         isFail = (m === "AB" || m === "A" || (m !== "" && !isNaN(Number(m)) && Number(m) < classData.passMark));
                       }
