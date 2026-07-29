@@ -1381,17 +1381,36 @@ export default function AdminPanel() {
             return;
           }
 
+          const rosterStudentMap = {};
+          rosters.forEach(r => {
+             (r.students || []).forEach(s => {
+                if (s.regNo) rosterStudentMap[s.regNo.toString().trim()] = s;
+             });
+          });
+          
+          const classStudentMap = {};
+          classes.forEach(c => {
+             (c.students || []).forEach(s => {
+                if (s.regNo) classStudentMap[s.regNo.toString().trim()] = s;
+             });
+          });
+
           const studentsData = [];
           for (let i = 1; i < json.length; i++) {
             const row = json[i];
             if (!row[regNoIdx]) continue;
             
+            const regNo = (row[regNoIdx] || "").toString().trim();
+            const rStudent = rosterStudentMap[regNo] || classStudentMap[regNo] || {};
+            
             const marks = subjectCols.map(col => (row[col.idx] || "").toString().trim());
             
             studentsData.push({
-              regNo: (row[regNoIdx] || "").toString().trim(),
+              regNo: regNo,
               name: (row[nameIdx] || "").toString().trim(),
-              marks: marks
+              marks: marks,
+              gender: rStudent.gender || "Boy",
+              studentType: rStudent.studentType || "Day Scholar"
             });
           }
 
