@@ -996,6 +996,8 @@ export default function AdminPanel() {
           setCourseAutoLoadedFrom("");
         }
 
+        const bestDateMatch = exactExamYearSemMatch || cohortMatch || yearSemMatch;
+        
         const defaults = getDefaultMarks(exam);
         setFormData(prev => ({
           ...prev,
@@ -1007,6 +1009,7 @@ export default function AdminPanel() {
           department: currentDept,
           passMark: defaults.passMark,
           markPerSubject: defaults.markPerSubject,
+          date: (bestDateMatch && bestDateMatch.date) ? bestDateMatch.date : prev.date,
           allowEditing: true,
           editingStartDate: "",
           editingEndDate: ""
