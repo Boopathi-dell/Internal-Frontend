@@ -330,7 +330,7 @@ export default function MarkEntry() {
     applyFilters(classes, newFilters);
   };
 
-  const handleClassSelect = (e) => {
+  const _handleClassSelect = (e) => {
     const name = e.target.value;
     setSelectedClassId(name);
     if (!name) {
@@ -340,7 +340,7 @@ export default function MarkEntry() {
     loadSpecificClassData(name);
   };
 
-  const toggleShowAll = () => {
+  const _toggleShowAll = () => {
     const nextShowAll = !showAll;
     setShowAll(nextShowAll);
     const targetYSS = `${filters.year}/${filters.semester}/${filters.section}`;
@@ -433,7 +433,7 @@ export default function MarkEntry() {
     setClassData({ ...classData, students: newStudents });
   };
 
-  const handleAttendanceChange = (studentIndex, value) => {
+  const _handleAttendanceChange = (studentIndex, value) => {
     if (!classData || classData.allowEditing === false || isEditingLockedByDate().locked) return;
     const newStudents = [...classData.students];
     newStudents[studentIndex].attendance = value;
@@ -635,7 +635,7 @@ export default function MarkEntry() {
             userId, userName, action: "submit",
             details: `Submitted marks for ${classData.className}`
           });
-        } catch (e) { /* ignore tracking errors */ }
+        } catch (e) { console.error(e); }
       }
 
       const res = await API.get(`/api/classes/${encodeURIComponent(classData.className)}`);
