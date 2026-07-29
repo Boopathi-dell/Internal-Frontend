@@ -261,7 +261,7 @@ export default function ResultAnalysis() {
   const totalStudents = students.length;
   const cd = classData.courseDetails && classData.courseDetails.length > 0
     ? classData.courseDetails
-    : classData.subjects.map(s => ({ courseCode: s, courseName: "", facultyName: "" }));
+    : (classData.subjects || []).map(s => ({ courseCode: s, courseName: "", facultyName: "" }));
 
   const isESE = classData.examName === "ESE";
 
@@ -329,7 +329,7 @@ export default function ResultAnalysis() {
     students.forEach(s => {
       let abCount = 0;
       s.marks.forEach(m => { if (isAbsent(m)) abCount++; });
-      if (abCount >= classData.subjects.length) counts.all++;
+      if (abCount >= (classData.subjects || []).length) counts.all++;
       else if (abCount >= 5) counts[5]++;
       else if (abCount >= 4) counts[4]++;
       else if (abCount >= 3) counts[3]++;

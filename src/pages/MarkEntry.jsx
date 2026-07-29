@@ -663,7 +663,7 @@ export default function MarkEntry() {
         { wch: 6 },  // S.No
         { wch: 15 }, // RegNo
         { wch: 25 }, // Name
-        ...classData.subjects.map(() => ({ wch: 10 })), // Subjects
+        ...(classData.subjects || []).map(() => ({ wch: 10 })), // Subjects
         { wch: 10 }, // Total
         { wch: 8 },  // %
         { wch: 8 }   // P/F
@@ -1093,7 +1093,7 @@ export default function MarkEntry() {
                       {getCourseDetails()[idx]?.courseCode || sub}
                     </th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <React.Fragment>Total<br />Marks</React.Fragment>}</th>
+                  <th rowSpan="2" style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass %</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass/<br />Fail</th>
                 </tr>
@@ -1107,7 +1107,7 @@ export default function MarkEntry() {
                 </tr>
               </thead>
               <tbody>
-                {classData.students.map((s, i) => (
+                {(classData.students || []).map((s, i) => (
                   <tr key={s._id || i}>
                     <td style={{ padding: "4px" }}>{i + 1}</td>
                     <td style={{ padding: "4px" }}>{s.regNo}</td>
@@ -1151,28 +1151,28 @@ export default function MarkEntry() {
                 {/* Summary rows restored */}
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="4" style={{ textAlign: "right", padding: "4px" }}>Total</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`total-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="4" style={{ textAlign: "right", padding: "4px" }}>Pass</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`pass-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="4" style={{ textAlign: "right", padding: "4px" }}>Fail</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`fail-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="4" style={{ textAlign: "right", padding: "4px" }}>Pass %</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`passpct-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>

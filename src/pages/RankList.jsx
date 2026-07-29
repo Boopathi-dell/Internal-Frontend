@@ -211,7 +211,7 @@ export default function RankList() {
   const getCourseDetails = () => {
     if (!classData) return [];
     if (classData.courseDetails && classData.courseDetails.length > 0) return classData.courseDetails;
-    return classData.subjects.map(s => ({ courseCode: s, courseName: "", facultyName: "" }));
+    return (classData.subjects || []).map(s => ({ courseCode: s, courseName: "", facultyName: "" }));
   };
 
   const calculateSubjectStats = (subjectIndex) => {
@@ -318,7 +318,7 @@ export default function RankList() {
         { wch: 6 },  // Rank
         { wch: 15 }, // RegNo
         { wch: 25 }, // Name
-        ...classData.subjects.map(() => ({ wch: 10 })), // Subjects
+        ...(classData.subjects || []).map(() => ({ wch: 10 })), // Subjects
         { wch: 10 }, // Total
         { wch: 8 },  // %
         { wch: 8 }   // P/F
@@ -451,7 +451,7 @@ export default function RankList() {
                   {getCourseDetails().map((cd, idx) => (
                     <th key={idx} style={{ padding: "2px", width: "65px", wordWrap: "break-word", fontSize: "10px" }}>{cd.courseCode}</th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px", width: "60px" }}>{classData.examName === "ESE" ? "SGPA" : <React.Fragment>Total<br />Marks</React.Fragment>}</th>
+                  <th rowSpan="2" style={{ padding: "3px", width: "60px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
                   <th rowSpan="2" style={{ padding: "3px", width: "55px" }}>Pass %</th>
                   <th rowSpan="2" style={{ padding: "3px", width: "50px" }}>Pass/<br />Fail</th>
                 </tr>
@@ -463,12 +463,12 @@ export default function RankList() {
                 </tr>
               </thead>
               <tbody>
-                {classData.students.map((s, i) => (
+                {(classData.students || []).map((s, i) => (
                   <tr key={s._id || i}>
                     <td style={{ padding: "4px" }}>{i + 1}</td>
                     <td style={{ padding: "4px" }}>{s.regNo}</td>
                     <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px", fontSize: "12px" }}>{s.name}</td>
-                    {classData.subjects.map((sub, j) => {
+                    {(classData.subjects || []).map((sub, j) => {
                       const m = s.marks ? String(s.marks[j]).toUpperCase().trim() : "";
                       const isESE = classData.examName === "ESE";
                       let isFail = false;
@@ -503,28 +503,28 @@ export default function RankList() {
                 {/* Summary rows restored */}
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Total</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`total-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Pass</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`pass-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Fail</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`fail-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Pass %</td>
-                  {classData.subjects.map((_, idx) => (
+                  {(classData.subjects || []).map((_, idx) => (
                     <td key={`passpct-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
