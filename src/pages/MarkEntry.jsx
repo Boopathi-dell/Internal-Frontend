@@ -491,6 +491,105 @@ export default function MarkEntry() {
         }, 10);
       }
     }
+  const handleExcelUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) {
+      alert("Editing is currently locked or you don't have access.");
+      e.target.value = null;
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+        const headerRow = json[0] || [];
+        
+        let regNoIdx = -1;
+        const subjectColMap = {}; // Maps subject index in classData.subjects to Excel column index
+
+        headerRow.forEach((h, i) => {
+          const val = (h || "").toString().toUpperCase().trim();
+          if (val.includes("REGISTER NO") || val.includes("REG NO") || val === "REGNO") regNoIdx = i;
+          else {
+            const codeStr = val.replace(/[^A-Z0-9]/g, '');
+            // Check if this matches any of the class subjects
+            const subIdx = classData.subjects.findIndex(s => s.replace(/[^A-Z0-9]/g, '') === codeStr);
+            if (subIdx !== -1) {
+              subjectColMap[subIdx] = i;
+            }
+          }
+        });
+
+        if (regNoIdx === -1) {
+          alert("Invalid Excel format: Could not find 'REGISTER NO' or 'REG NO' column.");
+          return;
+        }
+
+        let isFallback = false;
+        if (Object.keys(subjectColMap).length === 0) {
+           isFallback = true;
+           let startIdx = regNoIdx + 1;
+           headerRow.forEach((h, i) => {
+              const val = (h || "").toString().toUpperCase().trim();
+              if (val.includes("NAME")) startIdx = Math.max(startIdx, i + 1);
+           });
+           
+           classData.subjects.forEach((sub, subIdx) => {
+             if (startIdx + subIdx < headerRow.length) {
+               subjectColMap[subIdx] = startIdx + subIdx;
+             }
+           });
+        }
+
+        const excelDataMap = {};
+        for (let i = 1; i < json.length; i++) {
+          const row = json[i];
+          if (!row[regNoIdx]) continue;
+          const regNo = row[regNoIdx].toString().trim().toLowerCase();
+          excelDataMap[regNo] = row;
+        }
+
+        const newStudents = [...classData.students];
+        let matchCount = 0;
+
+        newStudents.forEach(s => {
+          const regNo = (s.regNo || "").toString().trim().toLowerCase();
+          const excelRow = excelDataMap[regNo];
+          if (excelRow) {
+            matchCount++;
+            if (!s.marks) s.marks = new Array(classData.subjects.length).fill("");
+            
+            classData.subjects.forEach((sub, subIdx) => {
+              const excelColIdx = subjectColMap[subIdx];
+              if (excelColIdx !== undefined) {
+                let markVal = (excelRow[excelColIdx] || "").toString().trim();
+                if (markVal === "undefined" || markVal === "null") markVal = "";
+                s.marks[subIdx] = markVal;
+              }
+            });
+          }
+        });
+
+        setClassData({ ...classData, students: newStudents });
+        
+        let msg = `Successfully imported marks for ${matchCount} students from Excel.`;
+        if (isFallback) msg += " (Mapped marks by column order as course codes were not found in header)";
+        msg += "\n\nPlease click 'Save Marks' to save these changes to the database.";
+        
+        alert(msg);
+      } catch (err) {
+        alert("Failed to process Excel file: " + err.message);
+      }
+      e.target.value = null; // reset
+    };
+    reader.readAsArrayBuffer(file);
   };
 
   const handleSave = async () => {
@@ -1028,6 +1127,13 @@ export default function MarkEntry() {
             Download Excel
           </button>
 
+          <label
+            className="print-btn"
+            style={{ marginBottom: "20px", marginRight: "10px", padding: "10px 20px", background: "#f59e0b", color: "white", cursor: "pointer", border: "none", borderRadius: "4px", display: "inline-block" }}
+          >
+            Upload Grades (Excel)
+            <input type="file" accept=".xlsx, .xls" style={{ display: "none" }} onChange={handleExcelUpload} />
+          </label>
 
           <button
             className="print-btn"
