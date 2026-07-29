@@ -7,6 +7,7 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState("classes");
   const [classes, setClasses] = useState([]);
   const [rosters, setRosters] = useState([]);
+  const [selectedRostersForDelete, setSelectedRostersForDelete] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [showAllClassesDropdown, setShowAllClassesDropdown] = useState(false);
   const [formData, setFormData] = useState({
@@ -1316,7 +1317,23 @@ export default function AdminPanel() {
     } catch (err) {
       alert("Failed to save roster: " + err.message);
     }
+  };  const handleDeleteSelectedRosters = async () => {
+    if (selectedRostersForDelete.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedRostersForDelete.length} roster(s)?`)) return;
+
+    try {
+      for (const cohortName of selectedRostersForDelete) {
+        await API.delete(`/api/rosters/${encodeURIComponent(cohortName)}`);
+      }
+      alert("Selected rosters deleted successfully.");
+      setSelectedRostersForDelete([]);
+      loadRosters();
+    } catch (err) {
+      alert("Failed to delete some rosters: " + err.message);
+      loadRosters();
+    }
   };
+
 
 
   const handleDeleteClass = async () => {
@@ -2193,6 +2210,58 @@ export default function AdminPanel() {
           <button className="btn btn-secondary" style={{ width: "100%", marginTop: "2rem", padding: "1rem", background: "var(--primary)", color: "#fff", border: "none" }} onClick={handleSaveRoster}>
             🚀 Save & Synchronize Roster
           </button>
+
+          <div style={{ marginTop: "3rem", borderTop: "1px solid var(--border-color)", paddingTop: "2rem" }}>
+            <h3 style={{ marginBottom: "1rem" }}>Manage Saved Rosters</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "1rem" }}>Select rosters to delete. This will permanently remove them from the database.</p>
+            {rosters.length === 0 ? (
+              <p>No saved rosters found.</p>
+            ) : (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
+                  <button className="btn btn-danger" onClick={handleDeleteSelectedRosters} disabled={selectedRostersForDelete.length === 0}>
+                    🗑️ Delete Selected Rosters
+                  </button>
+                </div>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "50px" }}>
+                        <input 
+                          type="checkbox" 
+                          onChange={(e) => {
+                            if (e.target.checked) setSelectedRostersForDelete(rosters.map(r => r.cohortName));
+                            else setSelectedRostersForDelete([]);
+                          }} 
+                          checked={selectedRostersForDelete.length === rosters.length && rosters.length > 0}
+                        />
+                      </th>
+                      <th>Cohort Name</th>
+                      <th>Students Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rosters.map(r => (
+                      <tr key={r.cohortName}>
+                        <td>
+                          <input 
+                            type="checkbox" 
+                            checked={selectedRostersForDelete.includes(r.cohortName)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedRostersForDelete([...selectedRostersForDelete, r.cohortName]);
+                              else setSelectedRostersForDelete(selectedRostersForDelete.filter(name => name !== r.cohortName));
+                            }}
+                          />
+                        </td>
+                        <td>{r.cohortName}</td>
+                        <td>{r.students?.length || 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
