@@ -613,7 +613,7 @@ export default function ResultAnalysis() {
                       style={{ width: "100%", border: "none", textAlign: "center", background: "#fff9c4" }}
                     />
                   ) : (
-                    progressData[k]?.percentage || ""
+                    progressData[k]?.percentage ? (String(progressData[k].percentage).includes("%") ? progressData[k].percentage : `${progressData[k].percentage} %`) : ""
                   )}
                 </td>
               ))}
@@ -771,10 +771,10 @@ export default function ResultAnalysis() {
             <tr>
               <td style={tdStyle}>5</td>
               <td style={{ ...tdStyle, textAlign: "left", paddingLeft: "8px" }}>Pass % (B/A) × 100</td>
-              <td style={tdStyle}>{catPassPct(dsB)}</td>
-              <td style={tdStyle}>{catPassPct(dsG)}</td>
-              <td style={tdStyle}>{catPassPct(hB)}</td>
-              <td style={tdStyle}>{catPassPct(hG)}</td>
+              <td style={tdStyle}>{catPassPct(dsB)} %</td>
+              <td style={tdStyle}>{catPassPct(dsG)} %</td>
+              <td style={tdStyle}>{catPassPct(hB)} %</td>
+              <td style={tdStyle}>{catPassPct(hG)} %</td>
             </tr>
           </tbody>
         </table>
