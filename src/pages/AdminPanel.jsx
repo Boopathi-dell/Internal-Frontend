@@ -972,12 +972,14 @@ export default function AdminPanel() {
         const bestCourseMatch = exactExamYearSemMatch || (cohortMatch && cohortMatch.courseDetails && cohortMatch.courseDetails.length > 0 ? cohortMatch : yearSemMatch);
 
         if (bestCourseMatch) {
+          const isSameSection = bestCourseMatch.yearSemSec === `${y}/${validatedSem}/${sec}`;
           const loadedCourses = bestCourseMatch.courseDetails.map(cd => {
+            const facultyNameToKeep = isSameSection ? (cd.facultyName || "") : "";
             if (cd.courseCode && cd.courseCode.includes(' & ')) {
               const parts = cd.courseCode.split(' & ');
-              return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
+              return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: facultyNameToKeep, credits: cd.credits !== undefined ? cd.credits : 3 };
             }
-            return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
+            return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: facultyNameToKeep, credits: cd.credits !== undefined ? cd.credits : 3 };
           });
           setCourseDetails(loadedCourses);
           setCourseAutoLoadedFrom(bestCourseMatch.className);
