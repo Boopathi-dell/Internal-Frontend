@@ -951,25 +951,43 @@ export default function AdminPanel() {
           setAutoLoadedFrom("");
         }
 
-        // Auto-load course details from cohort
+        // Search for any existing class in the same Year/Sem (ignoring Section) to auto-fetch course details
+        const yearSemMatch = list.find(c =>
+          c.programme === currentProg &&
+          c.department === currentDept &&
+          c.yearSemSec && c.yearSemSec.startsWith(`${y}/${validatedSem}/`) &&
+          c.courseDetails && c.courseDetails.length > 0
+        );
+
+        // Auto-load course details from cohort or same Year/Sem
         if (cohortMatch && cohortMatch.courseDetails && cohortMatch.courseDetails.length > 0) {
           const loadedCourses = cohortMatch.courseDetails.map(cd => {
             if (cd.courseCode && cd.courseCode.includes(' & ')) {
               const parts = cd.courseCode.split(' & ');
-              return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "" };
+              return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
             }
-            return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "" };
+            return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
           });
           setCourseDetails(loadedCourses);
           setCourseAutoLoadedFrom(cohortMatch.className);
+        } else if (yearSemMatch) {
+          const loadedCourses = yearSemMatch.courseDetails.map(cd => {
+            if (cd.courseCode && cd.courseCode.includes(' & ')) {
+              const parts = cd.courseCode.split(' & ');
+              return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
+            }
+            return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: cd.facultyName || "", credits: cd.credits !== undefined ? cd.credits : 3 };
+          });
+          setCourseDetails(loadedCourses);
+          setCourseAutoLoadedFrom(yearSemMatch.className);
         } else if (cohortMatch && cohortMatch.subjects && cohortMatch.subjects.length > 0) {
           // Fallback: load from subjects array
           const loadedCourses = cohortMatch.subjects.map(s => {
             if (s.includes(' & ')) {
               const parts = s.split(' & ');
-              return { courseCode: parts[0].trim(), courseName: parts[1]?.trim() || "", shortName: "", facultyName: "" };
+              return { courseCode: parts[0].trim(), courseName: parts[1]?.trim() || "", shortName: "", facultyName: "", credits: 3 };
             }
-            return { courseCode: s, courseName: "", shortName: "", facultyName: "" };
+            return { courseCode: s, courseName: "", shortName: "", facultyName: "", credits: 3 };
           });
           setCourseDetails(loadedCourses);
           setCourseAutoLoadedFrom(cohortMatch.className);
@@ -1028,14 +1046,16 @@ export default function AdminPanel() {
               courseCode: parts[0].trim(), 
               courseName: cd.courseName || parts[1]?.trim() || "", 
               shortName: cd.shortName || "",
-              facultyName: cd.facultyName || "" 
+              facultyName: cd.facultyName || "",
+              credits: cd.credits !== undefined ? cd.credits : 3
             };
           }
           return { 
             courseCode: cd.courseCode || "", 
             courseName: cd.courseName || "", 
             shortName: cd.shortName || "",
-            facultyName: cd.facultyName || "" 
+            facultyName: cd.facultyName || "",
+            credits: cd.credits !== undefined ? cd.credits : 3
           };
         });
       } else {
