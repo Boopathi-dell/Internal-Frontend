@@ -152,10 +152,10 @@ export default function AdminPanel() {
       return { passMark: "15", markPerSubject: "30" };
     } else if (examName === "CIA - I" || examName === "CIA - II") {
       return { passMark: "25", markPerSubject: "50" };
-    } else if (examName === "CIA - III") {
+    } else if (examName === "CIA - III" || examName === "ESE") {
       return { passMark: "50", markPerSubject: "100" };
     }
-    return { passMark: "35", markPerSubject: "100" };
+    return { passMark: "50", markPerSubject: "100" };
   };
 
   useEffect(() => {
