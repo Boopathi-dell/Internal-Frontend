@@ -920,6 +920,17 @@ export default function AdminPanel() {
       } else {
         setSelectedClassId("");
 
+        // Ensure the dropdowns reflect the user's selection even if the class is new
+        setFormData(prev => ({
+          ...prev,
+          year: y,
+          semester: validatedSem,
+          section: sec,
+          examName: exam,
+          programme: currentProg,
+          department: currentDept
+        }));
+
         // Search for existing cohort match (same programme, department, yearSemSec)
         const cohortMatch = list.find(c =>
           c.programme === currentProg &&
