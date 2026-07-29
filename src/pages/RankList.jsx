@@ -269,7 +269,7 @@ export default function RankList() {
       ];
 
       // Header Row
-      const headerRow = ["Rank", "Register Number", "Name of the Student"];
+      const headerRow = ["R. No", "Register Number", "Name of the Student"];
       classData.subjects.forEach((sub, j) => {
         headerRow.push(courseDetails[j]?.courseCode || sub);
       });
@@ -445,7 +445,7 @@ export default function RankList() {
 
               <thead>
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
-                  <th rowSpan="2" style={{ padding: "3px", width: "40px" }}>Rank</th>
+                  <th rowSpan="2" style={{ padding: "3px", width: "40px" }}>R. No</th>
                   <th rowSpan="2" style={{ padding: "3px", width: "100px" }}>Register<br />Number</th>
                   <th rowSpan="2" style={{ padding: "3px", minWidth: "200px" }}>Name of the<br />Student</th>
                   {getCourseDetails().map((cd, idx) => (

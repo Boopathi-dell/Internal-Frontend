@@ -631,14 +631,13 @@ export default function ResultAnalysis() {
               <th rowSpan="2" style={thStyle}>COURSE<br />CODE</th>
               <th rowSpan="2" style={thStyle}>COURSE NAME</th>
               <th rowSpan="2" style={thStyle}>NAME OF THE FACULTY</th>
-              <th colSpan="4" style={thStyle}>No.of Students</th>
+              <th colSpan="3" style={thStyle}>No.of Students</th>
               <th rowSpan="2" style={thStyle}>PASS<br />%</th>
             </tr>
             <tr>
               <th style={thStyle}>Total</th>
               <th style={thStyle}>PASS</th>
               <th style={thStyle}>FAIL</th>
-              <th style={thStyle}>AB</th>
             </tr>
           </thead>
           <tbody>
@@ -653,7 +652,6 @@ export default function ResultAnalysis() {
                   <td style={tdStyle}>{stats.total}</td>
                   <td style={tdStyle}>{stats.pass}</td>
                   <td style={tdStyle}>{stats.fail}</td>
-                  <td style={tdStyle}>{stats.ab}</td>
                   <td style={tdStyle}>{stats.passPercent}</td>
                 </tr>
               );
