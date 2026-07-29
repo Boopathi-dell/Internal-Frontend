@@ -1053,13 +1053,13 @@ export default function MarkEntry() {
 
             <div style={{ marginBottom: "10px", width: "100%" }}>
               <div style={{ textAlign: "right", fontSize: "9px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
-                MEC/IQAC/2025-26/COE/001
+                {classData.iqacPrefix || "MEC/IQAC/2026-27/COE/"}001
               </div>
               <img src={headerLogo} alt="MEC Header" style={{ width: "100%", height: "85px", display: "block" }} />
 
               <div style={{ textAlign: "center", marginTop: "8px" }}>
                 <h2 style={{ margin: "5px 0 2px", fontSize: "14px", color: "black", fontWeight: "bold" }}>OFFICE OF THE CONTROLLER OF EXAMINATIONS</h2>
-                <h3 style={{ margin: "0", fontSize: "14px", textTransform: "uppercase", color: "black" }}>{classData.examName} MARK STATEMENT</h3>
+                <h3 style={{ margin: "0", fontSize: "14px", textTransform: "uppercase", color: "black" }}>{classData.examName} MARK STATEMENT{classData.academicYearText || ""}</h3>
               </div>
             </div>
 

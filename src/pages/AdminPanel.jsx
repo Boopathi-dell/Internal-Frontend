@@ -138,6 +138,20 @@ export default function AdminPanel() {
     image: null
   });
 
+  // Report Settings States
+  const [reportSettingsFilter, setReportSettingsFilter] = useState({
+    year: "II", semester: "IV", section: "A", examName: "CIA - I"
+  });
+  const [reportSettingsData, setReportSettingsData] = useState({
+    iqacPrefix: "MEC/IQAC/2026-27/COE/",
+    academicYearText: " (2026-27)",
+    actionTakenSubjects: []
+  });
+  const [reportSettingsClassId, setReportSettingsClassId] = useState(null);
+  const [reportSettingsClassSubjects, setReportSettingsClassSubjects] = useState([]);
+  const [reportSettingsLoading, setReportSettingsLoading] = useState(false);
+  const [reportSettingsMessage, setReportSettingsMessage] = useState("");
+
   // Exam name options
   const examNameOptions = [
     "Model Exam",
@@ -216,6 +230,60 @@ export default function AdminPanel() {
       loadLetterTemplate();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "reportsettings") {
+      loadReportSettings();
+    }
+  }, [reportSettingsFilter, activeTab]);
+
+  const loadReportSettings = async () => {
+    setReportSettingsLoading(true);
+    setReportSettingsMessage("");
+    try {
+      const yearSemSec = `${reportSettingsFilter.year}/${reportSettingsFilter.semester}/${reportSettingsFilter.section}`;
+      // Find the class matching the filter
+      const cls = classes.find(c => c.yearSemSec === yearSemSec && c.examName === reportSettingsFilter.examName);
+      if (cls) {
+        setReportSettingsClassId(cls._id);
+        setReportSettingsClassSubjects(cls.courseDetails.map(c => c.courseCode));
+        setReportSettingsData({
+          iqacPrefix: cls.iqacPrefix || "MEC/IQAC/2026-27/COE/",
+          academicYearText: cls.academicYearText || " (2026-27)",
+          actionTakenSubjects: cls.actionTakenSubjects || []
+        });
+      } else {
+        setReportSettingsClassId(null);
+        setReportSettingsClassSubjects([]);
+        setReportSettingsData({
+          iqacPrefix: "MEC/IQAC/2026-27/COE/",
+          academicYearText: " (2026-27)",
+          actionTakenSubjects: []
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setReportSettingsLoading(false);
+  };
+
+  const handleSaveReportSettings = async () => {
+    if (!reportSettingsClassId) {
+      setReportSettingsMessage("Error: Class not found for the selected criteria. Please create it first.");
+      return;
+    }
+    setReportSettingsLoading(true);
+    try {
+      await API.put(`/api/classes/${reportSettingsClassId}/report-settings`, reportSettingsData);
+      setReportSettingsMessage("Report settings saved successfully!");
+      // Reload classes to update local state
+      loadClasses();
+    } catch (err) {
+      console.error(err);
+      setReportSettingsMessage("Failed to save report settings.");
+    }
+    setReportSettingsLoading(false);
+  };
 
   const loadExtensionRequests = async () => {
     try {
@@ -1843,6 +1911,13 @@ export default function AdminPanel() {
           onClick={() => setActiveTab("lettertemplate")}
         >
           📝 Letter Template
+        </button>
+        <button 
+          className={`btn ${activeTab === "reportsettings" ? "btn-primary" : "btn-secondary"}`} 
+          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
+          onClick={() => setActiveTab("reportsettings")}
+        >
+          ⚙️ Report Settings
         </button>
       </div>
 
@@ -3900,6 +3975,117 @@ export default function AdminPanel() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* REPORT SETTINGS TAB */}
+      {activeTab === "reportsettings" && (
+        <div className="admin-grid-1col fade-in">
+          <div className="glass-card" style={{ padding: "2rem" }}>
+            <h2 className="section-title">Report Settings</h2>
+            <p style={{ color: "var(--text-secondary)", marginBottom: "2rem", fontSize: "0.95rem" }}>
+              Configure the IQAC Prefix, Academic Year headings, and Action Taken Report subjects per specific Class and Exam combination.
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
+              <div className="form-group">
+                <label className="input-label">Year</label>
+                <select className="select-input" value={reportSettingsFilter.year} onChange={e => setReportSettingsFilter({...reportSettingsFilter, year: e.target.value})}>
+                  {["I", "II", "III", "IV"].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="input-label">Semester</label>
+                <select className="select-input" value={reportSettingsFilter.semester} onChange={e => setReportSettingsFilter({...reportSettingsFilter, semester: e.target.value})}>
+                  {["I", "II", "III", "IV", "V", "VI", "VII", "VIII"].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="input-label">Section</label>
+                <select className="select-input" value={reportSettingsFilter.section} onChange={e => setReportSettingsFilter({...reportSettingsFilter, section: e.target.value})}>
+                  {["A", "B", "C", "D"].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="input-label">Exam Name</label>
+                <select className="select-input" value={reportSettingsFilter.examName} onChange={e => setReportSettingsFilter({...reportSettingsFilter, examName: e.target.value})}>
+                  {examNameOptions.map(ex => <option key={ex} value={ex}>{ex}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {reportSettingsLoading ? (
+              <p>Loading...</p>
+            ) : !reportSettingsClassId ? (
+              <p style={{ color: "#ef4444", fontWeight: "bold" }}>Class not found for the selected criteria. Please create it first in the Class Setup tab.</p>
+            ) : (
+              <div style={{ background: "rgba(255,255,255,0.02)", padding: "1.5rem", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
+                <div className="form-group" style={{ marginBottom: "1.5rem" }}>
+                  <label className="input-label">IQAC / Reference Prefix</label>
+                  <input
+                    type="text"
+                    className="text-input"
+                    value={reportSettingsData.iqacPrefix}
+                    onChange={e => setReportSettingsData({ ...reportSettingsData, iqacPrefix: e.target.value })}
+                    placeholder="e.g., MEC/IQAC/2026-27/COE/"
+                  />
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "4px" }}>Prefix used for reports like Result Analysis and Mark Statement.</p>
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: "1.5rem" }}>
+                  <label className="input-label">Academic Year Text</label>
+                  <input
+                    type="text"
+                    className="text-input"
+                    value={reportSettingsData.academicYearText}
+                    onChange={e => setReportSettingsData({ ...reportSettingsData, academicYearText: e.target.value })}
+                    placeholder="e.g.,  (2026-27)"
+                  />
+                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: "4px" }}>Text appended to the heading below OFFICE OF CONTROLLER OF EXAMINATIONS (e.g., "MARK STATEMENT (2026-27)").</p>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: "1.5rem" }}>
+                  <label className="input-label">Subjects for Action Taken Report (Result Analysis)</label>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "10px" }}>Select the subjects to display in the Action Taken Report. If none are selected, all subjects will be displayed by default.</p>
+                  
+                  {reportSettingsClassSubjects.length > 0 ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "10px" }}>
+                      {reportSettingsClassSubjects.map(sub => (
+                        <label key={sub} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", background: "rgba(0,0,0,0.2)", padding: "8px", borderRadius: "6px" }}>
+                          <input 
+                            type="checkbox"
+                            checked={reportSettingsData.actionTakenSubjects.includes(sub)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setReportSettingsData(prev => {
+                                const newSubjects = checked 
+                                  ? [...prev.actionTakenSubjects, sub]
+                                  : prev.actionTakenSubjects.filter(s => s !== sub);
+                                return { ...prev, actionTakenSubjects: newSubjects };
+                              });
+                            }}
+                          />
+                          <span style={{ fontSize: "0.9rem" }}>{sub}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: "0.9rem", color: "#ef4444" }}>No subjects found for this class.</p>
+                  )}
+                </div>
+
+                {reportSettingsMessage && (
+                  <p style={{ color: reportSettingsMessage.includes("Error") || reportSettingsMessage.includes("Failed") ? "#ef4444" : "#10b981", marginBottom: "1rem", fontWeight: "bold" }}>
+                    {reportSettingsMessage}
+                  </p>
+                )}
+
+                <button className="btn btn-primary" onClick={handleSaveReportSettings} disabled={reportSettingsLoading}>
+                  {reportSettingsLoading ? "Saving..." : "Save Report Settings"}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

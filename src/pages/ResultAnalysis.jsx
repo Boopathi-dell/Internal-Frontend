@@ -533,13 +533,13 @@ export default function ResultAnalysis() {
         {/* Header Section - Banner Update */}
         <div style={{ position: "relative", marginBottom: "10px", width: "100%" }}>
           <div style={{ textAlign: "right", fontSize: "10px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
-            MEC/IQAC/2025-26/COE/003
+            {classData.iqacPrefix || "MEC/IQAC/2026-27/COE/"}003
           </div>
           <img src={headerLogo} alt="MEC Header" style={{ width: "100%", height: "85px", display: "block" }} />
 
           <div style={{ textAlign: "center", marginTop: "8px" }}>
             <h2 style={{ margin: "5px 0 2px", fontSize: "14px", fontWeight: "bold", color: "black" }}>OFFICE OF THE CONTROLLER OF EXAMINATIONS</h2>
-            <h3 style={{ margin: "0 0 2px", fontSize: "14px", color: "black" }}>RESULT ANALYSIS (2025-26)</h3>
+            <h3 style={{ margin: "0 0 2px", fontSize: "14px", color: "black" }}>RESULT ANALYSIS{classData.academicYearText || ""}</h3>
             <h3 style={{ margin: "0", fontSize: "14px", color: "black" }}>{classData.examName}</h3>
           </div>
         </div>
@@ -910,7 +910,11 @@ export default function ResultAnalysis() {
           <h3 style={{ fontSize: "14px", fontWeight: "bold", margin: "10px 0", color: "black" }}>H. ACTION TAKEN REPORT</h3>
 
           <div style={{ flex: 1 }}>
-            {cd.map((c, i) => (
+            {cd.map((c, i) => {
+              if (classData.actionTakenSubjects && classData.actionTakenSubjects.length > 0 && !classData.actionTakenSubjects.includes(c.courseCode)) {
+                return null;
+              }
+              return (
               <div key={i} style={{ border: "1px solid black", padding: "10px", marginBottom: "12px", fontSize: "12px", color: "black", minHeight: "90px", fontWeight: "bold" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", margin: "0 0 5px" }}>
                   <strong>Course {i + 1}: {c.courseCode} - {c.courseName}</strong>
@@ -922,7 +926,8 @@ export default function ResultAnalysis() {
                   <strong>Faculty Signature</strong>
                 </div>
               </div>
-            ))}
+              );
+            })}
 
           </div>
 
