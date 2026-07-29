@@ -602,7 +602,7 @@ export default function MarkEntry() {
         ["MUTHAYAMMAL ENGINEERING COLLEGE"],
         ["(Autonomous)"],
         ["OFFICE OF THE CONTROLLER OF EXAMINATIONS"],
-        [`${classData.examName} MARK STATEMENT`],
+        [`${classData.examName === "ESE" ? "End Semester Examination" : classData.examName} MARK STATEMENT`],
         [`Department : ${classData.department || "CSE"}`, "", `Class : ${classData.className.trim()}`, "", `Date: ${getDisplayDate()}`],
         [] // empty row
       ];
@@ -783,7 +783,7 @@ export default function MarkEntry() {
               fontFamily: "inherit"
             }}
           >
-            {examNameOptions.map(opt => <option key={opt} value={opt} style={{ background: "#0f172a", color: "#fff" }}>{opt}</option>)}
+            {examNameOptions.map(opt => <option key={opt} value={opt} style={{ background: "#0f172a", color: "#fff" }}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
           </select>
         </div>
       </div>
@@ -1059,7 +1059,7 @@ export default function MarkEntry() {
 
               <div style={{ textAlign: "center", marginTop: "8px" }}>
                 <h2 style={{ margin: "5px 0 2px", fontSize: "14px", color: "black", fontWeight: "bold" }}>OFFICE OF THE CONTROLLER OF EXAMINATIONS</h2>
-                <h3 style={{ margin: "0", fontSize: "14px", textTransform: "uppercase", color: "black" }}>{classData.examName} MARK STATEMENT{classData.academicYearText || ""}</h3>
+                <h3 style={{ margin: "0", fontSize: "14px", textTransform: "uppercase", color: "black" }}>{classData.examName === "ESE" ? "End Semester Examination" : classData.examName} MARK STATEMENT{classData.academicYearText || ""}</h3>
               </div>
             </div>
 

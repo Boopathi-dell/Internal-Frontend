@@ -339,7 +339,7 @@ export default function ParentLetter() {
             <div key={field}>
               <div className="pl-lbl">{label}</div>
               <select className="pl-sel" value={filters[field]} onChange={e => handleFilterChange(field, e.target.value)}>
-                {opts.map(o => <option key={o}>{o}</option>)}
+                {opts.map(o => <option key={o} value={o}>{o === "ESE" ? "End Semester Examination" : o}</option>)}
               </select>
             </div>
           ))}

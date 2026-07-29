@@ -167,7 +167,7 @@ export default function ResultAnalysis() {
       <div>
         <label style={{ display: "block", fontSize: "12px", fontWeight: "bold" }}>Evaluation Module</label>
         <select value={filters.exam} onChange={e => handleFilterChange('exam', e.target.value)} style={{ padding: "8px" }}>
-          {examNameOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+          {examNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
         </select>
       </div>
     </div>
@@ -526,7 +526,7 @@ export default function ResultAnalysis() {
             onClick={autoFillCurrentExam}
             style={{ padding: "10px 20px", background: "#17a2b8", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}
           >
-            🔄 Auto-fill {classData.examName}
+            🔄 Auto-fill {classData.examName === "ESE" ? "End Semester Examination" : classData.examName}
           </button>
         )}
       </div>
@@ -543,7 +543,7 @@ export default function ResultAnalysis() {
           <div style={{ textAlign: "center", marginTop: "8px" }}>
             <h2 style={{ margin: "5px 0 2px", fontSize: "14px", fontWeight: "bold", color: "black" }}>OFFICE OF THE CONTROLLER OF EXAMINATIONS</h2>
             <h3 style={{ margin: "0 0 2px", fontSize: "14px", color: "black" }}>RESULT ANALYSIS{classData.academicYearText || ""}</h3>
-            <h3 style={{ margin: "0", fontSize: "14px", color: "black" }}>{classData.examName}</h3>
+            <h3 style={{ margin: "0", fontSize: "14px", color: "black" }}>{classData.examName === "ESE" ? "End Semester Examination" : classData.examName}</h3>
           </div>
         </div>
 

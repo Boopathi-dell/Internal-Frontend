@@ -262,7 +262,7 @@ export default function AttendanceEntry() {
               padding: "10px 14px", background: "rgba(15, 23, 42, 0.6)", border: "1px solid rgba(14, 165, 233, 0.3)", 
               color: "#ffffff", borderRadius: "10px", outline: "none", minWidth: "120px", cursor: "pointer"
             }}>
-              {opts.map(o => <option key={o} value={o} style={{ background: "#0f172a" }}>{o}</option>)}
+              {opts.map(o => <option key={o} value={o} style={{ background: "#0f172a" }}>{o === "ESE" ? "End Semester Examination" : o}</option>)}
             </select>
           </div>
         ))}

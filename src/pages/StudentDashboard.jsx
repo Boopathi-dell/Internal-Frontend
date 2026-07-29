@@ -690,7 +690,7 @@ export default function StudentDashboard() {
                     <div style={{ background: "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)", padding: "0.45rem", borderRadius: "10px", color: "white", display: "flex", boxShadow: "0 4px 12px rgba(59, 130, 246, 0.25)" }}>
                       <BookOpen size={18} />
                     </div>
-                    {examResult.examName}
+                    {examResult.examName === "ESE" ? "End Semester Examination" : examResult.examName}
                   </h3>
                   <span style={{ fontSize: "0.8rem", color: "#64748b", background: "#f1f5f9", padding: "0.25rem 0.65rem", borderRadius: "8px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.03em", display: "inline-block", border: "1px solid #e2e8f0" }}>
                     Cohort: {examResult.programme} - {examResult.department} Sem {examResult.yearSemSec}
@@ -836,7 +836,7 @@ export default function StudentDashboard() {
               fontSize: "0.95rem",
               color: "#334155"
             }}>
-              <div><span style={{ color: "#64748b", fontSize: "0.825rem", textTransform: "uppercase", fontWeight: "700", display: "block", marginBottom: "0.2rem" }}>Exam</span> <strong style={{ fontSize: "1rem", color: "#0f172a" }}>{requestData.examName}</strong></div>
+              <div><span style={{ color: "#64748b", fontSize: "0.825rem", textTransform: "uppercase", fontWeight: "700", display: "block", marginBottom: "0.2rem" }}>Exam</span> <strong style={{ fontSize: "1rem", color: "#0f172a" }}>{requestData.examName === "ESE" ? "End Semester Examination" : requestData.examName}</strong></div>
               <div><span style={{ color: "#64748b", fontSize: "0.825rem", textTransform: "uppercase", fontWeight: "700", display: "block", marginBottom: "0.2rem" }}>Current Mark</span> <strong style={{ fontSize: "1.2rem", color: "#dc2626" }}>{requestData.currentMark}</strong></div>
             </div>
 

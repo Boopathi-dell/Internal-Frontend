@@ -2023,7 +2023,7 @@ export default function AdminPanel() {
               <label className="input-label">Evaluation Type / Exam Name</label>
               <select value={formData.examName} onChange={e => checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, e.target.value, classes)} className="select-input">
                 {examNameOptions.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
+                  <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>
                 ))}
               </select>
             </div>
@@ -3606,7 +3606,7 @@ export default function AdminPanel() {
                   onChange={e => setLetterTemplate(t => ({ ...t, attendanceSourceExam: e.target.value }))}
                   style={{ cursor: "pointer" }}>
                   <option value="[Selected Exam]">[Selected Exam] (Dynamic based on Parent Letter filter)</option>
-                  {examNameOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  {examNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
                 </select>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>💡 Choose which exam's attendance should be printed on the letter.</p>
               </div>
@@ -3710,7 +3710,7 @@ export default function AdminPanel() {
                             <option value="CIA - II">CIA - II</option>
                             <option value="CIA - III">CIA - III</option>
                             <option value="MKC">MKC</option>
-                            <option value="ESE">ESE</option>
+                            <option value="ESE">End Semester Examination</option>
                           </select>
                         </div>
                       ) : (
@@ -3928,7 +3928,7 @@ export default function AdminPanel() {
                       <td>{c.className}</td>
                       <td>
                         <span className="badge" style={{ background: c.examName === "ESE" ? "rgba(16, 185, 129, 0.1)" : "rgba(99, 102, 241, 0.1)", color: c.examName === "ESE" ? "#10b981" : "#6366f1", padding: "4px 8px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: "bold" }}>
-                          {c.examName}
+                          {c.examName === "ESE" ? "End Semester Examination" : c.examName}
                         </span>
                       </td>
                       <td>{c.students?.length || 0}</td>
@@ -4046,7 +4046,7 @@ export default function AdminPanel() {
               <div className="form-group">
                 <label className="input-label">Exam Name</label>
                 <select className="select-input" value={reportSettingsFilter.examName} onChange={e => setReportSettingsFilter({...reportSettingsFilter, examName: e.target.value})}>
-                  {examNameOptions.map(ex => <option key={ex} value={ex}>{ex}</option>)}
+                  {examNameOptions.map(ex => <option key={ex} value={ex}>{ex === "ESE" ? "End Semester Examination" : ex}</option>)}
                 </select>
               </div>
             </div>
