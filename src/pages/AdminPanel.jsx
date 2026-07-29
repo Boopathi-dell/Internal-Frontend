@@ -32,7 +32,8 @@ export default function AdminPanel() {
   const [students, setStudents] = useState([]);
   const [autoLoadedFrom, setAutoLoadedFrom] = useState("");
   const [courseAutoLoadedFrom, setCourseAutoLoadedFrom] = useState("");
-  const [propagateRoster, setPropagateRoster] = useState(true);
+  const [propagateRoster, setPropagateRoster] = useState(false);
+  const [propagateToYearSem, setPropagateToYearSem] = useState(true);
   const [selectedClassesForAccess, setSelectedClassesForAccess] = useState([]);
   const [accessFilterYear, setAccessFilterYear] = useState("All");
   const [accessFilterSem, setAccessFilterSem] = useState("All");
@@ -1286,6 +1287,7 @@ export default function AdminPanel() {
         editingStartTime: formData.editingStartTime || "",
         editingEndTime: formData.editingEndTime || "",
         propagateRoster: propagateRoster,
+        propagateToYearSem: propagateToYearSem,
         eseGradingSystem: formData.eseGradingSystem
       };
       await API.post("/api/classes", payload);
@@ -2125,6 +2127,18 @@ export default function AdminPanel() {
               />
               <label htmlFor="propagateRoster" style={{ fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)", userSelect: "none" }}>
                 Apply this student roster &amp; course details to all other exams of this cohort
+              </label>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+              <input 
+                type="checkbox" 
+                id="propagateToYearSem" 
+                checked={propagateToYearSem} 
+                onChange={e => setPropagateToYearSem(e.target.checked)} 
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+              <label htmlFor="propagateToYearSem" style={{ fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)", userSelect: "none" }}>
+                Auto-sync Course Details &amp; Report Date to all other sections in this Year &amp; Sem
               </label>
             </div>
             <button className="btn btn-primary" style={{ width: "100%", marginTop: "1rem", padding: "1rem" }} onClick={handleSave}>🚀 Save & Synchronize Class Setup</button>
