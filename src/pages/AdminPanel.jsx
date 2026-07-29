@@ -4003,7 +4003,7 @@ export default function AdminPanel() {
               <div className="form-group">
                 <label className="input-label">Section</label>
                 <select className="select-input" value={reportSettingsFilter.section} onChange={e => setReportSettingsFilter({...reportSettingsFilter, section: e.target.value})}>
-                  {["A", "B", "C", "D"].map(s => <option key={s} value={s}>{s}</option>)}
+                  {["A", "B", "C", "D", "E"].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div className="form-group">
