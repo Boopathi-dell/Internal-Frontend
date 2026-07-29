@@ -823,8 +823,8 @@ export default function ResultAnalysis() {
           </tbody>
         </table>
 
-        {/* F.2 LIST OF ABSENTEES */}
-        <h3 style={{ fontSize: "13px", margin: "16px 0 8px", color: "black" }}>F.2 LIST OF ABSENTEES (Mention in Red Color)</h3>
+        {/* F.2 LIST OF STUDENTS FAIL DUE TO ABSENT */}
+        <h3 style={{ fontSize: "13px", margin: "16px 0 8px", color: "black" }}>F.2. List of Students Fail due to Absent (Mention in Red Color)</h3>
         <table border="1" style={tblStyle}>
           <thead>
             <tr>
@@ -877,8 +877,8 @@ export default function ResultAnalysis() {
           </tbody>
         </table>
 
-        {/* G.1 LIST OF FAIL */}
-        <h3 style={{ fontSize: "13px", margin: "16px 0 8px", color: "black" }}>G.1 LIST OF FAIL (Mention in Red Color)</h3>
+        {/* G.1 LIST OF STUDENTS FAIL DUE TO MARK */}
+        <h3 style={{ fontSize: "13px", margin: "16px 0 8px", color: "black" }}>G.1. List of Students Fail due to Mark (Mention in Red Color)</h3>
         <table border="1" style={tblStyle}>
           <thead>
             <tr>
