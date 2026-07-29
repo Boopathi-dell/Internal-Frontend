@@ -491,6 +491,8 @@ export default function MarkEntry() {
         }, 10);
       }
     }
+  };
+
   const handleExcelUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
