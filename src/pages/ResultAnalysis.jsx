@@ -96,7 +96,7 @@ export default function ResultAnalysis() {
           (s.marks || []).forEach((val, idx) => {
             const markStr = String(val || "").toUpperCase().trim();
             if (isESE) {
-              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL") fail = true;
+              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") fail = true;
               const gp = getGradePoint(markStr, loadedClassData.eseGradingSystem || "System 2");
               const credits = (loadedClassData.courseDetails && loadedClassData.courseDetails[idx] && loadedClassData.courseDetails[idx].credits !== undefined) ? Number(loadedClassData.courseDetails[idx].credits) : 3;
               totalGradePoints += (gp * credits);
@@ -267,14 +267,14 @@ export default function ResultAnalysis() {
 
   const isAbsent = (val) => {
     const v = (val || "").toUpperCase().trim();
-    if (isESE) return v === "AB";
+    if (isESE) return v === "AB" || v === "U*";
     return v === "AB" || v === "A";
   };
 
   const isFail = (val) => {
     const v = (val || "").toUpperCase().trim();
     if (isESE) {
-      return v === "U" || v === "U*" || v === "FAIL";
+      return v === "U" || v === "FAIL" || v === "";
     } else {
       if (v === "AB" || v === "A") return false; 
       const mark = Number(v);
