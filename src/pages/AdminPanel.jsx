@@ -1314,6 +1314,7 @@ export default function AdminPanel() {
       await API.post("/api/rosters", payload);
       alert("Roster saved successfully!");
       loadRosters();
+      loadClasses();
     } catch (err) {
       alert("Failed to save roster: " + err.message);
     }
