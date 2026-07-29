@@ -1127,13 +1127,15 @@ export default function MarkEntry() {
             Download Excel
           </button>
 
-          <label
-            className="print-btn"
-            style={{ marginBottom: "20px", marginRight: "10px", padding: "10px 20px", background: "#f59e0b", color: "white", cursor: "pointer", border: "none", borderRadius: "4px", display: "inline-block" }}
-          >
-            Upload Grades (Excel)
-            <input type="file" accept=".xlsx, .xls" style={{ display: "none" }} onChange={handleExcelUpload} />
-          </label>
+          {(sessionStorage.getItem("role") === "admin" || sessionStorage.getItem("role") === "printAdmin") && (
+            <label
+              className="print-btn"
+              style={{ marginBottom: "20px", marginRight: "10px", padding: "10px 20px", background: "#f59e0b", color: "white", cursor: "pointer", border: "none", borderRadius: "4px", display: "inline-block" }}
+            >
+              Upload Grades (Excel)
+              <input type="file" accept=".xlsx, .xls" style={{ display: "none" }} onChange={handleExcelUpload} />
+            </label>
+          )}
 
           <button
             className="print-btn"
