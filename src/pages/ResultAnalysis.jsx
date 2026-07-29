@@ -22,7 +22,7 @@ export default function ResultAnalysis() {
     "MKC", "ESE"
   ];
 
-  const progressKeys = ["A1", "A2", "CIA-1", "A3", "A4", "CIA-II", "A5", "CIA-III", "MKC", "ESE"];
+  const progressKeys = ["U1", "U2", "CIA-1", "U3", "U4", "CIA-II", "U5", "CIA-III", "MKC", "ESE"];
 
   const getSemOptionsForYear = (year) => {
     switch (year) {
