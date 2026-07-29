@@ -361,19 +361,27 @@ export default function MarkEntry() {
       const sys1Grades = ["S", "A+", "A", "B+", "B", "C+", "C", "U", "U*", "W", "AB", "SA", "P", "F"];
       const sys2Grades = ["O", "A+", "A", "B+", "B", "C", "U", "U*", "W", "AB", "SA", "P", "F"];
       const validGrades = classData.eseGradingSystem === "System 1" ? sys1Grades : sys2Grades;
-      const isPartial = validGrades.some(g => g.startsWith(strVal));
-      if (strVal !== "" && !isPartial) {
+      if (strVal !== "" && !validGrades.includes(strVal)) {
+        alert(`Invalid grade '${strVal}' for ${classData.eseGradingSystem || "this system"}.\nAllowed grades: ${validGrades.join(", ")}`);
+        const newStudents = [...classData.students];
+        newStudents[studentIndex].marks[subjectIndex] = "";
+        setClassData({ ...classData, students: newStudents });
         return;
       }
     } else {
       if (strVal !== "" && strVal !== "A" && strVal !== "AB") {
         let numVal = Number(value);
-        if (isNaN(numVal)) return;
-        if (numVal > classData.markPerSubject) {
-          alert(`Max mark is ${classData.markPerSubject}`);
+        if (isNaN(numVal) || numVal < 0 || numVal > classData.markPerSubject) {
+          if (isNaN(numVal)) {
+            alert(`Invalid entry '${strVal}'. Only numbers, 'A' or 'AB' are allowed.`);
+          } else if (numVal > classData.markPerSubject) {
+            alert(`Max mark is ${classData.markPerSubject}`);
+          }
+          const newStudents = [...classData.students];
+          newStudents[studentIndex].marks[subjectIndex] = "";
+          setClassData({ ...classData, students: newStudents });
           return;
         }
-        if (numVal < 0) return;
       }
     }
 
