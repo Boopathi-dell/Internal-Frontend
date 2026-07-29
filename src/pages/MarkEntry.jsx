@@ -1127,7 +1127,7 @@ export default function MarkEntry() {
             Download Excel
           </button>
 
-          {(sessionStorage.getItem("role") === "admin" || sessionStorage.getItem("role") === "printAdmin") && (
+          {( (sessionStorage.getItem("role") || "").toLowerCase() === "admin" || (sessionStorage.getItem("role") || "").toLowerCase() === "printadmin" ) && (
             <label
               className="print-btn"
               style={{ marginBottom: "20px", marginRight: "10px", padding: "10px 20px", background: "#f59e0b", color: "white", cursor: "pointer", border: "none", borderRadius: "4px", display: "inline-block" }}
