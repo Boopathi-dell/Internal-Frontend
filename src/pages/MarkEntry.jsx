@@ -19,14 +19,16 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
 
   const handleBlur = () => {
     if (val !== initialValue) {
-      handleMarkChange(i, j, val);
+      const success = handleMarkChange(i, j, val);
+      if (success === false) setVal(initialValue);
     }
   };
 
   const handleKey = (e) => {
     if (e.key === "Enter" || e.keyCode === 13 || e.key.startsWith("Arrow")) {
       if (val !== initialValue) {
-        handleMarkChange(i, j, val);
+        const success = handleMarkChange(i, j, val);
+        if (success === false) setVal(initialValue);
       }
     }
     handleKeyDown(e, i, j);
@@ -353,7 +355,7 @@ export default function MarkEntry() {
   };
 
   const handleMarkChange = (studentIndex, subjectIndex, value) => {
-    if (!classData || classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) return;
+    if (!classData || classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) return false;
 
     const strVal = value.toUpperCase();
     
@@ -366,7 +368,7 @@ export default function MarkEntry() {
         const newStudents = [...classData.students];
         newStudents[studentIndex].marks[subjectIndex] = "";
         setClassData({ ...classData, students: newStudents });
-        return;
+        return false;
       }
     } else {
       if (strVal !== "" && strVal !== "A" && strVal !== "AB") {
@@ -380,7 +382,7 @@ export default function MarkEntry() {
           const newStudents = [...classData.students];
           newStudents[studentIndex].marks[subjectIndex] = "";
           setClassData({ ...classData, students: newStudents });
-          return;
+          return false;
         }
       }
     }
@@ -441,6 +443,7 @@ export default function MarkEntry() {
     s.result = fail ? "Fail" : "Pass";
 
     setClassData({ ...classData, students: newStudents });
+    return true;
   };
 
   const _handleAttendanceChange = (studentIndex, value) => {
