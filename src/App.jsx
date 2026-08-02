@@ -267,6 +267,12 @@ function App() {
     { name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
     { name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
     { name: "Parent Letters", path: "/parent-letters", icon: <span style={{fontSize:"18px"}}>📬</span> },
+    { 
+      name: "Mark Requests", 
+      path: "/requests", 
+      icon: <MessageSquareWarning size={20} />,
+      badge: pendingRequestsCount > 0 ? pendingRequestsCount : null
+    },
   ];
 
   const userNavItems = [
@@ -381,7 +387,7 @@ function App() {
               {(isAdmin || isPrintAdmin) && <Route path="/department-analysis" element={<DepartmentAnalysis />} />}
               {(isAdmin || isPrintAdmin) && <Route path="/rank" element={<RankList />} />}
               {(isAdmin || isPrintAdmin) && <Route path="/parent-letters" element={<ParentLetter />} />}
-              {isAdmin && <Route path="/requests" element={<CorrectionRequests />} />}
+              {(isAdmin || isPrintAdmin) && <Route path="/requests" element={<CorrectionRequests />} />}
               {isStudent && <Route path="/student-requests" element={<StudentRequests />} />}
               {isStudent && <Route path="/notices" element={<StudentNotices />} />}
             </Routes>
