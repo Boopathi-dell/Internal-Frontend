@@ -1629,7 +1629,7 @@ export default function AdminPanel() {
           gap: 1rem;
         }
       }
-
+    `}</style>
 
     <div className="page-layout fade-in admin-panel-container">
       <div className="header-flex" style={{ marginBottom: "1.5rem" }}>
