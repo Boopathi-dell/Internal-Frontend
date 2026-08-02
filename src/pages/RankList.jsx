@@ -11,6 +11,7 @@ export default function RankList() {
   const [classData, setClassData] = useState(null);
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
   const [filteredClasses, setFilteredClasses] = useState([]);
+  const [printBold, setPrintBold] = useState(false);
 
   const examNameOptions = [
     "Model Exam",
@@ -382,6 +383,9 @@ export default function RankList() {
                 padding: 0 !important;
                 margin: 0 !important;
               }
+              .print-bold-text, .print-bold-text th, .print-bold-text td, .print-bold-text span, .print-bold-text div, .print-bold-text p, .print-bold-text h3 {
+                font-weight: bold !important;
+              }
               .no-print { display: none !important; }
               h1, h2, h3, p { margin: 2px 0 !important; padding: 0 !important; }
               table { border-collapse: collapse !important; width: 100% !important; margin: 5px 0 !important; }
@@ -395,17 +399,21 @@ export default function RankList() {
           `}</style>
 
 
-          <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+          <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
             <button onClick={() => window.print()} style={{ padding: "10px 20px", background: "#007bff", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}>
               🖨 Print
             </button>
+            <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontWeight: "bold" }}>
+              <input type="checkbox" checked={printBold} onChange={(e) => setPrintBold(e.target.checked)} style={{ width: "16px", height: "16px" }} />
+              Print in Bold
+            </label>
             <button onClick={handleExportExcel} style={{ padding: "10px 20px", background: "#28a745", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}>
               📊 Download Excel
             </button>
           </div>
 
 
-          <div className="printable-rank" style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
+          <div className={`printable-rank ${printBold ? 'print-bold-text' : ''}`} style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
 
 
 

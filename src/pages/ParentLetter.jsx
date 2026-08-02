@@ -56,6 +56,7 @@ export default function ParentLetter() {
   const [loading, setLoading] = useState(false);
   const [attendanceMap, setAttendanceMap] = useState({});
   const [checkedStudents, setCheckedStudents] = useState({});
+  const [printBold, setPrintBold] = useState(false);
 
   // Fetched full class details mapping: { "CIA - I": classData, "ESE": classData }
   const [classesDataMap, setClassesDataMap] = useState({});
@@ -285,6 +286,9 @@ export default function ParentLetter() {
           .sidebar, .mobile-top-bar { display: none !important; }
           .main-content { margin: 0 !important; padding: 0 !important; }
           .page-layout { padding: 0 !important; margin: 0 !important; }
+          .print-bold-text, .print-bold-text th, .print-bold-text td, .print-bold-text span, .print-bold-text div, .print-bold-text p, .print-bold-text h3 {
+            font-weight: bold !important;
+          }
           .pl-letter {
             page-break-after: always;
             page-break-inside: avoid;
@@ -389,6 +393,10 @@ export default function ParentLetter() {
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <button onClick={selectAll} style={{ padding: "6px 13px", borderRadius: 7, border: "1px solid var(--border-color)", background: "var(--surface-2)", color: "var(--text-primary)", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600 }}>☑ All</button>
                 <button onClick={deselectAll} style={{ padding: "6px 13px", borderRadius: 7, border: "1px solid var(--border-color)", background: "var(--surface-2)", color: "var(--text-primary)", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600 }}>☐ None</button>
+                <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontWeight: "bold", fontSize: "0.82rem" }}>
+                  <input type="checkbox" checked={printBold} onChange={(e) => setPrintBold(e.target.checked)} style={{ width: "16px", height: "16px" }} />
+                  Print in Bold
+                </label>
                 <button className="btn-pr" onClick={() => window.print()} disabled={selectedStudents.length === 0}
                   style={{ opacity: selectedStudents.length === 0 ? 0.5 : 1, cursor: selectedStudents.length === 0 ? "not-allowed" : "pointer" }}>
                   🖨️ Print {selectedStudents.length} Letter{selectedStudents.length !== 1 ? "s" : ""}
@@ -455,7 +463,7 @@ export default function ParentLetter() {
             const failBg = { background: "rgba(220,38,38,0.15)", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" };
 
             return (
-              <div key={student.regNo || idx} className="pl-letter" style={{ ...ltrStyle, padding: "5pt 18pt 5pt", boxSizing: "border-box" }}>
+              <div key={student.regNo || idx} className={`pl-letter ${printBold ? 'print-bold-text' : ''}`} style={{ ...ltrStyle, padding: "5pt 18pt 5pt", boxSizing: "border-box" }}>
                 <div style={{ textAlign: "right", fontSize: "9pt", fontWeight: "bold", marginBottom: "2pt", minHeight: "12pt" }}>{refNum}</div>
                 {template.headerLogo ? (
                   <img src={template.headerLogo} alt="Header Logo" style={{ width: "100%", height: "auto", display: "block" }} />

@@ -13,6 +13,7 @@ export default function ResultAnalysis() {
   const [progressData, setProgressData] = useState({});
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
   const [filteredClasses, setFilteredClasses] = useState([]);
+  const [printBold, setPrintBold] = useState(false);
 
   const examNameOptions = [
     "Model Exam",
@@ -496,17 +497,21 @@ export default function ResultAnalysis() {
                   padding: 0 !important;
                   margin: 0 !important;
                 }
-                .printable-analysis, .printable-analysis th, .printable-analysis td, .printable-analysis span, .printable-analysis div, .printable-analysis p, .printable-analysis h3 {
+                .print-bold-text, .print-bold-text th, .print-bold-text td, .print-bold-text span, .print-bold-text div, .print-bold-text p, .print-bold-text h3 {
                   font-weight: bold !important;
                 }
                 .no-print { display: none !important; }
               }
       `}</style>
 
-      <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+      <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
         <button onClick={() => window.print()} style={{ padding: "10px 20px", background: "#007bff", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}>
           🖨 Print
         </button>
+        <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontWeight: "bold" }}>
+          <input type="checkbox" checked={printBold} onChange={(e) => setPrintBold(e.target.checked)} style={{ width: "16px", height: "16px" }} />
+          Print in Bold
+        </label>
         <button onClick={handleExportExcel} style={{ padding: "10px 20px", background: "#28a745", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}>
           📊 Download Excel
         </button>
@@ -540,7 +545,7 @@ export default function ResultAnalysis() {
       </div>
 
 
-      <div className="printable-analysis" style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
+      <div className={`printable-analysis ${printBold ? 'print-bold-text' : ''}`} style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
         {/* Header Section - Banner Update */}
         <div style={{ position: "relative", marginBottom: "10px", width: "100%" }}>
           <div style={{ textAlign: "right", fontSize: "10px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
