@@ -803,108 +803,48 @@ export default function MarkEntry() {
 
 
   return (
-    <div className="page-layout faculty-mark-entry-container" style={{
-      background: "linear-gradient(rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.95)), url('/mark-entry-bg.jpg') no-repeat center center fixed",
-      backgroundSize: "cover",
-      padding: "2.5rem",
-      borderRadius: "16px",
-      border: "1px solid rgba(14, 165, 233, 0.3)",
-      boxShadow: "0 15px 35px rgba(0, 0, 0, 0.5)",
-      color: "#ffffff"
-    }}>
-      <h1 style={{ marginBottom: "1.5rem", color: "#ffffff" }}>Mark Entry</h1>
+    <div className="page-layout faculty-mark-entry-container">
+      <h1 style={{ marginBottom: "1.5rem" }}>Mark Entry</h1>
       
-      <div className="filter-row" style={{ 
-        display: "flex", 
-        gap: "20px", 
-        marginBottom: "20px", 
-        flexWrap: "wrap", 
-        alignItems: "center",
-        background: "rgba(15, 23, 42, 0.55)",
-        padding: "20px 25px",
-        borderRadius: "14px",
-        border: "1px solid rgba(14, 165, 233, 0.25)",
-        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
-        color: "#ffffff"
-      }}>
+      <div className="filter-row">
         <div>
-          <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#38bdf8", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Year</label>
+          <label className="input-label">Year</label>
           <select 
             value={filters.year} 
             onChange={e => handleFilterChange('year', e.target.value)} 
-            style={{ 
-              padding: "10px 14px", 
-              background: "rgba(15, 23, 42, 0.6)", 
-              border: "1px solid rgba(14, 165, 233, 0.3)", 
-              color: "#ffffff",
-              borderRadius: "10px",
-              outline: "none",
-              minWidth: "100px",
-              cursor: "pointer",
-              fontFamily: "inherit"
-            }}
+            className="select-input"
           >
-            {["I", "II", "III", "IV"].map(y => <option key={y} value={y} style={{ background: "#0f172a", color: "#fff" }}>{y}</option>)}
+            {["I", "II", "III", "IV"].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#38bdf8", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Semester</label>
+          <label className="input-label">Semester</label>
           <select 
             value={filters.semester} 
             onChange={e => handleFilterChange('semester', e.target.value)} 
-            style={{ 
-              padding: "10px 14px", 
-              background: "rgba(15, 23, 42, 0.6)", 
-              border: "1px solid rgba(14, 165, 233, 0.3)", 
-              color: "#ffffff",
-              borderRadius: "10px",
-              outline: "none",
-              minWidth: "100px",
-              cursor: "pointer",
-              fontFamily: "inherit"
-            }}
+            className="select-input"
           >
-            {getSemOptionsForYear(filters.year).map(s => <option key={s} value={s} style={{ background: "#0f172a", color: "#fff" }}>{s}</option>)}
+            {getSemOptionsForYear(filters.year).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#38bdf8", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Section</label>
+          <label className="input-label">Section</label>
           <select 
             value={filters.section} 
             onChange={e => handleFilterChange('section', e.target.value)} 
-            style={{ 
-              padding: "10px 14px", 
-              background: "rgba(15, 23, 42, 0.6)", 
-              border: "1px solid rgba(14, 165, 233, 0.3)", 
-              color: "#ffffff",
-              borderRadius: "10px",
-              outline: "none",
-              minWidth: "100px",
-              cursor: "pointer",
-              fontFamily: "inherit"
-            }}
+            className="select-input"
           >
-            {["A", "B", "C", "D", "E"].map(s => <option key={s} value={s} style={{ background: "#0f172a", color: "#fff" }}>{s}</option>)}
+            {["A", "B", "C", "D", "E"].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div>
-          <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#38bdf8", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Evaluation Module</label>
+          <label className="input-label">Evaluation Module</label>
           <select 
             value={filters.exam} 
             onChange={e => handleFilterChange('exam', e.target.value)} 
-            style={{ 
-              padding: "10px 14px", 
-              background: "rgba(15, 23, 42, 0.6)", 
-              border: "1px solid rgba(14, 165, 233, 0.3)", 
-              color: "#ffffff",
-              borderRadius: "10px",
-              outline: "none",
-              minWidth: "180px",
-              cursor: "pointer",
-              fontFamily: "inherit"
-            }}
+            className="select-input"
           >
-            {examNameOptions.map(opt => <option key={opt} value={opt} style={{ background: "#0f172a", color: "#fff" }}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
+            {examNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
           </select>
         </div>
       </div>
@@ -914,33 +854,23 @@ export default function MarkEntry() {
         <div style={{ 
           marginTop: "15px", 
           padding: "15px 20px", 
-          background: "rgba(15, 23, 42, 0.8)", 
-          border: "1px solid rgba(14, 165, 233, 0.3)", 
+          background: "var(--bg-card)", 
+          border: "1px solid var(--border-color)", 
           borderRadius: "12px",
-          color: "#ffffff",
           display: "flex",
           alignItems: "center",
           gap: "15px",
-          boxShadow: "0 4px 15px rgba(0,0,0,0.15)"
+          boxShadow: "var(--shadow-sm)"
         }}>
-          <label style={{ fontWeight: "bold", color: "#38bdf8" }}>Select Class:</label>
+          <label style={{ fontWeight: "bold", color: "var(--primary)" }}>Select Class:</label>
           <select
             value={selectedClassId}
             onChange={e => { setSelectedClassId(e.target.value); loadSpecificClassData(e.target.value, classes); }}
-            style={{ 
-              padding: "10px 14px", 
-              background: "rgba(15, 23, 42, 0.6)", 
-              border: "1px solid rgba(14, 165, 233, 0.3)", 
-              color: "#ffffff",
-              borderRadius: "10px",
-              outline: "none",
-              minWidth: "250px",
-              cursor: "pointer"
-            }}
+            className="select-input"
           >
-            <option value="" style={{ background: "#0f172a", color: "#fff" }}>-- Select a Class --</option>
+            <option value="">-- Select a Class --</option>
             {filteredClasses.map(c => (
-              <option key={c._id} value={c.className} style={{ background: "#0f172a", color: "#fff" }}>{c.className}</option>
+              <option key={c._id} value={c.className}>{c.className}</option>
             ))}
           </select>
         </div>
@@ -950,19 +880,18 @@ export default function MarkEntry() {
         <div style={{ 
           padding: "20px", 
           background: "rgba(239, 68, 68, 0.08)", 
-          color: "#fca5a5", 
+          color: "var(--danger)", 
           borderRadius: "12px", 
           border: "1px solid rgba(239, 68, 68, 0.3)", 
           marginTop: "15px",
           display: "flex",
           alignItems: "flex-start",
-          gap: "12px",
-          boxShadow: "0 4px 15px rgba(239, 68, 68, 0.1)"
+          gap: "12px"
         }}>
           <span style={{ fontSize: "20px" }}>⚠️</span>
           <div>
-            <strong style={{ display: "block", marginBottom: "4px", color: "#ef4444" }}>No class setup found!</strong>
-            <span style={{ fontSize: "0.9rem" }}>Please ensure you have created a class for this Year/Sem/Sec/<strong>{filters.exam}</strong> in the <strong>Admin Panel</strong> first.</span>
+            <strong style={{ display: "block", marginBottom: "4px" }}>No class setup found!</strong>
+            <span style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>Please ensure you have created a class for this Year/Sem/Sec/<strong>{filters.exam}</strong> in the <strong>Admin Panel</strong> first.</span>
           </div>
         </div>
       )}
@@ -972,10 +901,10 @@ export default function MarkEntry() {
           textAlign: "center", 
           marginTop: "40px", 
           padding: "50px", 
-          background: "rgba(14, 165, 233, 0.03)", 
+          background: "var(--bg-card)", 
           borderRadius: "16px", 
-          border: "1px dashed rgba(14, 165, 233, 0.2)",
-          color: "#94a3b8", 
+          border: "1px dashed var(--border-color)",
+          color: "var(--text-muted)", 
           fontWeight: "500",
           fontSize: "1.05rem"
         }}>
