@@ -214,6 +214,8 @@ export default function AdminPanel() {
       loadAnnouncements();
     } else if (activeTab === "lettertemplate") {
       loadLetterTemplate();
+    } else if (activeTab === "security") {
+      loadSecuritySettings();
     }
   }, [activeTab]);
 
@@ -1378,6 +1380,19 @@ export default function AdminPanel() {
       setPrintEditAccess(newVal);
       alert("Print user edit access updated.");
     } catch (err) { alert("Failed to update print user access"); }
+  };
+
+  const loadSecuritySettings = async () => {
+    try {
+      const res = await API.get("/api/auth/admin/get-security");
+      setSecurityForm({
+        code: res.data.securityCode || "",
+        question: res.data.securityQuestion || "",
+        answer: res.data.securityAnswer || ""
+      });
+    } catch (err) {
+      console.error("Failed to load security settings:", err);
+    }
   };
 
   const handleSaveSecurity = async (e) => {
