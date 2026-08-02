@@ -365,3 +365,18 @@
     display: none;
   }
 }
+
+@media print {
+  .app-container {
+    background: none !important;
+    background-image: none !important;
+  }
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+  .sidebar {
+    display: none !important;
+  }
+}
