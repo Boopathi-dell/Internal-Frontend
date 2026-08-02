@@ -1384,7 +1384,9 @@ export default function AdminPanel() {
 
   const loadSecuritySettings = async () => {
     try {
-      const res = await API.get("/api/auth/admin/get-security");
+      const res = await API.get("/api/auth/admin/get-security", {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      });
       setSecurityForm({
         code: res.data.securityCode || "",
         question: res.data.securityQuestion || "",
