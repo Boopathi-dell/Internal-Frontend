@@ -1630,79 +1630,12 @@ export default function AdminPanel() {
         }
       }
 
-      /* 🪐 Cyber Overrides for Admin Panel */
-      .admin-panel-container .glass-card {
-        background: rgba(15, 23, 42, 0.65) !important;
-        border: 1px solid rgba(99, 102, 241, 0.35) !important;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4) !important;
-        color: #ffffff !important;
-      }
-      .admin-panel-container h1, 
-      .admin-panel-container h2, 
-      .admin-panel-container h3, 
-      .admin-panel-container h4 {
-        color: #ffffff !important;
-        text-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
-      }
-      .admin-panel-container p {
-        color: #a5b4fc !important;
-      }
-      .admin-panel-container .input-label {
-        color: #a5b4fc !important;
-      }
-      .admin-panel-container .text-input,
-      .admin-panel-container .select-input {
-        background: rgba(15, 23, 42, 0.6) !important;
-        border: 1px solid rgba(99, 102, 241, 0.3) !important;
-        color: #ffffff !important;
-      }
-      .admin-panel-container .text-input:focus,
-      .admin-panel-container .select-input:focus {
-        border-color: #818cf8 !important;
-        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
-      }
-      .admin-panel-container select.select-input option {
-        background: #0f172a !important;
-        color: #ffffff !important;
-      }
-      .admin-panel-container .btn-secondary {
-        background: rgba(255, 255, 255, 0.05) !important;
-        color: #e2e8f0 !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-      }
-      .admin-panel-container .btn-secondary:hover {
-        background: rgba(255, 255, 255, 0.1) !important;
-      }
-      .admin-panel-container .admin-table th {
-        background: rgba(15, 23, 42, 0.8) !important;
-        color: #818cf8 !important;
-        border-bottom: 1px solid rgba(99, 102, 241, 0.3) !important;
-      }
-      .admin-panel-container .admin-table td {
-        color: #ffffff !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-      }
-      .admin-panel-container .admin-table tr:hover {
-        background: rgba(99, 102, 241, 0.1) !important;
-      }
-      .admin-panel-container .table-container {
-        background: rgba(15, 23, 42, 0.4) !important;
-        border: 1px solid rgba(99, 102, 241, 0.2) !important;
-      }
-    `}</style>
-    <div className="page-layout fade-in admin-panel-container" style={{
-      background: "linear-gradient(rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.95)), url('/admin-dashboard-bg.jpg') no-repeat center right fixed",
-      backgroundSize: "cover",
-      padding: "2.5rem",
-      borderRadius: "16px",
-      border: "1px solid rgba(99, 102, 241, 0.3)",
-      boxShadow: "0 15px 35px rgba(0, 0, 0, 0.5)",
-      color: "#ffffff"
-    }}>
+
+    <div className="page-layout fade-in admin-panel-container">
       <div className="header-flex" style={{ marginBottom: "1.5rem" }}>
         <div>
           <h1>Admin Control Center</h1>
-          <p style={{ color: "#a5b4fc", fontSize: "1rem" }}>Configure student groups, manage user permissions, and track system logs.</p>
+          <p style={{ color: "var(--text-muted)", fontSize: "1rem" }}>Configure student groups, manage user permissions, and track system logs.</p>
         </div>
       </div>
 
@@ -2616,7 +2549,7 @@ export default function AdminPanel() {
             </label>
           </div>
 
-          <h4 style={{ marginBottom: "1rem", color: "#e2e8f0" }}>👨‍🏫 Faculty Approvals</h4>
+          <h4 style={{ marginBottom: "1rem", color: "var(--text-main)" }}>👨‍🏫 Faculty Approvals</h4>
           <div className="table-container">
             <table className="admin-table">
               <thead>
@@ -3397,7 +3330,7 @@ export default function AdminPanel() {
       {/* SECURITY SETTINGS TAB */}
       {activeTab === "security" && (
         <div className="glass-card" style={{ padding: "2rem", maxWidth: "600px", margin: "0 auto" }}>
-          <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#e2e8f0", marginBottom: "1.5rem" }}>Security Settings</h2>
+          <h2 style={{ fontSize: "1.5rem", fontWeight: "bold", color: "var(--text-main)", marginBottom: "1.5rem" }}>Security Settings</h2>
           <p style={{ color: "var(--text-muted)", marginBottom: "2rem", lineHeight: "1.6" }}>
             Set a custom security code for your admin account. You will need to enter this code during login. If you forget it, you can recover access by answering the security question below.
           </p>
@@ -3417,7 +3350,7 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={() => setShowSecurityCode(!showSecurityCode)}
-                  style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#818cf8", display: "flex", alignItems: "center", padding: "4px" }}
+                  style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--primary)", display: "flex", alignItems: "center", padding: "4px" }}
                   title={showSecurityCode ? "Hide code" : "Show code"}
                 >
                   {showSecurityCode ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -3450,7 +3383,7 @@ export default function AdminPanel() {
                 <button
                   type="button"
                   onClick={() => setShowSecurityAnswer(!showSecurityAnswer)}
-                  style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#818cf8", display: "flex", alignItems: "center", padding: "4px" }}
+                  style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--primary)", display: "flex", alignItems: "center", padding: "4px" }}
                   title={showSecurityAnswer ? "Hide answer" : "Show answer"}
                 >
                   {showSecurityAnswer ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -3584,8 +3517,8 @@ export default function AdminPanel() {
 
               <div style={{ marginTop: "2rem", padding: "1.5rem", background: "rgba(255,255,255,0.02)", borderRadius: "12px", border: "1px dashed rgba(99,102,241,0.3)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-                  <h4 style={{ margin: 0, color: "#a5b4fc" }}>📊 Dynamic Table Builder</h4>
-                  <button type="button" onClick={handleAddColumn} style={{ padding: "6px 12px", background: "rgba(99,102,241,0.1)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.3)", borderRadius: "6px", cursor: "pointer", fontSize: "0.8rem", fontWeight: "bold" }}>
+                  <h4 style={{ margin: 0, color: "var(--text-muted)" }}>📊 Dynamic Table Builder</h4>
+                  <button type="button" onClick={handleAddColumn} style={{ padding: "6px 12px", background: "rgba(99,102,241,0.1)", color: "var(--primary)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: "6px", cursor: "pointer", fontSize: "0.8rem", fontWeight: "bold" }}>
                     + Add Column
                   </button>
                 </div>
