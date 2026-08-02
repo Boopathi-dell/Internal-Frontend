@@ -8,6 +8,7 @@ import headerLogo from "../assets/logo image.jpg";
 const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDate, handleMarkChange, handleKeyDown, i, inputRef }) => {
   const initialValue = (s.marks && s.marks[j]) || "";
   const [val, setVal] = useState(initialValue);
+  const isSaving = useRef(false);
 
   useEffect(() => {
     setVal(initialValue);
@@ -18,17 +19,26 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
   };
 
   const handleBlur = () => {
-    if (val !== initialValue) {
+    if (val !== initialValue && !isSaving.current) {
+      isSaving.current = true;
       const success = handleMarkChange(i, j, val);
       if (success === false) setVal(initialValue);
+      setTimeout(() => { isSaving.current = false; }, 100);
     }
   };
 
   const handleKey = (e) => {
     if (e.key === "Enter" || e.keyCode === 13 || e.key.startsWith("Arrow")) {
-      if (val !== initialValue) {
+      if (val !== initialValue && !isSaving.current) {
+        isSaving.current = true;
         const success = handleMarkChange(i, j, val);
-        if (success === false) setVal(initialValue);
+        if (success === false) {
+          setVal(initialValue);
+          e.preventDefault();
+          setTimeout(() => { isSaving.current = false; }, 100);
+          return;
+        }
+        setTimeout(() => { isSaving.current = false; }, 100);
       }
     }
     handleKeyDown(e, i, j);
