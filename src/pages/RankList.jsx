@@ -481,7 +481,7 @@ export default function RankList() {
                       const isESE = classData.examName === "ESE";
                       let isFail = false;
                       if (isESE) {
-                        isFail = (m === "AB" || m === "U" || m === "U*" || m === "FAIL" || m === "");
+                        isFail = (m === "AB" || m === "U" || m === "U*" || m === "FAIL" || m === "RA" || m === "SA" || m === "W" || m === "");
                       } else {
                         isFail = (m === "AB" || m === "A" || (m !== "" && !isNaN(Number(m)) && Number(m) < classData.passMark));
                       }

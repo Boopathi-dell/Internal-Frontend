@@ -46,7 +46,7 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
 
   const isFailed = s.marks && (
     classData.examName === "ESE" 
-      ? (s.marks[j] === "AB" || s.marks[j] === "U" || s.marks[j] === "U*" || s.marks[j] === "FAIL" || s.marks[j] === "") 
+      ? (s.marks[j] === "AB" || s.marks[j] === "U" || s.marks[j] === "U*" || s.marks[j] === "FAIL" || s.marks[j] === "RA" || s.marks[j] === "SA" || s.marks[j] === "W" || s.marks[j] === "") 
       : (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark))
   );
 

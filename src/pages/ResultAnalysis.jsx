@@ -99,7 +99,7 @@ export default function ResultAnalysis() {
             const markStr = String(val || "").toUpperCase().trim();
             if (isESE) {
               if (markStr === "AB" || markStr === "U*") hasAbsent = true;
-              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") fail = true;
+              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "RA" || markStr === "SA" || markStr === "W" || markStr === "") fail = true;
               const gp = getGradePoint(markStr, loadedClassData.eseGradingSystem || "System 2");
               const credits = (loadedClassData.courseDetails && loadedClassData.courseDetails[idx] && loadedClassData.courseDetails[idx].credits !== undefined) ? Number(loadedClassData.courseDetails[idx].credits) : 3;
               totalGradePoints += (gp * credits);
@@ -283,7 +283,7 @@ export default function ResultAnalysis() {
   const isFail = (val) => {
     const v = (val || "").toUpperCase().trim();
     if (isESE) {
-      return v === "U" || v === "FAIL" || v === "";
+      return v === "U" || v === "FAIL" || v === "RA" || v === "SA" || v === "W" || v === "";
     } else {
       if (v === "AB" || v === "A") return false; 
       const mark = Number(v);
@@ -647,13 +647,14 @@ export default function ResultAnalysis() {
               <th rowSpan="2" style={thStyle}>COURSE<br />CODE</th>
               <th rowSpan="2" style={thStyle}>COURSE NAME</th>
               <th rowSpan="2" style={thStyle}>NAME OF THE FACULTY</th>
-              <th colSpan="3" style={thStyle}>No.of Students</th>
+              <th colSpan="4" style={thStyle}>No.of Students</th>
               <th rowSpan="2" style={thStyle}>PASS<br />%</th>
             </tr>
             <tr>
               <th style={thStyle}>Total</th>
               <th style={thStyle}>PASS</th>
               <th style={thStyle}>FAIL</th>
+              <th style={thStyle}>ABSENT</th>
             </tr>
           </thead>
           <tbody>
@@ -668,6 +669,7 @@ export default function ResultAnalysis() {
                   <td style={tdStyle}>{stats.total}</td>
                   <td style={tdStyle}>{stats.pass}</td>
                   <td style={tdStyle}>{stats.fail}</td>
+                  <td style={tdStyle}>{stats.ab}</td>
                   <td style={tdStyle}>{stats.passPercent}</td>
                 </tr>
               );
