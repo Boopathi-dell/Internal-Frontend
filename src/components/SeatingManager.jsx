@@ -379,7 +379,7 @@ export default function SeatingManager() {
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid black', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
                             <div>HALL NO : <span style={{ fontSize: '14px' }}>{alloc.hallNumber}</span></div>
-                            <div>Branch : {alloc.summaryInfo.split("/")[0] || "Multiple"}</div>
+                            <div>Branch : {alloc.summaryRanges && alloc.summaryRanges.length > 0 ? alloc.summaryRanges[0].branch.split("/")[0] : "Multiple"}</div>
                           </div>
 
                           <h3 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '15px', fontFamily: 'Times New Roman, serif' }}>REGISTER NO. OF THE CANDIDATES</h3>
@@ -483,22 +483,35 @@ export default function SeatingManager() {
                             </div>
                           )}
 
-                          <table style={{ ...tableStyles, marginTop: '20px' }}>
+                          <table style={{ ...tableStyles, marginTop: '20px', border: '2px solid black' }}>
                             <thead>
                               <tr>
-                                <th style={{ ...thStyles, width: '50%' }}>BRANCH / YEAR / SEM / SEC</th>
-                                <th style={{ ...thStyles, width: '50%' }}>Allotted</th>
+                                <th style={{ ...thStyles, width: '40%', border: '1px solid black', padding: '6px' }}>BRANCH/YEAR/SEM</th>
+                                <th style={{ ...thStyles, width: '60%', border: '1px solid black', padding: '6px' }}>Alloted</th>
                               </tr>
                             </thead>
                             <tbody>
+                              {alloc.summaryRanges && alloc.summaryRanges.map((rangeObj, rIdx) => (
+                                <tr key={rIdx}>
+                                  <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }}>{rangeObj.branch.toUpperCase()}</td>
+                                  <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }}>
+                                    {rangeObj.range} &nbsp;&nbsp;&nbsp; {rangeObj.count}
+                                  </td>
+                                </tr>
+                              ))}
                               <tr>
-                                <td style={tdStyles}>{alloc.summaryInfo.split(" - Total:")[0]}</td>
-                                <td style={tdStyles}>
-                                  {alloc.summaryInfo.split("- ")[1]}
+                                <td style={{ ...tdStyles, border: '1px solid black', borderTop: '2px solid black', fontWeight: 'bold' }}>Total No of Students</td>
+                                <td style={{ ...tdStyles, border: '1px solid black', borderTop: '2px solid black', fontWeight: 'bold' }}>
+                                  {alloc.totalAllocated}
                                 </td>
                               </tr>
                             </tbody>
                           </table>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
+                             <div>EC</div>
+                             <div>HOD</div>
+                          </div>
                           
                         </div>
                       )
