@@ -438,8 +438,10 @@ export default function SeatingManager() {
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
                             <div>HALL NO : <span style={{ fontSize: '14px' }}>{alloc.hallNumber}</span></div>
-                            <div>Date : {generatedPlan.examDate}</div>
-                            <div>Branch : {generatedPlan.branchName || "Multiple"}</div>
+                            <div style={{ textAlign: 'right' }}>
+                               <div style={{ marginBottom: '4px' }}>Branch : {generatedPlan.branchName || "Multiple"}</div>
+                               <div>Date : {generatedPlan.examDate}</div>
+                            </div>
                           </div>
 
                           <h3 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '15px', fontFamily: 'Times New Roman, serif' }}>REGISTER NO. OF THE CANDIDATES</h3>
