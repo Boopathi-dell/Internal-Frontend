@@ -18,6 +18,7 @@ export default function SeatingManager() {
   const [academicYear, setAcademicYear] = useState("2025-26(ODD SEMESTER)");
   const [iqacNumber, setIqacNumber] = useState("");
   const [selectedRosters, setSelectedRosters] = useState([]);
+  const [selectedHalls, setSelectedHalls] = useState([]);
   const [shuffleClasses, setShuffleClasses] = useState(false);
   const [libraryFillPreference, setLibraryFillPreference] = useState("Computer First");
   const [generatedPlan, setGeneratedPlan] = useState(null);
@@ -79,6 +80,10 @@ export default function SeatingManager() {
       alert("Please select at least one cohort.");
       return;
     }
+    if (selectedHalls.length === 0) {
+      alert("Please select at least one hall.");
+      return;
+    }
     try {
       const res = await API.post("/api/seating/generate", {
         date: examDate,
@@ -86,6 +91,7 @@ export default function SeatingManager() {
         academicYear,
         iqacNumber,
         rosterIds: selectedRosters,
+        hallIds: selectedHalls,
         shuffleClasses,
         libraryFillPreference
       });
@@ -123,6 +129,7 @@ export default function SeatingManager() {
 
   const { uniqueYears, totalStudents } = getSelectedRostersInfo();
   const showShuffleToggle = uniqueYears.length === 1 && selectedRosters.length > 1;
+  const showLibraryPreference = halls.some(h => selectedHalls.includes(h._id) && h.layoutType === 'Library');
 
   // Custom styling for tables in print layout to match screenshot
   const tableStyles = { borderCollapse: 'collapse', border: '2px solid black', width: '100%', textAlign: 'center', fontSize: '11px', fontWeight: 'bold' };
@@ -273,23 +280,42 @@ export default function SeatingManager() {
               <div className="glass-card">
                  <h3 style={{ marginBottom: '1rem' }}>Student Batches</h3>
                  
-                 <div className="form-group">
-                   <label className="input-label" style={{ color: 'var(--primary)' }}>Fetch from Master Roaster</label>
-                   <select 
-                      multiple 
-                      className="select-input"
-                      style={{ height: '150px' }}
-                      value={selectedRosters}
-                      onChange={e => {
-                        const vals = Array.from(e.target.selectedOptions, option => option.value);
-                        setSelectedRosters(vals);
-                      }}
-                   >
+                 <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                   <label className="input-label" style={{ color: 'var(--primary)' }}>Select Master Roasters</label>
+                   <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
                      {rosters.map(r => (
-                       <option key={r._id} value={r._id}>{r.cohortName}</option>
+                       <label key={r._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                         <input 
+                           type="checkbox" 
+                           checked={selectedRosters.includes(r._id)}
+                           onChange={(e) => {
+                             if (e.target.checked) setSelectedRosters([...selectedRosters, r._id]);
+                             else setSelectedRosters(selectedRosters.filter(id => id !== r._id));
+                           }}
+                         />
+                         {r.cohortName}
+                       </label>
                      ))}
-                   </select>
-                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '5px' }}>Hold Ctrl/Cmd to select multiple</p>
+                   </div>
+                 </div>
+
+                 <div className="form-group">
+                   <label className="input-label" style={{ color: 'var(--primary)' }}>Select Exam Halls</label>
+                   <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
+                     {halls.map(h => (
+                       <label key={h._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                         <input 
+                           type="checkbox" 
+                           checked={selectedHalls.includes(h._id)}
+                           onChange={(e) => {
+                             if (e.target.checked) setSelectedHalls([...selectedHalls, h._id]);
+                             else setSelectedHalls(selectedHalls.filter(id => id !== h._id));
+                           }}
+                         />
+                         {h.hallNumber} <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>({h.layoutType})</span>
+                       </label>
+                     ))}
+                   </div>
                  </div>
 
                  {totalStudents > 0 && (
@@ -306,13 +332,15 @@ export default function SeatingManager() {
                    </div>
                  )}
 
-                 <div className="form-group" style={{ marginTop: '1.5rem' }}>
-                    <label className="input-label">Library Fill Preference</label>
-                    <select className="select-input" value={libraryFillPreference} onChange={e => setLibraryFillPreference(e.target.value)}>
-                      <option value="Computer First">Computer Tables First</option>
-                      <option value="Reading First">Reading Tables First</option>
-                    </select>
-                 </div>
+                 {showLibraryPreference && (
+                   <div className="form-group fade-in" style={{ marginTop: '1.5rem' }}>
+                      <label className="input-label">Library Fill Preference</label>
+                      <select className="select-input" value={libraryFillPreference} onChange={e => setLibraryFillPreference(e.target.value)}>
+                        <option value="Computer First">Computer Tables First</option>
+                        <option value="Reading First">Reading Tables First</option>
+                      </select>
+                   </div>
+                 )}
               </div>
             </div>
 
