@@ -16,6 +16,7 @@ export default function SeatingManager() {
   const [examDate, setExamDate] = useState(new Date().toLocaleDateString('en-GB').replace(/\//g, '.'));
   const [examName, setExamName] = useState("CIA I");
   const [academicYear, setAcademicYear] = useState("2025-26(ODD SEMESTER)");
+  const [branchName, setBranchName] = useState("CSE");
   const [iqacNumber, setIqacNumber] = useState("");
   const [selectedRosters, setSelectedRosters] = useState([]);
   const [selectedHalls, setSelectedHalls] = useState([]);
@@ -89,6 +90,7 @@ export default function SeatingManager() {
         date: examDate,
         examName,
         academicYear,
+        branchName,
         iqacNumber,
         rosterIds: selectedRosters,
         hallIds: selectedHalls,
@@ -271,6 +273,10 @@ export default function SeatingManager() {
                     <label className="input-label">Academic Year</label>
                     <input type="text" className="text-input" value={academicYear} onChange={e => setAcademicYear(e.target.value)} />
                  </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">Branch Name</label>
+                    <input type="text" className="text-input" value={branchName} onChange={e => setBranchName(e.target.value)} />
+                 </div>
                  <div className="form-group">
                     <label className="input-label">IQAC Number (Optional)</label>
                     <input type="text" className="text-input" value={iqacNumber} onChange={e => setIqacNumber(e.target.value)} />
@@ -379,7 +385,7 @@ export default function SeatingManager() {
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid black', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
                             <div>HALL NO : <span style={{ fontSize: '14px' }}>{alloc.hallNumber}</span></div>
-                            <div>Branch : {alloc.summaryRanges && alloc.summaryRanges.length > 0 ? alloc.summaryRanges[0].branch.split("/")[0] : "Multiple"}</div>
+                            <div>Branch : {generatedPlan.branchName || "Multiple"}</div>
                           </div>
 
                           <h3 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '15px', fontFamily: 'Times New Roman, serif' }}>REGISTER NO. OF THE CANDIDATES</h3>
