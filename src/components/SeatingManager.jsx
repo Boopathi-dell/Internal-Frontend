@@ -541,7 +541,10 @@ export default function SeatingManager() {
                                 {Array.from({ length: Math.max(...alloc.columnsData.map(c => c.length), 0) }).map((_, rIndex) => (
                                   <tr key={rIndex}>
                                     {alloc.columnsData.map((col, cIndex) => (
-                                      <td key={cIndex} style={tdStyles}>
+                                      <td key={cIndex} style={{
+                                        ...tdStyles,
+                                        border: col[rIndex] ? '1px solid black' : 'none'
+                                      }}>
                                         {col[rIndex] || ""}
                                       </td>
                                     ))}
