@@ -520,6 +520,12 @@ export default function MarkEntry() {
     const file = e.target.files[0];
     if (!file) return;
 
+    if ((sessionStorage.getItem("role") || "").toLowerCase() !== "admin") {
+      alert("Only Admin can upload marks.");
+      e.target.value = null;
+      return;
+    }
+
     if (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) {
       alert("Editing is currently locked or you don't have access.");
       e.target.value = null;
@@ -1091,7 +1097,7 @@ export default function MarkEntry() {
             Download Excel
           </button>
 
-          {( (sessionStorage.getItem("role") || "").toLowerCase() === "admin" || (sessionStorage.getItem("role") || "").toLowerCase() === "printadmin" ) && (
+          {( (sessionStorage.getItem("role") || "").toLowerCase() === "admin" ) && (
             <label
               className="print-btn"
               style={{ marginBottom: "20px", marginRight: "10px", padding: "10px 20px", background: "#f59e0b", color: "white", cursor: "pointer", border: "none", borderRadius: "4px", display: "inline-block" }}

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import API from "../api";
 import { Eye, EyeOff } from "lucide-react";
+import SeatingManager from "../components/SeatingManager";
 
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState("classes");
@@ -1764,6 +1765,13 @@ export default function AdminPanel() {
           onClick={() => setActiveTab("reportsettings")}
         >
           ⚙️ Report Settings
+        </button>
+        <button 
+          className={`btn ${activeTab === "seating" ? "btn-primary" : "btn-secondary"}`} 
+          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
+          onClick={() => setActiveTab("seating")}
+        >
+          🪑 Seating
         </button>
       </div>
 
@@ -3861,6 +3869,13 @@ export default function AdminPanel() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* SEATING ARRANGEMENT TAB */}
+      {activeTab === "seating" && (
+        <div className="admin-grid-1col fade-in">
+           <SeatingManager />
         </div>
       )}
 
