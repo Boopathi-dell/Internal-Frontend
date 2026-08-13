@@ -1650,7 +1650,7 @@ export default function AdminPanel() {
     `}</style>
 
     <div className="page-layout fade-in admin-panel-container">
-      <div className="header-flex" style={{ marginBottom: "1.5rem" }}>
+      <div className="header-flex no-print" style={{ marginBottom: "1.5rem" }}>
         <div>
           <h1>Admin Control Center</h1>
           <p style={{ color: "var(--text-muted)", fontSize: "1rem" }}>Configure student groups, manage user permissions, and track system logs.</p>
@@ -1659,7 +1659,7 @@ export default function AdminPanel() {
 
       {/* Tabs */}
       <div 
-        className="admin-tabs" 
+        className="admin-tabs no-print" 
         ref={tabsRef}
         onMouseDown={handleMouseDown}
         onMouseLeave={handleMouseLeave}
