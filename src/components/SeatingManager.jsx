@@ -565,6 +565,65 @@ export default function SeatingManager() {
                         </div>
                       )
                    })}
+
+                   {/* MASTER CONSOLIDATION PAGE */}
+                   <div className="bg-white text-black" style={{ minHeight: '297mm', width: '210mm', margin: '0 auto', boxSizing: 'border-box', padding: '20mm', backgroundColor: 'white', position: 'relative' }}>
+                      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                         <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
+                         {generatedPlan.subHeaderText && (
+                           <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
+                         )}
+                         <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
+                         <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT - CONSOLIDATION</h4>
+                         <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
+                      </div>
+
+                      <table style={{ ...tableStyles, border: '2px solid black', marginTop: '20px' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ ...thStyles, border: '1px solid black', padding: '6px' }}>Sl.No</th>
+                            <th style={{ ...thStyles, border: '1px solid black', padding: '6px' }}>Hall Number</th>
+                            <th style={{ ...thStyles, border: '1px solid black', padding: '6px' }}>Branch/Year/Sem/Sec</th>
+                            <th style={{ ...thStyles, border: '1px solid black', padding: '6px' }}>Reg. No.</th>
+                            <th style={{ ...thStyles, border: '1px solid black', padding: '6px' }}>Class Strength</th>
+                            <th style={{ ...thStyles, border: '1px solid black', padding: '6px' }}>Total Strength</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {generatedPlan.allocations.map((alloc, idx) => {
+                             const rowSpan = alloc.summaryRanges && alloc.summaryRanges.length > 0 ? alloc.summaryRanges.length : 1;
+                             return (
+                               <React.Fragment key={`cons-${idx}`}>
+                                 {alloc.summaryRanges && alloc.summaryRanges.map((range, rIdx) => (
+                                    <tr key={`cons-${idx}-${rIdx}`}>
+                                      {rIdx === 0 && <td style={{ ...tdStyles, border: '1px solid black' }} rowSpan={rowSpan}>{idx + 1}</td>}
+                                      {rIdx === 0 && <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }} rowSpan={rowSpan}>{alloc.hallNumber}</td>}
+                                      <td style={{ ...tdStyles, border: '1px solid black' }}>{range.branch.toUpperCase()}</td>
+                                      <td style={{ ...tdStyles, border: '1px solid black' }}>{range.range}</td>
+                                      <td style={{ ...tdStyles, border: '1px solid black' }}>{range.count}</td>
+                                      {rIdx === 0 && <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }} rowSpan={rowSpan}>{alloc.totalAllocated}</td>}
+                                    </tr>
+                                 ))}
+                                 {(!alloc.summaryRanges || alloc.summaryRanges.length === 0) && (
+                                    <tr key={`cons-${idx}-empty`}>
+                                      <td style={{ ...tdStyles, border: '1px solid black' }}>{idx + 1}</td>
+                                      <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }}>{alloc.hallNumber}</td>
+                                      <td style={{ ...tdStyles, border: '1px solid black' }} colSpan="3">No Data</td>
+                                      <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }}>{alloc.totalAllocated}</td>
+                                    </tr>
+                                 )}
+                               </React.Fragment>
+                             );
+                          })}
+                        </tbody>
+                      </table>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
+                         <div>EC</div>
+                         <div>COE</div>
+                      </div>
+                   </div>
+
                  </div>
                )}
             </div>
