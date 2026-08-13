@@ -531,8 +531,8 @@ export default function SeatingManager() {
                                <div style={{ width: '68%' }}>
                                   {alloc.libraryData.computerTables.map((table, tIdx) => (
                                      <div key={tIdx} style={{ display: 'flex', border: '2px solid black', marginBottom: '15px' }}>
-                                        <div style={{ width: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '10px', textAlign: 'center', padding: '2px' }}>
-                                           COMPUT<br/>ER<br/>TABLE {tIdx + 1}
+                                        <div style={{ width: '85px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '10px', textAlign: 'center', padding: '2px' }}>
+                                           COMPUTER<br/>TABLE {tIdx + 1}
                                         </div>
                                         <div style={{ flex: 1 }}>
                                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '10px', fontWeight: 'bold' }}>
@@ -564,8 +564,8 @@ export default function SeatingManager() {
                                <div style={{ width: '28%' }}>
                                   {alloc.libraryData.readingTables.map((table, tIdx) => (
                                      <div key={tIdx} style={{ display: 'flex', border: '2px solid black', marginBottom: '15px' }}>
-                                        <div style={{ width: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '9px', textAlign: 'center', padding: '2px' }}>
-                                           READI<br/>NG<br/>TABLE<br/>{tIdx + 1}
+                                        <div style={{ width: '65px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '9px', textAlign: 'center', padding: '2px' }}>
+                                           READING<br/>TABLE {tIdx + 1}
                                         </div>
                                         <div style={{ flex: 1 }}>
                                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '10px', fontWeight: 'bold' }}>
