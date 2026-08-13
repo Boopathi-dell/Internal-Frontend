@@ -133,7 +133,14 @@ export default function SeatingManager() {
     return { selected, uniqueYears, totalStudents };
   };
 
-  const { uniqueYears, totalStudents } = getSelectedRostersInfo();
+  const getSelectedHallsInfo = () => {
+    const selectedHallsData = halls.filter(h => selectedHalls.includes(h._id));
+    const totalCapacity = selectedHallsData.reduce((sum, h) => sum + h.totalCapacity, 0);
+    return { selectedHallsData, totalCapacity };
+  };
+
+  const { selected, uniqueYears, totalStudents } = getSelectedRostersInfo();
+  const { totalCapacity } = getSelectedHallsInfo();
   const showShuffleToggle = uniqueYears.length === 1 && selectedRosters.length > 1;
   const showLibraryPreference = halls.some(h => selectedHalls.includes(h._id) && h.layoutType === 'Library');
 
@@ -365,12 +372,56 @@ export default function SeatingManager() {
                    </div>
                  </div>
 
-                 {totalStudents > 0 && (
-                   <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-main)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                     <p style={{ fontSize: '0.9rem', marginBottom: '5px' }}>Total Valid Numbers: <strong>{totalStudents}</strong></p>
-                     <p style={{ fontSize: '0.9rem' }}>Years Selected: <strong>{uniqueYears.join(", ")}</strong></p>
-                   </div>
-                 )}
+                  {(totalStudents > 0 || totalCapacity > 0) && (
+                    <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-main)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                      <h4 style={{ fontSize: '1rem', marginBottom: '12px', color: 'var(--primary)', borderBottom: '2px solid var(--border-color)', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Selection Summary</span>
+                        {totalStudents > 0 && <span style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--text-muted)' }}>Years: {uniqueYears.join(", ")}</span>}
+                      </h4>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        {/* Cohorts Breakdown */}
+                        <div>
+                          <p style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)' }}>Selected Cohorts ({totalStudents} Students)</p>
+                          <ul style={{ listStyleType: 'none', padding: 0, margin: 0, fontSize: '0.85rem', maxHeight: '120px', overflowY: 'auto' }}>
+                            {selected.map(r => (
+                               <li key={r._id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px dashed var(--border-color)' }}>
+                                 <span>{r.cohortName}</span>
+                                 <strong style={{ color: 'var(--primary)' }}>{r.students.length}</strong>
+                               </li>
+                            ))}
+                            {selected.length === 0 && <li style={{ color: 'var(--text-muted)' }}>No cohorts selected</li>}
+                          </ul>
+                        </div>
+
+                        {/* Halls Breakdown */}
+                        <div>
+                          <p style={{ fontSize: '0.85rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)' }}>Capacity Status ({totalCapacity} Seats)</p>
+                          <div style={{ fontSize: '0.85rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <span>Required Seats:</span>
+                              <strong>{totalStudents}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                              <span>Available Capacity:</span>
+                              <strong>{totalCapacity}</strong>
+                            </div>
+                            
+                            {totalStudents > 0 && totalStudents > totalCapacity && (
+                              <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#ffebee', color: '#c62828', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold', border: '1px solid #ffcdd2' }}>
+                                ⚠️ {totalStudents - totalCapacity} more seats needed!
+                              </div>
+                            )}
+                            {totalStudents > 0 && totalStudents <= totalCapacity && (
+                              <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#e8f5e9', color: '#2e7d32', borderRadius: '4px', textAlign: 'center', fontWeight: 'bold', border: '1px solid #c8e6c9' }}>
+                                ✅ Sufficient capacity ({totalCapacity - totalStudents} extra seats)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                  {showShuffleToggle && (
                    <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
