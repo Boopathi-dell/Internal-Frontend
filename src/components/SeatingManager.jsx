@@ -26,7 +26,9 @@ export default function SeatingManager() {
 
   // Saved Plans State
   const [savedPlans, setSavedPlans] = useState([]);
+  const [headerImage, setHeaderImage] = useState(() => localStorage.getItem("seatingHeaderImage") || null);
 
+  // Fetch initial data
   useEffect(() => {
     fetchHalls();
     fetchRosters();
@@ -132,6 +134,18 @@ export default function SeatingManager() {
   const { uniqueYears, totalStudents } = getSelectedRostersInfo();
   const showShuffleToggle = uniqueYears.length === 1 && selectedRosters.length > 1;
   const showLibraryPreference = halls.some(h => selectedHalls.includes(h._id) && h.layoutType === 'Library');
+
+  const handleLogoUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+         setHeaderImage(reader.result);
+         try { localStorage.setItem("seatingHeaderImage", reader.result); } catch(err) { console.error("Could not save to localStorage", err); }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Custom styling for tables in print layout to match screenshot
   const tableStyles = { borderCollapse: 'collapse', border: '2px solid black', width: '100%', textAlign: 'center', fontSize: '11px', fontWeight: 'bold' };
@@ -277,6 +291,17 @@ export default function SeatingManager() {
                     <label className="input-label">Branch Name</label>
                     <input type="text" className="text-input" value={branchName} onChange={e => setBranchName(e.target.value)} />
                  </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">Header Image (Optional)</label>
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ marginBottom: "5px", fontSize: "0.8rem" }} />
+                    {headerImage && (
+                       <div style={{ marginTop: '5px' }}>
+                         <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "4px" }}>Current Header Preview:</p>
+                         <img src={headerImage} alt="Header Preview" style={{ width: "100%", maxHeight: "60px", objectFit: "contain", border: "1px solid var(--border-color)", padding: "2px", background: "white" }} />
+                         <button className="btn btn-danger" style={{ padding: '2px 8px', fontSize: '0.7rem', marginTop: '5px' }} onClick={() => { setHeaderImage(null); localStorage.removeItem("seatingHeaderImage"); }}>Remove</button>
+                       </div>
+                    )}
+                 </div>
                  <div className="form-group">
                     <label className="input-label">IQAC Number (Optional)</label>
                     <input type="text" className="text-input" value={iqacNumber} onChange={e => setIqacNumber(e.target.value)} />
@@ -370,13 +395,23 @@ export default function SeatingManager() {
                             </div>
                           )}
                           
-                          <div style={{ display: 'flex', borderBottom: '1px solid black', paddingBottom: '10px', marginBottom: '15px' }}>
-                            <div style={{ width: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                               <img src="/logo1.png" alt="Logo" style={{ maxWidth: '80px', maxHeight: '80px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
-                            </div>
-                            <div style={{ flex: 1, textAlign: 'center' }}>
-                               <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
-                               <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>OFFICE OF THE CONTROLLER OF THE EXAMINATION</h3>
+                          <div style={{ borderBottom: '1px solid black', paddingBottom: '10px', marginBottom: '15px' }}>
+                            {headerImage ? (
+                               <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                                  <img src={headerImage} alt="Header" style={{ width: '100%', maxHeight: '120px', objectFit: 'contain' }} />
+                               </div>
+                            ) : (
+                               <div style={{ display: 'flex', marginBottom: '10px' }}>
+                                 <div style={{ width: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <img src="/logo1.png" alt="Logo" style={{ maxWidth: '80px', maxHeight: '80px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
+                                 </div>
+                                 <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
+                                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>OFFICE OF THE CONTROLLER OF THE EXAMINATION</h3>
+                                 </div>
+                               </div>
+                            )}
+                            <div style={{ textAlign: 'center' }}>
                                <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT</h4>
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
