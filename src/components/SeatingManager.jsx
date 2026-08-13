@@ -7,7 +7,8 @@ export default function SeatingManager() {
   
   // Master Halls State
   const [halls, setHalls] = useState([]);
-  const [hallForm, setHallForm] = useState({ hallNumber: "", totalCapacity: "40", columns: "8", layoutType: "Standard" });
+  const [editingHallId, setEditingHallId] = useState(null);
+  const [hallForm, setHallForm] = useState({ hallNumber: '', totalCapacity: '40', columns: '8', layoutType: 'Standard' });
 
   // Master Rosters 
   const [rosters, setRosters] = useState([]);
@@ -60,15 +61,31 @@ export default function SeatingManager() {
     if (activeTab === "plans") fetchPlans();
   }, [activeTab]);
 
-  const handleAddHall = async () => {
+  const handleSaveHall = async () => {
     if (!hallForm.hallNumber) return;
     try {
-      await API.post("/api/seating/halls", hallForm);
+      if (editingHallId) {
+        await API.put(`/api/seating/halls/${editingHallId}`, hallForm);
+        setEditingHallId(null);
+      } else {
+        await API.post("/api/seating/halls", hallForm);
+      }
       setHallForm({ hallNumber: "", totalCapacity: "40", columns: "8", layoutType: "Standard" });
       fetchHalls();
     } catch (err) {
-      alert("Error adding hall: " + (err.response?.data?.error || err.message));
+      alert("Error saving hall: " + (err.response?.data?.error || err.message));
     }
+  };
+
+  const handleEditHall = (hall) => {
+    setEditingHallId(hall._id);
+    setHallForm({
+      hallNumber: hall.hallNumber,
+      totalCapacity: hall.totalCapacity || '40',
+      columns: hall.columns || '8',
+      layoutType: hall.layoutType || 'Standard'
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteHall = async (id) => {
@@ -207,7 +224,15 @@ export default function SeatingManager() {
           <div className="admin-grid no-print">
             {/* Add Hall Card */}
             <div className="glass-card">
-              <h3 style={{ marginBottom: '1.5rem' }}>Add New Hall</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: 0 }}>{editingHallId ? 'Edit Hall' : 'Add New Hall'}</h3>
+                {editingHallId && (
+                  <button className="btn-secondary" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => {
+                    setEditingHallId(null);
+                    setHallForm({ hallNumber: '', totalCapacity: '40', columns: '8', layoutType: 'Standard' });
+                  }}>Cancel</button>
+                )}
+              </div>
               <div className="form-group">
                 <label className="input-label">Hall Name / Number</label>
                 <input type="text" className="text-input" value={hallForm.hallNumber} onChange={e => setHallForm({...hallForm, hallNumber: e.target.value})} />
@@ -239,21 +264,22 @@ export default function SeatingManager() {
                 </div>
               )}
               
-              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} onClick={handleAddHall}>
-                <Plus size={18} /> Add Hall
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} onClick={handleSaveHall}>
+                <Plus size={18} /> {editingHallId ? 'Update Hall' : 'Add Hall'}
               </button>
             </div>
 
             {/* Existing Halls */}
             {halls.map(hall => (
               <div key={hall._id} className="glass-card" style={{ position: 'relative' }}>
-                <button 
-                  onClick={() => handleDeleteHall(hall._id)} 
-                  className="btn-icon" 
-                  style={{ position: 'absolute', top: '15px', right: '15px', color: 'var(--danger)' }}
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '8px' }}>
+                  <button onClick={() => handleEditHall(hall)} className="btn-icon" style={{ color: 'var(--primary)' }} title="Edit Hall">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                  </button>
+                  <button onClick={() => handleDeleteHall(hall._id)} className="btn-icon" style={{ color: 'var(--danger)' }} title="Delete Hall">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
                 <h3 style={{ marginBottom: '1rem' }}>Hall Data</h3>
                 <div className="form-group" style={{ pointerEvents: 'none', marginBottom: '1rem' }}>
                   <label className="input-label">Hall Name</label>
