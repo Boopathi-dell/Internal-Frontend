@@ -321,7 +321,7 @@ export default function SeatingManager() {
                    <label className="input-label" style={{ color: 'var(--primary)' }}>Select Master Roasters</label>
                    <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
                      {rosters.map(r => (
-                       <label key={r._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                       <label key={r._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: selectedRosters.includes(r._id) ? 'var(--bg-secondary)' : 'transparent' }}>
                          <input 
                            type="checkbox" 
                            checked={selectedRosters.includes(r._id)}
@@ -330,7 +330,12 @@ export default function SeatingManager() {
                              else setSelectedRosters(selectedRosters.filter(id => id !== r._id));
                            }}
                          />
-                         {r.cohortName}
+                         <span style={{ flex: 1 }}>{r.cohortName}</span>
+                         {selectedRosters.includes(r._id) && (
+                           <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '12px' }}>
+                             {selectedRosters.indexOf(r._id) + 1}
+                           </span>
+                         )}
                        </label>
                      ))}
                    </div>
@@ -340,7 +345,7 @@ export default function SeatingManager() {
                    <label className="input-label" style={{ color: 'var(--primary)' }}>Select Exam Halls</label>
                    <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
                      {halls.map(h => (
-                       <label key={h._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                       <label key={h._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: selectedHalls.includes(h._id) ? 'var(--bg-secondary)' : 'transparent' }}>
                          <input 
                            type="checkbox" 
                            checked={selectedHalls.includes(h._id)}
@@ -349,7 +354,12 @@ export default function SeatingManager() {
                              else setSelectedHalls(selectedHalls.filter(id => id !== h._id));
                            }}
                          />
-                         {h.hallNumber} <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>({h.layoutType})</span>
+                         <span style={{ flex: 1 }}>{h.hallNumber} <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>({h.layoutType})</span></span>
+                         {selectedHalls.includes(h._id) && (
+                           <span style={{ fontSize: '0.75rem', backgroundColor: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '12px' }}>
+                             {selectedHalls.indexOf(h._id) + 1}
+                           </span>
+                         )}
                        </label>
                      ))}
                    </div>
