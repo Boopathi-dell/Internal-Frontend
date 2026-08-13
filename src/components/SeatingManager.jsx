@@ -16,6 +16,7 @@ export default function SeatingManager() {
   const [examDate, setExamDate] = useState(new Date().toLocaleDateString('en-GB').replace(/\//g, '.'));
   const [examName, setExamName] = useState("CIA I");
   const [academicYear, setAcademicYear] = useState("2025-26(ODD SEMESTER)");
+  const [subHeaderText, setSubHeaderText] = useState("OFFICE OF THE CONTROLLER OF THE EXAMINATION");
   const [branchName, setBranchName] = useState("CSE");
   const [iqacNumber, setIqacNumber] = useState("");
   const [selectedRosters, setSelectedRosters] = useState([]);
@@ -93,6 +94,7 @@ export default function SeatingManager() {
         examName,
         academicYear,
         branchName,
+        subHeaderText,
         iqacNumber,
         rosterIds: selectedRosters,
         hallIds: selectedHalls,
@@ -288,6 +290,10 @@ export default function SeatingManager() {
                     <input type="text" className="text-input" value={academicYear} onChange={e => setAcademicYear(e.target.value)} />
                  </div>
                  <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">Sub-Header Text</label>
+                    <input type="text" className="text-input" value={subHeaderText} onChange={e => setSubHeaderText(e.target.value)} />
+                 </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label className="input-label">Branch Name</label>
                     <input type="text" className="text-input" value={branchName} onChange={e => setBranchName(e.target.value)} />
                  </div>
@@ -407,11 +413,13 @@ export default function SeatingManager() {
                                  </div>
                                  <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                                     <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
-                                    <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>OFFICE OF THE CONTROLLER OF THE EXAMINATION</h3>
                                  </div>
                                </div>
                             )}
                             <div style={{ textAlign: 'center' }}>
+                               {generatedPlan.subHeaderText && (
+                                 <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
+                               )}
                                <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT</h4>
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
