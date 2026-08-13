@@ -140,7 +140,7 @@ export default function SeatingManager() {
     <div className="fade-in">
       
       {/* Header controls (Hidden in Print) */}
-      <div className="glass-card mb-6 header-flex print:hidden" style={{ padding: "1.5rem" }}>
+      <div className="glass-card mb-6 header-flex no-print" style={{ padding: "1.5rem" }}>
         <div>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0, color: 'var(--primary)' }}>
             <LayoutGrid size={24} /> Exam Seating Arranger
@@ -179,7 +179,7 @@ export default function SeatingManager() {
         
         {/* === MASTER HALLS === */}
         {activeTab === 'halls' && (
-          <div className="admin-grid print:hidden">
+          <div className="admin-grid no-print">
             {/* Add Hall Card */}
             <div className="glass-card">
               <h3 style={{ marginBottom: '1.5rem' }}>Add New Hall</h3>
@@ -257,7 +257,7 @@ export default function SeatingManager() {
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
             
             {/* Sidebar configurations */}
-            <div className="print:hidden" style={{ width: '100%', maxWidth: '350px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div className="no-print" style={{ width: '100%', maxWidth: '350px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div className="glass-card">
                  <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label className="input-label">Date</label>
@@ -345,9 +345,9 @@ export default function SeatingManager() {
             </div>
 
             {/* Preview Section */}
-            <div style={{ flex: 1 }} className="print:m-0 print:p-0">
+            <div style={{ flex: 1 }}>
                {!generatedPlan && (
-                 <div className="glass-card print:hidden" style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                 <div className="glass-card no-print" style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
                    Select cohorts and generate a plan to see preview.
                  </div>
                )}
@@ -357,7 +357,7 @@ export default function SeatingManager() {
                    {generatedPlan.allocations.map((alloc, idx) => {
                       
                       return (
-                        <div key={idx} className="bg-white text-black print:mb-0" style={{ minHeight: '297mm', width: '210mm', margin: '0 auto', boxSizing: 'border-box', pageBreakAfter: 'always', padding: '20mm', backgroundColor: 'white', position: 'relative' }}>
+                        <div key={idx} className="bg-white text-black" style={{ minHeight: '297mm', width: '210mm', margin: '0 auto', boxSizing: 'border-box', pageBreakAfter: 'always', padding: '20mm', backgroundColor: 'white', position: 'relative' }}>
                           {generatedPlan.iqacNumber && (
                             <div style={{ textAlign: 'right', fontSize: '11px', fontWeight: 'bold', marginBottom: '5px' }}>
                                {generatedPlan.iqacNumber}
@@ -524,7 +524,7 @@ export default function SeatingManager() {
 
         {/* === SAVED PLANS === */}
         {activeTab === 'plans' && (
-          <div className="glass-card print:hidden">
+          <div className="glass-card no-print">
              <h3 style={{ marginBottom: '1.5rem' }}>Saved Seating Plans</h3>
              <div className="admin-table-container">
                <table className="admin-table">
