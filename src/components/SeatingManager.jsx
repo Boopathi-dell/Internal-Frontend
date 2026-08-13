@@ -401,7 +401,7 @@ export default function SeatingManager() {
                             </div>
                           )}
                           
-                          <div style={{ borderBottom: '1px solid black', paddingBottom: '10px', marginBottom: '15px' }}>
+                          <div style={{ paddingBottom: '10px', marginBottom: '15px' }}>
                             {headerImage ? (
                                <div style={{ textAlign: 'center', marginBottom: '10px' }}>
                                   <img src={headerImage} alt="Header" style={{ width: '100%', maxHeight: '120px', objectFit: 'contain' }} />
@@ -426,8 +426,9 @@ export default function SeatingManager() {
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid black', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
                             <div>HALL NO : <span style={{ fontSize: '14px' }}>{alloc.hallNumber}</span></div>
+                            <div>Date : {generatedPlan.examDate}</div>
                             <div>Branch : {generatedPlan.branchName || "Multiple"}</div>
                           </div>
 
