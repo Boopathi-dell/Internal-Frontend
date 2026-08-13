@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import API from "../api";
 import { Printer, Save, Trash2, Plus, LayoutGrid, RotateCcw } from "lucide-react";
+import ManualSeatEditor from "./ManualSeatEditor";
 
 export default function SeatingManager() {
   const [activeTab, setActiveTab] = useState("generator"); 
@@ -28,6 +29,7 @@ export default function SeatingManager() {
 
   // Saved Plans State
   const [savedPlans, setSavedPlans] = useState([]);
+  const [editingPlan, setEditingPlan] = useState(null);
   const [headerImage, setHeaderImage] = useState(() => localStorage.getItem("seatingHeaderImage") || null);
 
   // Fetch initial data
@@ -723,7 +725,15 @@ export default function SeatingManager() {
         {/* === SAVED PLANS === */}
         {activeTab === 'plans' && (
           <div className="glass-card no-print">
-             <h3 style={{ marginBottom: '1.5rem' }}>Saved Seating Plans</h3>
+            {editingPlan ? (
+              <ManualSeatEditor 
+                 plan={editingPlan}
+                 onSave={() => { setEditingPlan(null); fetchPlans(); }}
+                 onCancel={() => setEditingPlan(null)}
+              />
+            ) : (
+              <>
+                <h3 style={{ marginBottom: '1.5rem' }}>Saved Seating Plans</h3>
              <div className="admin-table-container">
                <table className="admin-table">
                  <thead>
@@ -745,6 +755,7 @@ export default function SeatingManager() {
                        <td><span className="status-badge success">{plan.allocations.length} Halls Allocated</span></td>
                        <td style={{ display: 'flex', gap: '10px' }}>
                          <button className="btn btn-secondary" onClick={() => { setGeneratedPlan(plan); setActiveTab('generator'); }}>View</button>
+                         <button className="btn btn-primary" onClick={() => setEditingPlan(plan)}>Edit Seating</button>
                          <button className="btn btn-danger" onClick={() => handleDeletePlan(plan._id)}>Delete</button>
                        </td>
                      </tr>
@@ -752,6 +763,8 @@ export default function SeatingManager() {
                  </tbody>
                </table>
              </div>
+             </>
+            )}
           </div>
         )}
       </div>
