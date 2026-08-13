@@ -3,20 +3,23 @@ import API from "../api";
 import { Printer, Save, Trash2, Plus, LayoutGrid, RotateCcw } from "lucide-react";
 
 export default function SeatingManager() {
-  const [activeTab, setActiveTab] = useState("generator"); // generator, halls, plans
+  const [activeTab, setActiveTab] = useState("generator"); 
   
   // Master Halls State
   const [halls, setHalls] = useState([]);
-  const [hallForm, setHallForm] = useState({ hallNumber: "", totalCapacity: "40", columns: "8" });
+  const [hallForm, setHallForm] = useState({ hallNumber: "", totalCapacity: "40", columns: "8", layoutType: "Standard" });
 
-  // Master Rosters (for selection)
+  // Master Rosters 
   const [rosters, setRosters] = useState([]);
   
   // Generator State
   const [examDate, setExamDate] = useState(new Date().toLocaleDateString('en-GB').replace(/\//g, '.'));
-  const [iqacNumber, setIqacNumber] = useState("MEC/IQAC/2026-27/COE/73");
+  const [examName, setExamName] = useState("CIA I");
+  const [academicYear, setAcademicYear] = useState("2025-26(ODD SEMESTER)");
+  const [iqacNumber, setIqacNumber] = useState("");
   const [selectedRosters, setSelectedRosters] = useState([]);
   const [shuffleClasses, setShuffleClasses] = useState(false);
+  const [libraryFillPreference, setLibraryFillPreference] = useState("Computer First");
   const [generatedPlan, setGeneratedPlan] = useState(null);
 
   // Saved Plans State
@@ -52,12 +55,11 @@ export default function SeatingManager() {
     if (activeTab === "plans") fetchPlans();
   }, [activeTab]);
 
-  // Handle Hall actions
   const handleAddHall = async () => {
     if (!hallForm.hallNumber) return;
     try {
       await API.post("/api/seating/halls", hallForm);
-      setHallForm({ hallNumber: "", totalCapacity: "40", columns: "8" });
+      setHallForm({ hallNumber: "", totalCapacity: "40", columns: "8", layoutType: "Standard" });
       fetchHalls();
     } catch (err) {
       alert("Error adding hall: " + (err.response?.data?.error || err.message));
@@ -72,7 +74,6 @@ export default function SeatingManager() {
     } catch (err) { console.error(err); }
   };
 
-  // Handle Generator
   const handleGenerate = async () => {
     if (selectedRosters.length === 0) {
       alert("Please select at least one cohort.");
@@ -81,9 +82,12 @@ export default function SeatingManager() {
     try {
       const res = await API.post("/api/seating/generate", {
         date: examDate,
+        examName,
+        academicYear,
         iqacNumber,
         rosterIds: selectedRosters,
-        shuffleClasses
+        shuffleClasses,
+        libraryFillPreference
       });
       setGeneratedPlan(res.data);
     } catch (err) {
@@ -110,10 +114,6 @@ export default function SeatingManager() {
     } catch (err) { console.error(err); }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const getSelectedRostersInfo = () => {
     const selected = rosters.filter(r => selectedRosters.includes(r._id));
     const uniqueYears = [...new Set(selected.map(r => r.year))];
@@ -121,51 +121,44 @@ export default function SeatingManager() {
     return { selected, uniqueYears, totalStudents };
   };
 
-  const { uniqueYears, totalStudents, selected } = getSelectedRostersInfo();
+  const { uniqueYears, totalStudents } = getSelectedRostersInfo();
   const showShuffleToggle = uniqueYears.length === 1 && selectedRosters.length > 1;
 
+  // Custom styling for tables in print layout to match screenshot
+  const tableStyles = { borderCollapse: 'collapse', border: '2px solid black', width: '100%', textAlign: 'center', fontSize: '11px', fontWeight: 'bold' };
+  const thStyles = { border: '1px solid black', padding: '4px', backgroundColor: '#f0f0f0' };
+  const tdStyles = { border: '1px solid black', padding: '2px', height: '24px' };
+
   return (
-    <div className="seating-manager print:m-0 print:p-0">
+    <div className="fade-in">
       
-      {/* Top Navbar */}
-      <div className="flex items-center justify-between mb-6 bg-gray-800 p-4 rounded-lg shadow print:hidden">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <LayoutGrid /> Exam Seating Arranger
-        </h2>
-        <div className="flex gap-4">
-          <button 
-            className={`px-4 py-2 rounded font-semibold ${activeTab === 'generator' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
-            onClick={() => setActiveTab('generator')}
-          >
-            Seating Generator
-          </button>
-          <button 
-            className={`px-4 py-2 rounded font-semibold ${activeTab === 'halls' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
-            onClick={() => setActiveTab('halls')}
-          >
-            Master Halls
-          </button>
-          <button 
-            className={`px-4 py-2 rounded font-semibold ${activeTab === 'plans' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
-            onClick={() => setActiveTab('plans')}
-          >
-            Saved Plans
-          </button>
+      {/* Header controls (Hidden in Print) */}
+      <div className="glass-card mb-6 header-flex print:hidden" style={{ padding: "1.5rem" }}>
+        <div>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0, color: 'var(--primary)' }}>
+            <LayoutGrid size={24} /> Exam Seating Arranger
+          </h2>
+          <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+             <button className={`btn ${activeTab === 'generator' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('generator')}>Seating Generator</button>
+             <button className={`btn ${activeTab === 'halls' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('halls')}>Master Halls</button>
+             <button className={`btn ${activeTab === 'plans' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveTab('plans')}>Saved Plans</button>
+          </div>
         </div>
+        
         {activeTab === 'generator' && (
-          <div className="flex gap-2">
-             <button onClick={() => setGeneratedPlan(null)} className="px-3 py-2 bg-gray-700 text-white rounded flex items-center gap-1 hover:bg-gray-600">
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+             <button className="btn btn-secondary" onClick={() => setGeneratedPlan(null)}>
                <RotateCcw size={16} /> Reset
              </button>
-             <button onClick={handleGenerate} className="px-3 py-2 bg-purple-600 text-white rounded flex items-center gap-1 hover:bg-purple-500 font-bold">
+             <button className="btn btn-primary" onClick={handleGenerate}>
                Generate Plan
              </button>
              {generatedPlan && (
                <>
-                 <button onClick={handleSavePlan} className="px-3 py-2 bg-emerald-600 text-white rounded flex items-center gap-1 hover:bg-emerald-500 font-bold">
+                 <button className="btn btn-primary" style={{ background: 'var(--success)' }} onClick={handleSavePlan}>
                    <Save size={16} /> Save Plan
                  </button>
-                 <button onClick={handlePrint} className="px-3 py-2 bg-teal-500 text-white rounded flex items-center gap-1 hover:bg-teal-400 font-bold">
+                 <button className="btn btn-primary" style={{ background: 'var(--accent)' }} onClick={() => window.print()}>
                    <Printer size={16} /> Print All
                  </button>
                </>
@@ -174,96 +167,118 @@ export default function SeatingManager() {
         )}
       </div>
 
-      {/* Tabs Content */}
-      <div className="tab-content">
+      {/* TABS CONTENT */}
+      <div>
         
-        {/* MASTER HALLS TAB */}
+        {/* === MASTER HALLS === */}
         {activeTab === 'halls' && (
-          <div className="print:hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="admin-grid print:hidden">
+            {/* Add Hall Card */}
+            <div className="glass-card">
+              <h3 style={{ marginBottom: '1.5rem' }}>Add New Hall</h3>
+              <div className="form-group">
+                <label className="input-label">Hall Name / Number</label>
+                <input type="text" className="text-input" value={hallForm.hallNumber} onChange={e => setHallForm({...hallForm, hallNumber: e.target.value})} />
+              </div>
               
-              {/* Add Hall Card */}
-              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                   Add New Hall
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-gray-400">Hall Name / Number</label>
-                    <input type="text" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white" value={hallForm.hallNumber} onChange={e => setHallForm({...hallForm, hallNumber: e.target.value})} />
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-400">Total Capacity</label>
-                      <input type="number" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white" value={hallForm.totalCapacity} onChange={e => setHallForm({...hallForm, totalCapacity: e.target.value})} />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-xs text-gray-400">Columns</label>
-                      <input type="number" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white" value={hallForm.columns} onChange={e => setHallForm({...hallForm, columns: e.target.value})} />
-                    </div>
-                  </div>
-                  <button onClick={handleAddHall} className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded font-bold flex justify-center items-center gap-2">
-                    <Plus size={18} /> Add Hall
-                  </button>
-                </div>
+              <div className="form-group" style={{ marginTop: '1rem' }}>
+                <label className="input-label">Layout Type</label>
+                <select className="select-input" value={hallForm.layoutType} onChange={e => setHallForm({...hallForm, layoutType: e.target.value})}>
+                  <option value="Standard">Standard (Columns)</option>
+                  <option value="Library">Library (Custom)</option>
+                </select>
               </div>
 
-              {/* List existing halls */}
-              {halls.map(hall => (
-                <div key={hall._id} className="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg relative group">
-                  <button onClick={() => handleDeleteHall(hall._id)} className="absolute top-3 right-3 text-red-400 hover:text-red-300 bg-red-900/30 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Trash2 size={16} />
-                  </button>
-                  <h3 className="text-lg font-bold text-white mb-4">Hall Data</h3>
-                  <div className="space-y-3 pointer-events-none">
-                    <div>
-                      <label className="text-xs text-gray-400">Hall Name / Number</label>
-                      <input type="text" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-gray-300" value={hall.hallNumber} readOnly />
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <label className="text-xs text-gray-400">Total Capacity</label>
-                        <input type="text" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-gray-300" value={hall.totalCapacity} readOnly />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-xs text-gray-400">Columns</label>
-                        <input type="text" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-gray-300" value={hall.columns} readOnly />
-                      </div>
-                    </div>
+              {hallForm.layoutType === 'Standard' && (
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="input-label">Total Capacity</label>
+                    <input type="number" className="text-input" value={hallForm.totalCapacity} onChange={e => setHallForm({...hallForm, totalCapacity: e.target.value})} />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="input-label">Columns</label>
+                    <input type="number" className="text-input" value={hallForm.columns} onChange={e => setHallForm({...hallForm, columns: e.target.value})} />
                   </div>
                 </div>
-              ))}
-
+              )}
+              {hallForm.layoutType === 'Library' && (
+                <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                   * Library Layout has a fixed capacity of 84 seats (60 Computer, 24 Reading).
+                </div>
+              )}
+              
+              <button className="btn btn-primary" style={{ width: '100%', marginTop: '1.5rem' }} onClick={handleAddHall}>
+                <Plus size={18} /> Add Hall
+              </button>
             </div>
+
+            {/* Existing Halls */}
+            {halls.map(hall => (
+              <div key={hall._id} className="glass-card" style={{ position: 'relative' }}>
+                <button 
+                  onClick={() => handleDeleteHall(hall._id)} 
+                  className="btn-icon" 
+                  style={{ position: 'absolute', top: '15px', right: '15px', color: 'var(--danger)' }}
+                >
+                  <Trash2 size={16} />
+                </button>
+                <h3 style={{ marginBottom: '1rem' }}>Hall Data</h3>
+                <div className="form-group" style={{ pointerEvents: 'none', marginBottom: '1rem' }}>
+                  <label className="input-label">Hall Name</label>
+                  <input type="text" className="text-input" value={hall.hallNumber} readOnly />
+                </div>
+                <div style={{ display: 'flex', gap: '1rem', pointerEvents: 'none' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="input-label">Layout</label>
+                    <input type="text" className="text-input" value={hall.layoutType} readOnly />
+                  </div>
+                  {hall.layoutType === 'Standard' && (
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label className="input-label">Capacity</label>
+                      <input type="text" className="text-input" value={`${hall.totalCapacity} (${hall.columns} Col)`} readOnly />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        {/* GENERATOR TAB */}
+
+        {/* === GENERATOR === */}
         {activeTab === 'generator' && (
-          <div className="flex flex-col md:flex-row gap-6">
+          <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+            
             {/* Sidebar configurations */}
-            <div className="w-full md:w-80 space-y-4 print:hidden">
-              <div className="bg-gray-800 p-4 rounded-xl shadow border border-gray-700">
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Date</label>
-                    <input type="text" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white" value={examDate} onChange={e => setExamDate(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">IQAC Number (Optional)</label>
-                    <input type="text" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white" value={iqacNumber} onChange={e => setIqacNumber(e.target.value)} />
-                  </div>
-                </div>
+            <div className="print:hidden" style={{ width: '100%', maxWidth: '350px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div className="glass-card">
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">Date</label>
+                    <input type="text" className="text-input" value={examDate} onChange={e => setExamDate(e.target.value)} />
+                 </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">Exam Name</label>
+                    <input type="text" className="text-input" value={examName} onChange={e => setExamName(e.target.value)} />
+                 </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">Academic Year</label>
+                    <input type="text" className="text-input" value={academicYear} onChange={e => setAcademicYear(e.target.value)} />
+                 </div>
+                 <div className="form-group">
+                    <label className="input-label">IQAC Number (Optional)</label>
+                    <input type="text" className="text-input" value={iqacNumber} onChange={e => setIqacNumber(e.target.value)} />
+                 </div>
               </div>
 
-              <div className="bg-gray-800 p-4 rounded-xl shadow border border-gray-700">
-                 <h3 className="text-white font-bold mb-3">Student Batches</h3>
+              <div className="glass-card">
+                 <h3 style={{ marginBottom: '1rem' }}>Student Batches</h3>
                  
-                 <div className="mb-3">
-                   <label className="text-xs text-emerald-400 font-semibold block mb-1">Fetch from Master Roaster</label>
+                 <div className="form-group">
+                   <label className="input-label" style={{ color: 'var(--primary)' }}>Fetch from Master Roaster</label>
                    <select 
                       multiple 
-                      className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white h-32 text-sm"
+                      className="select-input"
+                      style={{ height: '150px' }}
                       value={selectedRosters}
                       onChange={e => {
                         const vals = Array.from(e.target.selectedOptions, option => option.value);
@@ -274,100 +289,184 @@ export default function SeatingManager() {
                        <option key={r._id} value={r._id}>{r.cohortName}</option>
                      ))}
                    </select>
-                   <p className="text-xs text-gray-400 mt-1">Hold Ctrl/Cmd to select multiple</p>
+                   <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '5px' }}>Hold Ctrl/Cmd to select multiple</p>
                  </div>
 
                  {totalStudents > 0 && (
-                   <div className="mt-4 p-3 bg-gray-900 rounded border border-gray-700">
-                     <p className="text-sm text-gray-300">Total Valid Numbers: <span className="font-bold text-emerald-400">{totalStudents}</span></p>
-                     <p className="text-sm text-gray-300 mt-1">Years Selected: <span className="font-bold text-emerald-400">{uniqueYears.join(", ")}</span></p>
+                   <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-main)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                     <p style={{ fontSize: '0.9rem', marginBottom: '5px' }}>Total Valid Numbers: <strong>{totalStudents}</strong></p>
+                     <p style={{ fontSize: '0.9rem' }}>Years Selected: <strong>{uniqueYears.join(", ")}</strong></p>
                    </div>
                  )}
 
                  {showShuffleToggle && (
-                   <div className="mt-4 flex items-center gap-2 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded">
-                     <input type="checkbox" id="shuffle" checked={shuffleClasses} onChange={e => setShuffleClasses(e.target.checked)} className="w-4 h-4" />
-                     <label htmlFor="shuffle" className="text-sm text-yellow-200">Shuffle Classes? (Admin Opt)</label>
-                   </div>
-                 )}
-                 {uniqueYears.length > 1 && (
-                   <div className="mt-4 p-2 bg-blue-900/20 border border-blue-700/50 rounded">
-                     <p className="text-sm text-blue-200">Years will be automatically interleaved.</p>
+                   <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                     <input type="checkbox" id="shuffle" checked={shuffleClasses} onChange={e => setShuffleClasses(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+                     <label htmlFor="shuffle" className="input-label" style={{ margin: 0 }}>Shuffle Classes? (Admin Opt)</label>
                    </div>
                  )}
 
+                 <div className="form-group" style={{ marginTop: '1.5rem' }}>
+                    <label className="input-label">Library Fill Preference</label>
+                    <select className="select-input" value={libraryFillPreference} onChange={e => setLibraryFillPreference(e.target.value)}>
+                      <option value="Computer First">Computer Tables First</option>
+                      <option value="Reading First">Reading Tables First</option>
+                    </select>
+                 </div>
               </div>
             </div>
 
             {/* Preview Section */}
-            <div className="flex-1 bg-gray-800 p-4 rounded-xl shadow border border-gray-700 overflow-auto print:border-none print:shadow-none print:bg-white print:p-0">
-               <h3 className="text-white font-bold mb-4 print:hidden">Preview (Will match print output)</h3>
+            <div style={{ flex: 1 }} className="print:m-0 print:p-0">
+               {!generatedPlan && (
+                 <div className="glass-card print:hidden" style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                   Select cohorts and generate a plan to see preview.
+                 </div>
+               )}
                
-               {generatedPlan ? (
+               {generatedPlan && (
                  <div className="print-container">
                    {generatedPlan.allocations.map((alloc, idx) => {
-                      // Generate columns for the table
-                      const maxRows = Math.max(...alloc.columnsData.map(c => c.length), 0);
                       
                       return (
-                        <div key={idx} className="bg-white p-8 mb-8 text-black print:mb-0" style={{ minHeight: '297mm', width: '210mm', margin: '0 auto', boxSizing: 'border-box', pageBreakAfter: 'always' }}>
-                          <div className="text-right text-sm font-bold mb-2">
-                             {generatedPlan.iqacNumber}
-                          </div>
-                          <div className="text-center mb-6">
-                            <h2 className="font-bold text-lg">MUTHAYAMMAL ENGINEERING COLLEGE, RASIPURAM - 637408</h2>
-                            <h3 className="font-bold text-md">OFFICE OF THE CONTROLLER OF THE EXAMINATION</h3>
-                            <h4 className="font-bold text-sm">ACADEMIC YEAR 2026-27</h4>
-                            <h4 className="font-bold text-sm">SEATING ARRANGEMENT</h4>
-                            {/* <h4 className="font-bold text-sm">UNIT TEST I</h4> */}
-                          </div>
-
-                          <div className="flex justify-between items-end mb-4 font-bold">
-                            <div>HALL NO : <span className="text-xl">{alloc.hallNumber}</span></div>
-                            <div className="text-right">
-                              <div>Branch : {alloc.summaryInfo.split("/")[0] || "Multiple"}</div>
-                              <div>Date : {generatedPlan.examDate}</div>
+                        <div key={idx} className="bg-white text-black print:mb-0" style={{ minHeight: '297mm', width: '210mm', margin: '0 auto', boxSizing: 'border-box', pageBreakAfter: 'always', padding: '20mm', backgroundColor: 'white', position: 'relative' }}>
+                          {generatedPlan.iqacNumber && (
+                            <div style={{ textAlign: 'right', fontSize: '11px', fontWeight: 'bold', marginBottom: '5px' }}>
+                               {generatedPlan.iqacNumber}
+                            </div>
+                          )}
+                          
+                          <div style={{ display: 'flex', borderBottom: '1px solid black', paddingBottom: '10px', marginBottom: '15px' }}>
+                            <div style={{ width: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                               <img src="/logo1.png" alt="Logo" style={{ maxWidth: '80px', maxHeight: '80px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
+                            </div>
+                            <div style={{ flex: 1, textAlign: 'center' }}>
+                               <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
+                               <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>OFFICE OF THE CONTROLLER OF THE EXAMINATION</h3>
+                               <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
+                               <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT</h4>
+                               <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
                             </div>
                           </div>
 
-                          <h3 className="text-center font-bold text-lg mb-2">REGISTER NO. OF THE CANDIDATES</h3>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid black', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
+                            <div>HALL NO : <span style={{ fontSize: '14px' }}>{alloc.hallNumber}</span></div>
+                            <div>Branch : {alloc.summaryInfo.split("/")[0] || "Multiple"}</div>
+                          </div>
 
-                          <table className="w-full border-collapse border border-black text-center text-sm mb-6">
-                            <thead>
-                              <tr>
-                                {alloc.columnsData.map((_, cIndex) => (
-                                  <th key={cIndex} className="border border-black p-2 bg-gray-100">
-                                    {['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][cIndex] || (cIndex+1)} ROW
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {Array.from({ length: maxRows }).map((_, rIndex) => (
-                                <tr key={rIndex}>
-                                  {alloc.columnsData.map((col, cIndex) => (
-                                    <td key={cIndex} className="border border-black p-2 h-8">
-                                      {col[rIndex] || ""}
-                                    </td>
+                          <h3 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '15px', fontFamily: 'Times New Roman, serif' }}>REGISTER NO. OF THE CANDIDATES</h3>
+
+                          {/* STANDARD LAYOUT RENDER */}
+                          {alloc.layoutType === 'Standard' && (
+                            <table style={tableStyles}>
+                              <thead>
+                                <tr>
+                                  {alloc.columnsData.map((_, cIndex) => (
+                                    <th key={cIndex} style={thStyles}>
+                                      {['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'][cIndex] || (cIndex+1)} ROW
+                                    </th>
                                   ))}
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {Array.from({ length: Math.max(...alloc.columnsData.map(c => c.length), 0) }).map((_, rIndex) => (
+                                  <tr key={rIndex}>
+                                    {alloc.columnsData.map((col, cIndex) => (
+                                      <td key={cIndex} style={tdStyles}>
+                                        {col[rIndex] || ""}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
 
-                          <table className="w-full border-collapse border border-black text-center text-sm font-bold">
+                          {/* LIBRARY LAYOUT RENDER */}
+                          {alloc.layoutType === 'Library' && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                               
+                               {/* COMPUTER TABLES (Left) */}
+                               <div style={{ width: '68%' }}>
+                                  {alloc.libraryData.computerTables.map((table, tIdx) => (
+                                     <div key={tIdx} style={{ display: 'flex', border: '2px solid black', marginBottom: '15px' }}>
+                                        <div style={{ width: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '10px', textAlign: 'center', padding: '2px' }}>
+                                           COMPUT<br/>ER<br/>TABLE {tIdx + 1}
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '10px', fontWeight: 'bold' }}>
+                                              <tbody>
+                                                 {/* Row 1 */}
+                                                 <tr>
+                                                   {Array.from({length: 6}).map((_, c) => (
+                                                      <td key={`r0-c${c}`} style={{ border: '1px solid black', height: '22px', borderTop: 'none', borderRight: c===5?'none':'1px solid black' }}>
+                                                        {table[c][0]}
+                                                      </td>
+                                                   ))}
+                                                 </tr>
+                                                 {/* Row 2 */}
+                                                 <tr>
+                                                   {Array.from({length: 6}).map((_, c) => (
+                                                      <td key={`r1-c${c}`} style={{ border: '1px solid black', height: '22px', borderBottom: 'none', borderRight: c===5?'none':'1px solid black' }}>
+                                                        {table[c][1]}
+                                                      </td>
+                                                   ))}
+                                                 </tr>
+                                              </tbody>
+                                           </table>
+                                        </div>
+                                     </div>
+                                  ))}
+                               </div>
+
+                               {/* READING TABLES (Right) */}
+                               <div style={{ width: '28%' }}>
+                                  {alloc.libraryData.readingTables.map((table, tIdx) => (
+                                     <div key={tIdx} style={{ display: 'flex', border: '2px solid black', marginBottom: '15px' }}>
+                                        <div style={{ width: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '9px', textAlign: 'center', padding: '2px' }}>
+                                           READI<br/>NG<br/>TABLE<br/>{tIdx + 1}
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '10px', fontWeight: 'bold' }}>
+                                              <tbody>
+                                                 {/* Row 1 */}
+                                                 <tr>
+                                                   {Array.from({length: 2}).map((_, c) => (
+                                                      <td key={`r0-c${c}`} style={{ border: '1px solid black', height: '22px', borderTop: 'none', borderRight: c===1?'none':'1px solid black' }}>
+                                                        {table[c][0]}
+                                                      </td>
+                                                   ))}
+                                                 </tr>
+                                                 {/* Row 2 */}
+                                                 <tr>
+                                                   {Array.from({length: 2}).map((_, c) => (
+                                                      <td key={`r1-c${c}`} style={{ border: '1px solid black', height: '22px', borderBottom: 'none', borderRight: c===1?'none':'1px solid black' }}>
+                                                        {table[c][1]}
+                                                      </td>
+                                                   ))}
+                                                 </tr>
+                                              </tbody>
+                                           </table>
+                                        </div>
+                                     </div>
+                                  ))}
+                               </div>
+
+                            </div>
+                          )}
+
+                          <table style={{ ...tableStyles, marginTop: '20px' }}>
                             <thead>
                               <tr>
-                                <th className="border border-black p-2 bg-gray-100 w-1/2">BRANCH / YEAR / SEM / SEC</th>
-                                <th className="border border-black p-2 bg-gray-100 w-1/2">Allotted</th>
+                                <th style={{ ...thStyles, width: '50%' }}>BRANCH / YEAR / SEM / SEC</th>
+                                <th style={{ ...thStyles, width: '50%' }}>Allotted</th>
                               </tr>
                             </thead>
                             <tbody>
                               <tr>
-                                <td className="border border-black p-2">{alloc.summaryInfo}</td>
-                                <td className="border border-black p-2">
-                                  {/* Just a summary, could be first and last reg no */}
-                                  Total: {alloc.columnsData.flat().length}
+                                <td style={tdStyles}>{alloc.summaryInfo.split(" - Total:")[0]}</td>
+                                <td style={tdStyles}>
+                                  {alloc.summaryInfo.split("- ")[1]}
                                 </td>
                               </tr>
                             </tbody>
@@ -377,46 +476,46 @@ export default function SeatingManager() {
                       )
                    })}
                  </div>
-               ) : (
-                 <div className="h-64 flex items-center justify-center text-gray-500 print:hidden">
-                   Select cohorts and generate a plan to see preview.
-                 </div>
                )}
             </div>
           </div>
         )}
 
-        {/* SAVED PLANS TAB */}
+        {/* === SAVED PLANS === */}
         {activeTab === 'plans' && (
-          <div className="print:hidden bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg">
-             <h3 className="text-white font-bold mb-4">Saved Seating Plans</h3>
-             <div className="space-y-4">
-               {savedPlans.length === 0 && <p className="text-gray-400">No saved plans found.</p>}
-               {savedPlans.map(plan => (
-                 <div key={plan._id} className="bg-gray-900 p-4 rounded border border-gray-700 flex justify-between items-center">
-                   <div>
-                     <p className="text-white font-bold">{plan.examDate}</p>
-                     <p className="text-sm text-gray-400">{plan.iqacNumber}</p>
-                     <p className="text-xs text-indigo-400 mt-1">{plan.allocations.length} Halls Allocated</p>
-                   </div>
-                   <div className="flex gap-2">
-                     <button onClick={() => {
-                        setGeneratedPlan(plan);
-                        setActiveTab('generator');
-                     }} className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-500 text-sm">
-                       View / Print
-                     </button>
-                     <button onClick={() => handleDeletePlan(plan._id)} className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-500 text-sm">
-                       Delete
-                     </button>
-                   </div>
-                 </div>
-               ))}
+          <div className="glass-card print:hidden">
+             <h3 style={{ marginBottom: '1.5rem' }}>Saved Seating Plans</h3>
+             <div className="admin-table-container">
+               <table className="admin-table">
+                 <thead>
+                   <tr>
+                     <th>Date</th>
+                     <th>Exam Name</th>
+                     <th>Halls</th>
+                     <th>Actions</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {savedPlans.length === 0 && (
+                     <tr><td colSpan="4" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No saved plans.</td></tr>
+                   )}
+                   {savedPlans.map(plan => (
+                     <tr key={plan._id}>
+                       <td><strong>{plan.examDate}</strong></td>
+                       <td>{plan.examName}</td>
+                       <td><span className="status-badge success">{plan.allocations.length} Halls Allocated</span></td>
+                       <td style={{ display: 'flex', gap: '10px' }}>
+                         <button className="btn btn-secondary" onClick={() => { setGeneratedPlan(plan); setActiveTab('generator'); }}>View</button>
+                         <button className="btn btn-danger" onClick={() => handleDeletePlan(plan._id)}>Delete</button>
+                       </td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
              </div>
           </div>
         )}
       </div>
-
     </div>
   );
 }
