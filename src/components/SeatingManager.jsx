@@ -721,6 +721,13 @@ export default function SeatingManager() {
                              );
                           })}
                         </tbody>
+                        <tfoot>
+                           <tr>
+                             <td colSpan="4" style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold', textAlign: 'right', paddingRight: '15px' }}>TOTAL</td>
+                             <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }}>{generatedPlan.allocations.reduce((sum, a) => sum + a.totalAllocated, 0)}</td>
+                             <td style={{ ...tdStyles, border: '1px solid black', fontWeight: 'bold' }}>{generatedPlan.allocations.reduce((sum, a) => sum + a.totalAllocated, 0)}</td>
+                           </tr>
+                        </tfoot>
                       </table>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
