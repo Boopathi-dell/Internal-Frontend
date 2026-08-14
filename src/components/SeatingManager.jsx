@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import API from "../api";
-import { Printer, Save, Trash2, Plus, LayoutGrid, RotateCcw, Download } from "lucide-react";
+import { Printer, Save, Trash2, Plus, LayoutGrid, RotateCcw, Download, Users, X } from "lucide-react";
 import * as XLSX from 'xlsx';
 import ManualSeatEditor from "./ManualSeatEditor";
 
@@ -26,6 +26,8 @@ export default function SeatingManager() {
   const [selectedHalls, setSelectedHalls] = useState([]);
   const [shuffleClasses, setShuffleClasses] = useState(false);
   const [libraryFillPreference, setLibraryFillPreference] = useState("Computer First");
+  const [excludedStudents, setExcludedStudents] = useState([]);
+  const [showStudentManager, setShowStudentManager] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState(null);
 
   // Saved Plans State
@@ -129,7 +131,8 @@ export default function SeatingManager() {
         rosterIds: selectedRosters,
         hallIds: selectedHalls,
         shuffleClasses,
-        libraryFillPreference
+        libraryFillPreference,
+        excludedStudents
       });
       setGeneratedPlan(res.data);
     } catch (err) {
@@ -480,6 +483,15 @@ export default function SeatingManager() {
                        </label>
                      ))}
                    </div>
+                   {selectedRosters.length > 0 && (
+                     <button 
+                        className="btn btn-secondary" 
+                        style={{ width: '100%', marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '8px' }}
+                        onClick={() => setShowStudentManager(true)}
+                     >
+                        <Users size={16} /> Manage Students ({selectedRosters.length} Classes)
+                     </button>
+                   )}
                  </div>
 
                  <div className="form-group">
@@ -884,6 +896,75 @@ export default function SeatingManager() {
           </div>
         )}
       </div>
+
+      {/* === STUDENT MANAGER MODAL === */}
+      {showStudentManager && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000, 
+          display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px'
+        }}>
+          <div className="glass-card" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-main)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Users size={24} /> Manage Students
+              </h2>
+              <button className="btn-icon" onClick={() => setShowStudentManager(false)}>
+                <X size={24} />
+              </button>
+            </div>
+            
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              Uncheck a student to exclude them from the seating arrangement (e.g., absent, internship).
+              Currently {excludedStudents.length} students excluded.
+            </p>
+
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '10px' }}>
+              {selectedRosters.map(rosterId => {
+                const roster = rosters.find(r => r._id === rosterId);
+                if (!roster) return null;
+                return (
+                  <div key={roster._id} style={{ marginBottom: '1.5rem' }}>
+                    <h4 style={{ backgroundColor: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: '4px', marginBottom: '10px' }}>
+                      {roster.cohortName} ({roster.students.length} Students)
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
+                      {roster.students.map(student => {
+                        const isExcluded = excludedStudents.includes(student.regNo);
+                        return (
+                          <label key={student.regNo} style={{
+                            display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', cursor: 'pointer',
+                            opacity: isExcluded ? 0.5 : 1, textDecoration: isExcluded ? 'line-through' : 'none'
+                          }}>
+                            <input 
+                              type="checkbox" 
+                              checked={!isExcluded}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setExcludedStudents(excludedStudents.filter(r => r !== student.regNo));
+                                } else {
+                                  setExcludedStudents([...excludedStudents, student.regNo]);
+                                }
+                              }}
+                            />
+                            {student.regNo}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ paddingTop: '1rem', marginTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button className="btn btn-secondary" onClick={() => setExcludedStudents([])}>Reset All</button>
+              <button className="btn btn-primary" onClick={() => setShowStudentManager(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
