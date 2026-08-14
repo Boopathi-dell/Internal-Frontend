@@ -462,8 +462,21 @@ export default function SeatingManager() {
                  <h3 style={{ marginBottom: '1rem' }}>Student Batches</h3>
                  
                  <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                   <label className="input-label" style={{ color: 'var(--primary)' }}>Select Master Roasters</label>
+                   <label className="input-label" style={{ color: 'var(--primary)', display: 'flex', justifyContent: 'space-between' }}>
+                     <span>Select Master Roasters</span>
+                   </label>
                    <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
+                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-secondary)', fontWeight: 'bold' }}>
+                       <input 
+                         type="checkbox" 
+                         checked={rosters.length > 0 && selectedRosters.length === rosters.length}
+                         onChange={(e) => {
+                           if (e.target.checked) setSelectedRosters(rosters.map(r => r._id));
+                           else setSelectedRosters([]);
+                         }}
+                       />
+                       <span style={{ flex: 1 }}>Select All</span>
+                     </label>
                      {rosters.map(r => (
                        <label key={r._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: selectedRosters.includes(r._id) ? 'var(--bg-secondary)' : 'transparent' }}>
                          <input 
@@ -495,8 +508,21 @@ export default function SeatingManager() {
                  </div>
 
                  <div className="form-group">
-                   <label className="input-label" style={{ color: 'var(--primary)' }}>Select Exam Halls</label>
+                   <label className="input-label" style={{ color: 'var(--primary)', display: 'flex', justifyContent: 'space-between' }}>
+                     <span>Select Exam Halls</span>
+                   </label>
                    <div style={{ maxHeight: '150px', overflowY: 'auto', background: 'var(--bg-main)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '10px' }}>
+                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-secondary)', fontWeight: 'bold' }}>
+                       <input 
+                         type="checkbox" 
+                         checked={halls.length > 0 && selectedHalls.length === halls.length}
+                         onChange={(e) => {
+                           if (e.target.checked) setSelectedHalls(halls.map(h => h._id));
+                           else setSelectedHalls([]);
+                         }}
+                       />
+                       <span style={{ flex: 1 }}>Select All</span>
+                     </label>
                      {halls.map(h => (
                        <label key={h._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '0.9rem', padding: '4px 8px', borderRadius: '4px', backgroundColor: selectedHalls.includes(h._id) ? 'var(--bg-secondary)' : 'transparent' }}>
                          <input 
