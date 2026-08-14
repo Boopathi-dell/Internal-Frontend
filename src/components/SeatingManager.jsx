@@ -828,7 +828,7 @@ export default function SeatingManager() {
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
                          <div>EC</div>
-                         <div>COE</div>
+                         <div>HOD</div>
                       </div>
                    </div>
 
