@@ -161,7 +161,7 @@ export default function SeatingManager() {
   const { selected, uniqueYears, totalStudents } = getSelectedRostersInfo();
   const { totalCapacity } = getSelectedHallsInfo();
   const showShuffleToggle = uniqueYears.length === 1 && selectedRosters.length > 1;
-  const showLibraryPreference = halls.some(h => selectedHalls.includes(h._id) && h.layoutType === 'Library');
+  const showLibraryPreference = halls.some(h => selectedHalls.includes(h._id) && (h.layoutType === 'Library' || h.layoutType === 'Library 2'));
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
@@ -244,7 +244,8 @@ export default function SeatingManager() {
                 <label className="input-label">Layout Type</label>
                 <select className="select-input" value={hallForm.layoutType} onChange={e => setHallForm({...hallForm, layoutType: e.target.value})}>
                   <option value="Standard">Standard (Columns)</option>
-                  <option value="Library">Library (Custom)</option>
+                  <option value="Library">Library Model 1 (24 Reading Seats)</option>
+                  <option value="Library 2">Library Model 2 (48 Reading Seats)</option>
                 </select>
               </div>
 
@@ -262,7 +263,12 @@ export default function SeatingManager() {
               )}
               {hallForm.layoutType === 'Library' && (
                 <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                   * Library Layout has a fixed capacity of 84 seats (60 Computer, 24 Reading).
+                   * Library Model 1 has a fixed capacity of 84 seats (60 Computer, 24 Reading).
+                </div>
+              )}
+              {hallForm.layoutType === 'Library 2' && (
+                <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                   * Library Model 2 has a fixed capacity of 108 seats (60 Computer, 48 Reading).
                 </div>
               )}
               
@@ -555,11 +561,11 @@ export default function SeatingManager() {
                           )}
 
                           {/* LIBRARY LAYOUT RENDER */}
-                          {alloc.layoutType === 'Library' && (
+                          {(alloc.layoutType === 'Library' || alloc.layoutType === 'Library 2') && (
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                
                                {/* COMPUTER TABLES (Left) */}
-                               <div style={{ width: '68%' }}>
+                               <div style={{ width: alloc.layoutType === 'Library 2' ? '58%' : '68%' }}>
                                   {alloc.libraryData.computerTables.map((table, tIdx) => (
                                      <div key={tIdx} style={{ display: 'flex', border: '2px solid black', marginBottom: '15px' }}>
                                         <div style={{ width: '85px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '10px', textAlign: 'center', padding: '2px' }}>
@@ -592,7 +598,7 @@ export default function SeatingManager() {
                                </div>
 
                                {/* READING TABLES (Right) */}
-                               <div style={{ width: '28%' }}>
+                               <div style={{ width: alloc.layoutType === 'Library 2' ? '38%' : '28%' }}>
                                   {alloc.libraryData.readingTables.map((table, tIdx) => (
                                      <div key={tIdx} style={{ display: 'flex', border: '2px solid black', marginBottom: '15px' }}>
                                         <div style={{ width: '65px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '2px solid black', fontWeight: 'bold', fontSize: '9px', textAlign: 'center', padding: '2px' }}>
@@ -603,16 +609,16 @@ export default function SeatingManager() {
                                               <tbody>
                                                  {/* Row 1 */}
                                                  <tr>
-                                                   {Array.from({length: 2}).map((_, c) => (
-                                                      <td key={`r0-c${c}`} style={{ border: '1px solid black', height: '22px', borderTop: 'none', borderRight: c===1?'none':'1px solid black' }}>
+                                                   {Array.from({length: alloc.layoutType === 'Library 2' ? 4 : 2}).map((_, c) => (
+                                                      <td key={`r0-c${c}`} style={{ border: '1px solid black', height: '22px', borderTop: 'none', borderRight: c===(alloc.layoutType === 'Library 2' ? 3 : 1)?'none':'1px solid black' }}>
                                                         {table[c][0]}
                                                       </td>
                                                    ))}
                                                  </tr>
                                                  {/* Row 2 */}
                                                  <tr>
-                                                   {Array.from({length: 2}).map((_, c) => (
-                                                      <td key={`r1-c${c}`} style={{ border: '1px solid black', height: '22px', borderBottom: 'none', borderRight: c===1?'none':'1px solid black' }}>
+                                                   {Array.from({length: alloc.layoutType === 'Library 2' ? 4 : 2}).map((_, c) => (
+                                                      <td key={`r1-c${c}`} style={{ border: '1px solid black', height: '22px', borderBottom: 'none', borderRight: c===(alloc.layoutType === 'Library 2' ? 3 : 1)?'none':'1px solid black' }}>
                                                         {table[c][1]}
                                                       </td>
                                                    ))}
