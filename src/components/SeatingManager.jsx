@@ -154,7 +154,11 @@ export default function SeatingManager() {
 
   const getSelectedHallsInfo = () => {
     const selectedHallsData = halls.filter(h => selectedHalls.includes(h._id));
-    const totalCapacity = selectedHallsData.reduce((sum, h) => sum + h.totalCapacity, 0);
+    const totalCapacity = selectedHallsData.reduce((sum, h) => {
+      if (h.layoutType === 'Library') return sum + 84;
+      if (h.layoutType === 'Library 2') return sum + 108;
+      return sum + (h.totalCapacity || 0);
+    }, 0);
     return { selectedHallsData, totalCapacity };
   };
 
