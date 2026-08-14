@@ -16,12 +16,12 @@ export default function SeatingManager() {
   const [rosters, setRosters] = useState([]);
   
   // Generator State
-  const [examDate, setExamDate] = useState(new Date().toLocaleDateString('en-GB').replace(/\//g, '.'));
-  const [examName, setExamName] = useState("CIA I");
-  const [academicYear, setAcademicYear] = useState("2025-26(ODD SEMESTER)");
-  const [subHeaderText, setSubHeaderText] = useState("OFFICE OF THE CONTROLLER OF THE EXAMINATION");
-  const [branchName, setBranchName] = useState("CSE");
-  const [iqacNumber, setIqacNumber] = useState("");
+  const [examDate, setExamDate] = useState(() => localStorage.getItem("seatingExamDate") || new Date().toLocaleDateString('en-GB').replace(/\//g, '.'));
+  const [examName, setExamName] = useState(() => localStorage.getItem("seatingExamName") || "CIA I");
+  const [academicYear, setAcademicYear] = useState(() => localStorage.getItem("seatingAcademicYear") || "2025-26(ODD SEMESTER)");
+  const [subHeaderText, setSubHeaderText] = useState(() => localStorage.getItem("seatingSubHeaderText") || "OFFICE OF THE CONTROLLER OF THE EXAMINATION");
+  const [branchName, setBranchName] = useState(() => localStorage.getItem("seatingBranchName") || "CSE");
+  const [iqacNumber, setIqacNumber] = useState(() => localStorage.getItem("seatingIqacNumber") || "");
   const [selectedRosters, setSelectedRosters] = useState([]);
   const [selectedHalls, setSelectedHalls] = useState([]);
   const [shuffleClasses, setShuffleClasses] = useState(false);
@@ -38,6 +38,16 @@ export default function SeatingManager() {
     fetchHalls();
     fetchRosters();
   }, []);
+
+  // Persist form fields to localStorage
+  useEffect(() => {
+    localStorage.setItem("seatingExamDate", examDate);
+    localStorage.setItem("seatingExamName", examName);
+    localStorage.setItem("seatingAcademicYear", academicYear);
+    localStorage.setItem("seatingSubHeaderText", subHeaderText);
+    localStorage.setItem("seatingBranchName", branchName);
+    localStorage.setItem("seatingIqacNumber", iqacNumber);
+  }, [examDate, examName, academicYear, subHeaderText, branchName, iqacNumber]);
 
   const fetchHalls = async () => {
     try {
