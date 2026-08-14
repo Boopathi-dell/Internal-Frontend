@@ -796,7 +796,7 @@ export default function SeatingManager() {
                             </tbody>
                           </table>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '90px', padding: '0 40px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
                              <div>EC</div>
                              <div>HOD</div>
                           </div>
@@ -885,7 +885,7 @@ export default function SeatingManager() {
                         </tfoot>
                       </table>
                       
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '60px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '90px', padding: '0 40px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
                          <div>EC</div>
                          <div>HOD</div>
                       </div>
