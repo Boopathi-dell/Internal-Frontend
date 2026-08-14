@@ -194,9 +194,9 @@ export default function SeatingManager() {
   };
 
   // Custom styling for tables in print layout to match screenshot
-  const tableStyles = { borderCollapse: 'collapse', width: '100%', textAlign: 'center', fontSize: '11px', fontWeight: 'bold' };
-  const thStyles = { border: '1px solid black', padding: '4px', backgroundColor: '#f0f0f0' };
-  const tdStyles = { padding: '2px', height: '24px' };
+  const tableStyles = { borderCollapse: 'collapse', width: '100%', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', fontFamily: 'Times New Roman, serif' };
+  const thStyles = { border: '1px solid black', padding: '4px', backgroundColor: '#f0f0f0', fontWeight: 'bold' };
+  const tdStyles = { padding: '2px', height: '24px', fontWeight: 'bold' };
 
   const handleExportExcel = () => {
     if (!generatedPlan) return;
@@ -645,29 +645,29 @@ export default function SeatingManager() {
                                     <img src="/logo1.png" alt="Logo" style={{ maxWidth: '80px', maxHeight: '80px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
                                  </div>
                                  <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                    <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
+                                    <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
                                  </div>
                                </div>
                             )}
                             <div style={{ textAlign: 'center' }}>
                                {generatedPlan.subHeaderText && (
-                                 <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
+                                 <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
                                )}
-                               <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
+                               <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT</h4>
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '13px' }}>
-                            <div>HALL NO : <span style={{ fontSize: '14px' }}>{alloc.hallNumber}</span></div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '14px', fontWeight: 'bold' }}>
+                            <div>HALL NO : <span>{alloc.hallNumber}</span></div>
                             <div style={{ textAlign: 'right' }}>
                                <div style={{ marginBottom: '4px' }}>Branch : {generatedPlan.branchName || "Multiple"}</div>
                                <div>Date : {generatedPlan.examDate}</div>
                             </div>
                           </div>
 
-                          <h3 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px', marginBottom: '15px', fontFamily: 'Times New Roman, serif' }}>REGISTER NO. OF THE CANDIDATES</h3>
+                          <h3 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '15px', fontFamily: 'Times New Roman, serif' }}>REGISTER NO. OF THE CANDIDATES</h3>
 
                           {/* STANDARD LAYOUT RENDER */}
                           {alloc.layoutType === 'Standard' && (
@@ -824,15 +824,15 @@ export default function SeatingManager() {
                                 <img src="/logo1.png" alt="Logo" style={{ maxWidth: '80px', maxHeight: '80px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
                              </div>
                              <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
+                                <h2 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
                              </div>
                            </div>
                         )}
                         <div style={{ textAlign: 'center' }}>
                            {generatedPlan.subHeaderText && (
-                             <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
+                             <h3 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
                            )}
-                           <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
+                           <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
                            <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT - CONSOLIDATION</h4>
                            <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
                         </div>
