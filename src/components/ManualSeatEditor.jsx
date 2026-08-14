@@ -49,6 +49,20 @@ export default function ManualSeatEditor({ plan, onSave, onCancel }) {
     }
   };
 
+  const handleSeatDoubleClick = (aIdx, seatDetails) => {
+    const alloc = editedPlan.allocations[aIdx];
+    const currentVal = getSeatValue(alloc, seatDetails);
+    const newVal = window.prompt("Edit Roll Number (Clear the text to empty the seat):", currentVal);
+    
+    if (newVal !== null) {
+      const newPlan = { ...editedPlan };
+      const newAlloc = newPlan.allocations[aIdx];
+      setSeatValue(newAlloc, seatDetails, newVal.trim());
+      setEditedPlan(newPlan);
+      setSelectedSeat(null);
+    }
+  };
+
   const handleSave = async () => {
     try {
       await API.put(`/api/seating/plans/${editedPlan._id}`, { allocations: editedPlan.allocations });
@@ -68,9 +82,10 @@ export default function ManualSeatEditor({ plan, onSave, onCancel }) {
     }
   };
 
-  const SeatBox = ({ val, selected, onClick, width = '70px', height = '30px', fontSize = '11px' }) => (
+  const SeatBox = ({ val, selected, onClick, onDoubleClick, width = '70px', height = '30px', fontSize = '11px' }) => (
     <div 
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       style={{
         width, height,
         border: `2px solid ${selected ? 'var(--primary)' : '#cbd5e1'}`,
@@ -97,7 +112,7 @@ export default function ManualSeatEditor({ plan, onSave, onCancel }) {
           <p style={{ color: 'var(--text-muted)', margin: '5px 0 0 0', fontSize: '0.9rem' }}>
             {selectedSeat 
               ? "Select another seat to swap with..." 
-              : "Click a seat, then click another seat to swap them."}
+              : "Click two seats to swap. Double-click a seat to manually edit the text."}
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
@@ -127,6 +142,7 @@ export default function ManualSeatEditor({ plan, onSave, onCancel }) {
                           val={col[rIndex]}
                           selected={isSelected(aIdx, { type: 'standard', cIndex, rIndex })}
                           onClick={() => handleSeatClick(aIdx, { type: 'standard', cIndex, rIndex })}
+                          onDoubleClick={() => handleSeatDoubleClick(aIdx, { type: 'standard', cIndex, rIndex })}
                         />
                       ))}
                     </div>
@@ -147,6 +163,7 @@ export default function ManualSeatEditor({ plan, onSave, onCancel }) {
                                 val={table[c][r]}
                                 selected={isSelected(aIdx, { type: 'library_computer', t: tIdx, c, r })}
                                 onClick={() => handleSeatClick(aIdx, { type: 'library_computer', t: tIdx, c, r })}
+                                onDoubleClick={() => handleSeatDoubleClick(aIdx, { type: 'library_computer', t: tIdx, c, r })}
                                 width="60px" height="25px" fontSize="9px"
                               />
                            ))}
@@ -167,6 +184,7 @@ export default function ManualSeatEditor({ plan, onSave, onCancel }) {
                                 val={table[c][r]}
                                 selected={isSelected(aIdx, { type: 'library_reading', t: tIdx, c, r })}
                                 onClick={() => handleSeatClick(aIdx, { type: 'library_reading', t: tIdx, c, r })}
+                                onDoubleClick={() => handleSeatDoubleClick(aIdx, { type: 'library_reading', t: tIdx, c, r })}
                                 width="60px" height="25px" fontSize="9px"
                               />
                            ))}
