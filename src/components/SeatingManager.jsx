@@ -807,14 +807,35 @@ export default function SeatingManager() {
 
                    {/* MASTER CONSOLIDATION PAGE */}
                    <div className="bg-white text-black" style={{ minHeight: '297mm', width: '210mm', margin: '0 auto', boxSizing: 'border-box', padding: '20mm', backgroundColor: 'white', position: 'relative' }}>
-                      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                         <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
-                         {generatedPlan.subHeaderText && (
-                           <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
-                         )}
-                         <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
-                         <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT - CONSOLIDATION</h4>
-                         <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
+                      {generatedPlan.iqacNumber && (
+                        <div style={{ textAlign: 'right', fontSize: '11px', fontWeight: 'bold', marginBottom: '5px' }}>
+                           {generatedPlan.iqacNumber}
+                        </div>
+                      )}
+                      
+                      <div style={{ paddingBottom: '10px', marginBottom: '15px' }}>
+                        {headerImage ? (
+                           <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+                              <img src={headerImage} alt="Header" style={{ width: '100%', maxHeight: '120px', objectFit: 'contain' }} />
+                           </div>
+                        ) : (
+                           <div style={{ display: 'flex', marginBottom: '10px' }}>
+                             <div style={{ width: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <img src="/logo1.png" alt="Logo" style={{ maxWidth: '80px', maxHeight: '80px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
+                             </div>
+                             <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                <h2 style={{ fontSize: '15px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>MUTHAYAMMAL ENGINEERING COLLEGE , RASIPURAM &ndash; 637408</h2>
+                             </div>
+                           </div>
+                        )}
+                        <div style={{ textAlign: 'center' }}>
+                           {generatedPlan.subHeaderText && (
+                             <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.subHeaderText}</h3>
+                           )}
+                           <h4 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>ACADEMIC YEAR {generatedPlan.academicYear}</h4>
+                           <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT - CONSOLIDATION</h4>
+                           <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
+                        </div>
                       </div>
 
                       <table style={{ ...tableStyles, border: '2px solid black', marginTop: '20px' }}>
