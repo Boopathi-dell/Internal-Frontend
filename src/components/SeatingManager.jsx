@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import API from "../api";
-import { Printer, Save, Trash2, Plus, LayoutGrid, RotateCcw } from "lucide-react";
+import { Printer, Save, Trash2, Plus, LayoutGrid, RotateCcw, Download } from "lucide-react";
+import * as XLSX from 'xlsx';
 import ManualSeatEditor from "./ManualSeatEditor";
 
 export default function SeatingManager() {
@@ -180,9 +181,91 @@ export default function SeatingManager() {
   };
 
   // Custom styling for tables in print layout to match screenshot
-  const tableStyles = { borderCollapse: 'collapse', border: '2px solid black', width: '100%', textAlign: 'center', fontSize: '11px', fontWeight: 'bold' };
+  const tableStyles = { borderCollapse: 'collapse', width: '100%', textAlign: 'center', fontSize: '11px', fontWeight: 'bold' };
   const thStyles = { border: '1px solid black', padding: '4px', backgroundColor: '#f0f0f0' };
-  const tdStyles = { border: '1px solid black', padding: '2px', height: '24px' };
+  const tdStyles = { padding: '2px', height: '24px' };
+
+  const handleExportExcel = () => {
+    if (!generatedPlan) return;
+    
+    const wb = XLSX.utils.book_new();
+
+    generatedPlan.allocations.forEach(alloc => {
+      let sheetData = [];
+      sheetData.push([`HALL NO: ${alloc.hallNumber}`, "", "", `Date: ${generatedPlan.examDate}`]);
+      sheetData.push(["", "", "", `Branch: ${generatedPlan.branchName || 'Multiple'}`]);
+      sheetData.push([]);
+      
+      if (alloc.layoutType === 'Standard') {
+         let headers = alloc.columnsData.map((_, i) => `${['I','II','III','IV','V','VI','VII','VIII','IX','X'][i] || (i+1)} ROW`);
+         sheetData.push(headers);
+         
+         const maxRows = Math.max(...alloc.columnsData.map(c => c.length), 0);
+         for (let r = 0; r < maxRows; r++) {
+           let row = [];
+           for (let c = 0; c < alloc.columnsData.length; c++) {
+             row.push(alloc.columnsData[c][r] || "");
+           }
+           sheetData.push(row);
+         }
+      } else {
+         sheetData.push(["COMPUTER TABLES"]);
+         alloc.libraryData.computerTables.forEach((table, tIdx) => {
+            sheetData.push([`TABLE ${tIdx + 1}`]);
+            sheetData.push(table.map(col => col[0])); 
+            sheetData.push(table.map(col => col[1])); 
+            sheetData.push([]);
+         });
+         sheetData.push(["READING TABLES"]);
+         alloc.libraryData.readingTables.forEach((table, tIdx) => {
+            sheetData.push([`TABLE ${tIdx + 1}`]);
+            sheetData.push(table.map(col => col[0])); 
+            sheetData.push(table.map(col => col[1])); 
+            sheetData.push([]);
+         });
+      }
+      
+      sheetData.push([]);
+      sheetData.push(["Summary"]);
+      sheetData.push(["BRANCH/YEAR/SEM", "Alloted Range", "Count"]);
+      alloc.summaryRanges?.forEach(r => {
+        sheetData.push([r.branch.toUpperCase(), r.range, r.count]);
+      });
+      sheetData.push(["Total No of Students", "", alloc.totalAllocated]);
+      
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(wb, ws, `Hall ${alloc.hallNumber}`);
+    });
+    
+    let consData = [];
+    consData.push(["SEATING ARRANGEMENT - CONSOLIDATION"]);
+    consData.push([generatedPlan.examName]);
+    consData.push([]);
+    consData.push(["Sl.No", "Hall Number", "Branch/Year/Sem/Sec", "Reg. No.", "Class Strength", "Total Strength"]);
+    
+    let slNo = 1;
+    generatedPlan.allocations.forEach(alloc => {
+       if (alloc.summaryRanges && alloc.summaryRanges.length > 0) {
+         alloc.summaryRanges.forEach((range, rIdx) => {
+           if (rIdx === 0) {
+             consData.push([slNo++, alloc.hallNumber, range.branch.toUpperCase(), range.range, range.count, alloc.totalAllocated]);
+           } else {
+             consData.push(["", "", range.branch.toUpperCase(), range.range, range.count, ""]);
+           }
+         });
+       } else {
+         consData.push([slNo++, alloc.hallNumber, "No Data", "", "", alloc.totalAllocated]);
+       }
+    });
+    
+    const grandTotal = generatedPlan.allocations.reduce((sum, a) => sum + a.totalAllocated, 0);
+    consData.push(["", "", "", "TOTAL", grandTotal, grandTotal]);
+    
+    const consWs = XLSX.utils.aoa_to_sheet(consData);
+    XLSX.utils.book_append_sheet(wb, consWs, "Consolidation");
+
+    XLSX.writeFile(wb, `${generatedPlan.examName}_Seating_Plan.xlsx`);
+  };
 
   return (
     <div className="fade-in">
@@ -212,6 +295,9 @@ export default function SeatingManager() {
                <>
                  <button className="btn btn-primary" style={{ background: 'var(--success)' }} onClick={handleSavePlan}>
                    <Save size={16} /> Save Plan
+                 </button>
+                 <button className="btn btn-primary" style={{ background: '#107c41' }} onClick={handleExportExcel}>
+                   <Download size={16} /> Export Excel
                  </button>
                  <button className="btn btn-primary" style={{ background: 'var(--accent)' }} onClick={() => window.print()}>
                    <Printer size={16} /> Print All
