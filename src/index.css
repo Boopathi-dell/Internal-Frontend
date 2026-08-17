@@ -488,3 +488,35 @@ h3 { font-size: 1.35rem; }
     background-color: white !important;
   }
 }
+
+/* Mark Entry Sticky Columns */
+.table-responsive-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  position: relative;
+  margin-bottom: 15px;
+}
+
+.sticky-col-header {
+  position: sticky;
+  z-index: 10;
+  background-color: #f2f2f2 !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+}
+
+.sticky-col-body {
+  position: sticky;
+  z-index: 5;
+  background-color: white !important;
+  box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+}
+
+@media print {
+  .table-responsive-wrapper {
+    overflow-x: visible !important;
+  }
+  .sticky-col-header, .sticky-col-body {
+    position: static !important;
+    box-shadow: none !important;
+  }
+}

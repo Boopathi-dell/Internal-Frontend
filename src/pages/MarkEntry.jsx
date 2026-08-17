@@ -1210,7 +1210,8 @@ export default function MarkEntry() {
 
 
 
-            <table border="1" style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black" }}>
+            <div className="table-responsive-wrapper">
+              <table border="1" style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black", minWidth: "900px" }}>
 
 
 
@@ -1218,9 +1219,9 @@ export default function MarkEntry() {
 
               <thead>
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
-                  <th rowSpan="2" style={{ padding: "3px" }}>S.No.</th>
-                  <th rowSpan="2" style={{ padding: "3px" }}>Register<br />Number</th>
-                  <th rowSpan="2" style={{ padding: "3px" }}>Name of the<br />Student</th>
+                  <th className="sticky-col-header" rowSpan="2" style={{ padding: "3px", left: 0, minWidth: "40px", width: "40px", maxWidth: "40px" }}>S.No.</th>
+                  <th className="sticky-col-header" rowSpan="2" style={{ padding: "3px", left: "40px", minWidth: "100px", width: "100px", maxWidth: "100px" }}>Register<br />Number</th>
+                  <th className="sticky-col-header" rowSpan="2" style={{ padding: "3px", left: "140px", minWidth: "160px", width: "160px", maxWidth: "160px", textAlign: "left", paddingLeft: "10px" }}>Name of the<br />Student</th>
                   {(classData.subjects || []).map((sub, idx) => (
                     <th key={idx} style={{ padding: "2px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px" }}>
                       {getCourseDetails()[idx]?.courseCode || sub}
@@ -1242,9 +1243,9 @@ export default function MarkEntry() {
               <tbody>
                 {(classData.students || []).map((s, i) => (
                   <tr key={s._id || i}>
-                    <td style={{ padding: "4px" }}>{i + 1}</td>
-                    <td style={{ padding: "4px" }}>{s.regNo}</td>
-                    <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px", fontSize: "12px" }}>{s.name}</td>
+                    <td className="sticky-col-body" style={{ padding: "4px", left: 0, minWidth: "40px", width: "40px", maxWidth: "40px" }}>{i + 1}</td>
+                    <td className="sticky-col-body" style={{ padding: "4px", left: "40px", minWidth: "100px", width: "100px", maxWidth: "100px" }}>{s.regNo}</td>
+                    <td className="sticky-col-body" style={{ padding: "4px", textAlign: "left", paddingLeft: "10px", fontSize: "12px", left: "140px", minWidth: "160px", width: "160px", maxWidth: "160px" }}>{s.name}</td>
                     {(classData.subjects || []).map((sub, j) => (
                       <td
                         key={j}
@@ -1283,28 +1284,28 @@ export default function MarkEntry() {
 
                 {/* Summary rows restored */}
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
-                  <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Total</td>
+                  <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Total</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`total-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
-                  <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Pass</td>
+                  <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`pass-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
-                  <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Fail</td>
+                  <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Fail</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`fail-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
                   ))}
                   <td colSpan="3" style={{ border: "none" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
-                  <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Pass %</td>
+                  <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass %</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`passpct-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
                   ))}
@@ -1312,6 +1313,7 @@ export default function MarkEntry() {
                 </tr>
               </tbody>
             </table>
+            </div>
 
             {/* Summary Text */}
             <div style={{ textAlign: "left", marginTop: "15px", color: "black" }}>
