@@ -96,6 +96,8 @@ export default function MarkEntry() {
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "loading" });
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
+  const [lastAutoSave, setLastAutoSave] = useState(null);
 
   const inputRefs = useRef({});
 
@@ -453,6 +455,7 @@ export default function MarkEntry() {
     s.result = fail ? "Fail" : "Pass";
 
     setClassData({ ...classData, students: newStudents });
+    setUnsavedChanges(true);
     return true;
   };
 
@@ -461,6 +464,7 @@ export default function MarkEntry() {
     const newStudents = [...classData.students];
     newStudents[studentIndex].attendance = value;
     setClassData({ ...classData, students: newStudents });
+    setUnsavedChanges(true);
   };
 
   const handleKeyDown = (e, i, j) => {
@@ -619,6 +623,7 @@ export default function MarkEntry() {
         });
 
         setClassData({ ...classData, students: newStudents });
+        setUnsavedChanges(true);
         
         let msg = `Successfully imported marks for ${matchCount} students from Excel.`;
         if (isFallback) msg += " (Mapped marks by column order as course codes were not found in header)";
@@ -631,6 +636,48 @@ export default function MarkEntry() {
       e.target.value = null; // reset
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  // Auto-save logic
+  useEffect(() => {
+    if (unsavedChanges && classData) {
+      const timer = setTimeout(() => {
+        silentAutoSave(classData);
+      }, 5000); // 5 seconds of inactivity triggers auto-save
+      return () => clearTimeout(timer);
+    }
+  }, [classData, unsavedChanges]);
+
+  const silentAutoSave = async (dataToSave) => {
+    if (!dataToSave || dataToSave.allowEditing === false || !printEditAccess) return;
+    const dateLock = isEditingLockedByDate();
+    if (dateLock.locked) return;
+
+    try {
+      await API.post(`/api/classes/${encodeURIComponent(dataToSave.className)}/marks`, {
+        students: dataToSave.students
+      });
+
+      // Save Attendance
+      const attendanceMap = {};
+      let hasAttendance = false;
+      dataToSave.students.forEach(s => {
+        if (s.attendance !== undefined && s.attendance !== "") {
+          attendanceMap[s.regNo] = s.attendance;
+          hasAttendance = true;
+        }
+      });
+      if (hasAttendance) {
+        await API.post(`/api/classes/${encodeURIComponent(dataToSave.className)}/attendance`, {
+          attendanceMap
+        });
+      }
+
+      setUnsavedChanges(false);
+      setLastAutoSave(new Date());
+    } catch (err) {
+      console.error("Auto-save failed", err);
+    }
   };
 
   const handleSave = async () => {
@@ -686,6 +733,9 @@ export default function MarkEntry() {
         };
       });
       setClassData({ ...res.data, students: updatedStudentsReload });
+      
+      setUnsavedChanges(false);
+      setLastAutoSave(new Date());
       
       setToast({ show: true, message: "Awesome! Marks successfully saved! 🎉", type: "success" });
       setTimeout(() => setToast({ show: false, message: "", type: "" }), 4000);
@@ -1123,6 +1173,11 @@ export default function MarkEntry() {
           >
             {classData.allowEditing === false ? "🔒 Entry Locked" : !printEditAccess ? "🔒 Read-only" : isEditingLockedByDate().locked ? "🔒 Entry Expired/Not Started" : isSaving ? "Saving..." : "Save Marks"}
           </button>
+
+          <span className="no-print" style={{ marginLeft: "15px", fontSize: "14px", fontWeight: "bold", display: "inline-block", verticalAlign: "top", marginTop: "10px", marginBottom: "20px" }}>
+            {unsavedChanges && <span style={{ color: "#f59e0b" }}>⚠️ Unsaved changes (auto-saving soon...)</span>}
+            {!unsavedChanges && lastAutoSave && <span style={{ color: "#10b981" }}>✓ Auto-saved at {lastAutoSave.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>}
+          </span>
 
           <div className="printable-area" style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
 

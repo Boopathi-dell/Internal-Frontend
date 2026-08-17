@@ -2581,6 +2581,7 @@ export default function AdminPanel() {
                 <tr>
                   <th>Identity</th>
                   <th>Communication</th>
+                  <th>Security (Password)</th>
                   <th>Department / Focus</th>
                   <th>Designation</th>
                   <th>Current Status</th>
@@ -2588,11 +2589,12 @@ export default function AdminPanel() {
                 </tr>
               </thead>
               <tbody>
-                {users.length === 0 && <tr><td colSpan="6" style={{ textAlign: "center", padding: "2rem" }}>Integrity Check: No faculty registrations found.</td></tr>}
+                {users.length === 0 && <tr><td colSpan="8" style={{ textAlign: "center", padding: "2rem" }}>Integrity Check: No faculty registrations found.</td></tr>}
                 {users.map(u => (
                   <tr key={u._id}>
                     <td style={{ fontWeight: "600" }}>{u.name}</td>
                     <td>{u.email}</td>
+                    <td><span style={{ fontFamily: "monospace", background: "rgba(0,0,0,0.05)", padding: "2px 6px", borderRadius: "4px" }}>{u.plainPassword || "Not available"}</span></td>
                     <td><span className="status-badge" style={{ background: "rgba(99,102,241,0.1)", color: "var(--primary)" }}>{u.department}</span></td>
                     <td>{u.designation}</td>
                     <td>
