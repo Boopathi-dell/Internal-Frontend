@@ -643,7 +643,7 @@ export default function MarkEntry() {
     if (unsavedChanges && classData) {
       const timer = setTimeout(() => {
         silentAutoSave(classData);
-      }, 5000); // 5 seconds of inactivity triggers auto-save
+      }, 1500); // 1.5 seconds of inactivity triggers auto-save
       return () => clearTimeout(timer);
     }
   }, [classData, unsavedChanges]);
