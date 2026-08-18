@@ -2727,7 +2727,7 @@ export default function AdminPanel() {
             <div>
               <div className="print-only" style={{ textAlign: "center", marginBottom: "20px" }}>
                 <h2>MUTHAYAMMAL ENGINEERING COLLEGE (Autonomous)</h2>
-                <h3>MARK ENTRY DEFAULTER REPORT - {reportExamModel}</h3>
+                <h3>MARK ENTRY REPORT FOR {reportExamModel}</h3>
               </div>
               <div className="table-container">
                 <table className="admin-table" style={{ width: "100%", borderCollapse: "collapse" }}>
