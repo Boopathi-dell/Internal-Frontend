@@ -139,6 +139,9 @@ export default function AdminPanel() {
   const [reportSettingsLoading, setReportSettingsLoading] = useState(false);
   const [reportSettingsMessage, setReportSettingsMessage] = useState("");
 
+  // Report State
+  const [reportExamModel, setReportExamModel] = useState("");
+
   // Exam name options
   const examNameOptions = [
     "Model Exam",
