@@ -141,7 +141,28 @@ export default function AdminPanel() {
 
   // Report State
   const [reportExamModel, setReportExamModel] = useState("");
+  const [reportYears, setReportYears] = useState(["All"]);
+  const [reportSections, setReportSections] = useState(["All"]);
 
+  const handleReportCheckboxChange = (option, selectedList, setter) => {
+    if (option === "All") {
+      setter(selectedList.includes("All") ? [] : ["All"]);
+      return;
+    }
+    
+    let newList = selectedList.filter(i => i !== "All");
+    if (newList.includes(option)) {
+      newList = newList.filter(i => i !== option);
+    } else {
+      newList.push(option);
+    }
+    
+    if (newList.length === 0) {
+      setter(["All"]);
+    } else {
+      setter(newList);
+    }
+  };
   // Exam name options
   const examNameOptions = [
     "Model Exam",
@@ -1581,6 +1602,23 @@ export default function AdminPanel() {
     
     classes.forEach(cls => {
       if (cls.examName === reportExamModel && !cls.isDeleted) {
+        // Evaluate Year
+        let yearMatch = false;
+        if (reportYears.includes("All")) {
+          yearMatch = true;
+        } else if (cls.yearSemSec) {
+          yearMatch = reportYears.some(y => cls.yearSemSec.startsWith(`${y}/`));
+        }
+
+        // Evaluate Section
+        let secMatch = false;
+        if (reportSections.includes("All")) {
+          secMatch = true;
+        } else if (cls.yearSemSec) {
+          secMatch = reportSections.some(s => cls.yearSemSec.endsWith(`/${s}`));
+        }
+
+        if (yearMatch && secMatch) {
         (cls.courseDetails || []).forEach((cd, j) => {
           let enteredCount = 0;
           let totalCount = cls.students ? cls.students.length : 0;
@@ -1606,6 +1644,7 @@ export default function AdminPanel() {
             status: pendingCount > 0 ? "Pending" : "Completed"
           });
         });
+        }
       }
     });
     
@@ -2605,20 +2644,39 @@ export default function AdminPanel() {
       {/* MARK ENTRY REPORTS TAB */}
       {activeTab === "reports" && (
         <div className="glass-card fade-in printable-area">
-          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
-            <div>
-              <h3 style={{ marginBottom: "0.5rem" }}>📊 Mark Entry Status Report</h3>
-              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Track which faculty members have pending marks to enter.</p>
+          <div className="no-print" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+              <div>
+                <h3 style={{ marginBottom: "0.5rem" }}>📊 Mark Entry Status Report</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: 0 }}>Track which faculty members have pending marks to enter.</p>
+              </div>
+              
+              <div style={{ display: "flex", gap: "1rem", alignItems: "flex-end" }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => window.print()}
+                  disabled={!reportExamModel || reportData.length === 0}
+                >
+                  🖨️ Print
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleExportReportExcel}
+                  disabled={!reportExamModel || reportData.length === 0}
+                >
+                  📥 Export Excel
+                </button>
+              </div>
             </div>
-            
-            <div style={{ display: "flex", gap: "1rem", alignItems: "flex-end" }}>
-              <div className="input-group" style={{ margin: 0 }}>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "2rem", background: "rgba(0,0,0,0.02)", padding: "1rem", borderRadius: "12px", border: "1px solid var(--border-color)" }}>
+              <div className="input-group" style={{ margin: 0, minWidth: "250px" }}>
                 <label>Select Exam Model</label>
                 <select 
                   className="input-field" 
                   value={reportExamModel} 
                   onChange={(e) => setReportExamModel(e.target.value)}
-                  style={{ minWidth: "200px" }}
+                  style={{ width: "100%" }}
                 >
                   <option value="">-- Select Exam Model --</option>
                   {[...new Set(classes.filter(c => !c.isDeleted).map(c => c.examName))].map(exam => (
@@ -2626,21 +2684,34 @@ export default function AdminPanel() {
                   ))}
                 </select>
               </div>
-              
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => window.print()}
-                disabled={!reportExamModel || reportData.length === 0}
-              >
-                🖨️ Print
-              </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={handleExportReportExcel}
-                disabled={!reportExamModel || reportData.length === 0}
-              >
-                📥 Export Excel
-              </button>
+
+              <div className="input-group" style={{ margin: 0 }}>
+                <label>Filter by Year</label>
+                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
+                    <input type="checkbox" checked={reportYears.includes("All")} onChange={() => handleReportCheckboxChange("All", reportYears, setReportYears)} /> All
+                  </label>
+                  {["I", "II", "III", "IV"].map(y => (
+                    <label key={y} style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
+                      <input type="checkbox" checked={reportYears.includes(y)} onChange={() => handleReportCheckboxChange(y, reportYears, setReportYears)} /> {y}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="input-group" style={{ margin: 0 }}>
+                <label>Filter by Section</label>
+                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
+                    <input type="checkbox" checked={reportSections.includes("All")} onChange={() => handleReportCheckboxChange("All", reportSections, setReportSections)} /> All
+                  </label>
+                  {["A", "B", "C", "D"].map(s => (
+                    <label key={s} style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
+                      <input type="checkbox" checked={reportSections.includes(s)} onChange={() => handleReportCheckboxChange(s, reportSections, setReportSections)} /> {s}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
