@@ -520,3 +520,14 @@ h3 { font-size: 1.35rem; }
     box-shadow: none !important;
   }
 }
+
+@media print {
+  .print-only {
+    display: block !important;
+  }
+}
+@media screen {
+  .print-only {
+    display: none !important;
+  }
+}

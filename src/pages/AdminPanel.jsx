@@ -1570,6 +1570,69 @@ export default function AdminPanel() {
     tabsRef.current.scrollLeft = scrollLeft.current - walk;
   };
 
+  const generateReportData = () => {
+    if (!reportExamModel) return [];
+    
+    let reportRows = [];
+    let sno = 1;
+    
+    classes.forEach(cls => {
+      if (cls.examName === reportExamModel && !cls.isDeleted) {
+        (cls.courseDetails || []).forEach((cd, j) => {
+          let enteredCount = 0;
+          let totalCount = cls.students ? cls.students.length : 0;
+          
+          if (cls.students) {
+            cls.students.forEach(s => {
+              if (s.marks && s.marks[j] !== undefined && s.marks[j] !== null && s.marks[j] !== "") {
+                enteredCount++;
+              }
+            });
+          }
+          
+          let pendingCount = totalCount - enteredCount;
+          reportRows.push({
+            sno: sno++,
+            facultyName: cd.facultyName || "Not Assigned",
+            courseCode: cd.courseCode || "-",
+            courseName: cd.courseName || "-",
+            className: cls.className,
+            totalStudents: totalCount,
+            enteredMarks: enteredCount,
+            pendingMarks: pendingCount,
+            status: pendingCount > 0 ? "Pending" : "Completed"
+          });
+        });
+      }
+    });
+    
+    return reportRows;
+  };
+
+  const handleExportReportExcel = () => {
+    const data = generateReportData();
+    if (data.length === 0) {
+      alert("No data available for the selected Exam Model.");
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(data.map(r => ({
+      "S.No": r.sno,
+      "Faculty Name": r.facultyName,
+      "Class & Section": r.className.split(" - ")[1] || r.className,
+      "Course Code": r.courseCode,
+      "Course Name": r.courseName,
+      "Total Students": r.totalStudents,
+      "Entered": r.enteredMarks,
+      "Pending": r.pendingMarks,
+      "Status": r.status
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Mark Entry Report");
+    XLSX.writeFile(wb, `Mark_Entry_Report_${reportExamModel}.xlsx`);
+  };
+
+  const reportData = activeTab === "reports" ? generateReportData() : [];
+
   return (
     <>
     <style>{`
@@ -1687,6 +1750,13 @@ export default function AdminPanel() {
           onClick={() => setActiveTab("access")}
         >
           🔑 Mark Entry Access
+        </button>
+        <button 
+          className={`btn ${activeTab === "reports" ? "btn-primary" : "btn-secondary"}`} 
+          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
+          onClick={() => setActiveTab("reports")}
+        >
+          📊 Mark Entry Reports
         </button>
         <button 
           className={`btn ${activeTab === "users" ? "btn-primary" : "btn-secondary"}`} 
@@ -2526,6 +2596,103 @@ export default function AdminPanel() {
               })
             )}
           </div>
+        </div>
+      )}
+
+      {/* MARK ENTRY REPORTS TAB */}
+      {activeTab === "reports" && (
+        <div className="glass-card fade-in printable-area">
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+            <div>
+              <h3 style={{ marginBottom: "0.5rem" }}>📊 Mark Entry Status Report</h3>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>Track which faculty members have pending marks to enter.</p>
+            </div>
+            
+            <div style={{ display: "flex", gap: "1rem", alignItems: "flex-end" }}>
+              <div className="input-group" style={{ margin: 0 }}>
+                <label>Select Exam Model</label>
+                <select 
+                  className="input-field" 
+                  value={reportExamModel} 
+                  onChange={(e) => setReportExamModel(e.target.value)}
+                  style={{ minWidth: "200px" }}
+                >
+                  <option value="">-- Select Exam Model --</option>
+                  {[...new Set(classes.filter(c => !c.isDeleted).map(c => c.examName))].map(exam => (
+                    <option key={exam} value={exam}>{exam}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => window.print()}
+                disabled={!reportExamModel || reportData.length === 0}
+              >
+                🖨️ Print
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleExportReportExcel}
+                disabled={!reportExamModel || reportData.length === 0}
+              >
+                📥 Export Excel
+              </button>
+            </div>
+          </div>
+
+          {!reportExamModel ? (
+            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)", background: "rgba(0,0,0,0.02)", borderRadius: "12px" }}>
+              <p>Please select an Exam Model from the dropdown to generate the report.</p>
+            </div>
+          ) : reportData.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)", background: "rgba(0,0,0,0.02)", borderRadius: "12px" }}>
+              <p>No classes found for the selected Exam Model.</p>
+            </div>
+          ) : (
+            <div>
+              <div className="print-only" style={{ textAlign: "center", marginBottom: "20px" }}>
+                <h2>MUTHAYAMMAL ENGINEERING COLLEGE (Autonomous)</h2>
+                <h3>MARK ENTRY DEFAULTER REPORT - {reportExamModel}</h3>
+              </div>
+              <div className="table-container">
+                <table className="admin-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th>S.No</th>
+                      <th>Faculty Name</th>
+                      <th>Class & Section</th>
+                      <th>Course Code</th>
+                      <th>Course Name</th>
+                      <th style={{ textAlign: "center" }}>Total Students</th>
+                      <th style={{ textAlign: "center" }}>Entered</th>
+                      <th style={{ textAlign: "center" }}>Pending</th>
+                      <th style={{ textAlign: "center" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.map((row, idx) => (
+                      <tr key={idx} style={{ background: row.pendingMarks > 0 ? "rgba(239, 68, 68, 0.05)" : "transparent" }}>
+                        <td>{row.sno}</td>
+                        <td style={{ fontWeight: "600" }}>{row.facultyName}</td>
+                        <td>{row.className.split(" - ")[1] || row.className}</td>
+                        <td>{row.courseCode}</td>
+                        <td>{row.courseName}</td>
+                        <td style={{ textAlign: "center" }}>{row.totalStudents}</td>
+                        <td style={{ textAlign: "center", color: "var(--success)", fontWeight: "bold" }}>{row.enteredMarks}</td>
+                        <td style={{ textAlign: "center", color: row.pendingMarks > 0 ? "var(--danger)" : "var(--text-muted)", fontWeight: "bold" }}>{row.pendingMarks}</td>
+                        <td style={{ textAlign: "center" }}>
+                          <span className={`status-badge ${row.pendingMarks === 0 ? 'success' : 'danger'}`}>
+                            {row.pendingMarks === 0 ? "Completed" : "Pending"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
