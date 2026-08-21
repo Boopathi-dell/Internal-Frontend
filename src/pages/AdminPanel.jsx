@@ -2705,7 +2705,7 @@ export default function AdminPanel() {
                   <label style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
                     <input type="checkbox" checked={reportSections.includes("All")} onChange={() => handleReportCheckboxChange("All", reportSections, setReportSections)} /> All
                   </label>
-                  {["A", "B", "C", "D"].map(s => (
+                  {["A", "B", "C", "D", "E"].map(s => (
                     <label key={s} style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer" }}>
                       <input type="checkbox" checked={reportSections.includes(s)} onChange={() => handleReportCheckboxChange(s, reportSections, setReportSections)} /> {s}
                     </label>

@@ -531,3 +531,18 @@ h3 { font-size: 1.35rem; }
     display: none !important;
   }
 }
+
+@media print {
+  .admin-table {
+    font-size: 11px !important;
+  }
+  .admin-table th, .admin-table td {
+    padding: 4px !important;
+  }
+}
+
+@media print {
+  .table-container {
+    overflow-x: visible !important;
+  }
+}
