@@ -144,6 +144,7 @@ export default function AdminPanel() {
   const [reportYears, setReportYears] = useState(["All"]);
   const [reportSections, setReportSections] = useState(["All"]);
   const [selectedPendingData, setSelectedPendingData] = useState(null);
+  const [selectedPendingStudents, setSelectedPendingStudents] = useState([]);
   const [pendingModalLoading, setPendingModalLoading] = useState(false);
 
   const handleReportCheckboxChange = (option, selectedList, setter) => {
@@ -1686,10 +1687,25 @@ export default function AdminPanel() {
       ...row,
       pendingStudents
     });
+    setSelectedPendingStudents([]);
   };
 
-  const handleMarkAllPendingAsAB = async () => {
-    if (!selectedPendingData) return;
+  const handlePendingStudentCheckboxChange = (regNo) => {
+    setSelectedPendingStudents(prev => 
+      prev.includes(regNo) ? prev.filter(id => id !== regNo) : [...prev, regNo]
+    );
+  };
+
+  const handlePendingStudentSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedPendingStudents(selectedPendingData.pendingStudents.map(s => s.regNo));
+    } else {
+      setSelectedPendingStudents([]);
+    }
+  };
+
+  const handleMarkSelectedPendingAsAB = async () => {
+    if (!selectedPendingData || selectedPendingStudents.length === 0) return;
     setPendingModalLoading(true);
     try {
       const cls = classes.find(c => c.className === selectedPendingData.className);
@@ -1698,8 +1714,10 @@ export default function AdminPanel() {
       const updatedStudents = JSON.parse(JSON.stringify(cls.students));
       
       updatedStudents.forEach(s => {
-        if (s.marks[selectedPendingData.subjectIndex] === undefined || s.marks[selectedPendingData.subjectIndex] === null || s.marks[selectedPendingData.subjectIndex] === "") {
-          s.marks[selectedPendingData.subjectIndex] = "AB";
+        if (selectedPendingStudents.includes(s.regNo)) {
+          if (s.marks[selectedPendingData.subjectIndex] === undefined || s.marks[selectedPendingData.subjectIndex] === null || s.marks[selectedPendingData.subjectIndex] === "") {
+            s.marks[selectedPendingData.subjectIndex] = "AB";
+          }
         }
       });
 
@@ -1707,8 +1725,9 @@ export default function AdminPanel() {
         headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
       });
 
-      alert("Successfully marked all pending students as AB.");
+      alert("Successfully marked selected pending students as AB.");
       setSelectedPendingData(null);
+      setSelectedPendingStudents([]);
       loadClasses();
     } catch (err) {
       alert("Failed to update marks: " + (err.response?.data?.error || err.message));
@@ -4197,6 +4216,13 @@ export default function AdminPanel() {
               <table className="admin-table">
                 <thead>
                   <tr>
+                    <th>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedPendingStudents.length === selectedPendingData.pendingStudents.length && selectedPendingData.pendingStudents.length > 0}
+                        onChange={handlePendingStudentSelectAll}
+                      />
+                    </th>
                     <th>S.No</th>
                     <th>Register Number</th>
                     <th>Name</th>
@@ -4205,6 +4231,13 @@ export default function AdminPanel() {
                 <tbody>
                   {selectedPendingData.pendingStudents.map((s, idx) => (
                     <tr key={idx}>
+                      <td>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedPendingStudents.includes(s.regNo)}
+                          onChange={() => handlePendingStudentCheckboxChange(s.regNo)}
+                        />
+                      </td>
                       <td>{idx + 1}</td>
                       <td>{s.regNo}</td>
                       <td>{s.name}</td>
@@ -4224,11 +4257,11 @@ export default function AdminPanel() {
               </button>
               <button 
                 className="btn btn-primary" 
-                onClick={handleMarkAllPendingAsAB}
-                disabled={pendingModalLoading}
-                style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+                onClick={handleMarkSelectedPendingAsAB}
+                disabled={pendingModalLoading || selectedPendingStudents.length === 0}
+                style={{ background: "var(--danger)", borderColor: "var(--danger)", opacity: selectedPendingStudents.length === 0 ? 0.5 : 1 }}
               >
-                {pendingModalLoading ? "Marking..." : "Mark All as Absent (AB)"}
+                {pendingModalLoading ? "Marking..." : "Mark Selected as Absent (AB)"}
               </button>
             </div>
           </div>
