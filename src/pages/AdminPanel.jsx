@@ -143,6 +143,8 @@ export default function AdminPanel() {
   const [reportExamModel, setReportExamModel] = useState("");
   const [reportYears, setReportYears] = useState(["All"]);
   const [reportSections, setReportSections] = useState(["All"]);
+  const [selectedPendingData, setSelectedPendingData] = useState(null);
+  const [pendingModalLoading, setPendingModalLoading] = useState(false);
 
   const handleReportCheckboxChange = (option, selectedList, setter) => {
     if (option === "All") {
@@ -1638,6 +1640,7 @@ export default function AdminPanel() {
             courseCode: cd.courseCode || "-",
             courseName: cd.courseName || "-",
             className: cls.className,
+            subjectIndex: j,
             totalStudents: totalCount,
             enteredMarks: enteredCount,
             pendingMarks: pendingCount,
@@ -1674,6 +1677,45 @@ export default function AdminPanel() {
   };
 
   const reportData = activeTab === "reports" ? generateReportData() : [];
+
+  const handlePendingClick = (row) => {
+    const cls = classes.find(c => c.className === row.className);
+    if (!cls) return;
+    const pendingStudents = cls.students.filter(s => s.marks[row.subjectIndex] === undefined || s.marks[row.subjectIndex] === null || s.marks[row.subjectIndex] === "");
+    setSelectedPendingData({
+      ...row,
+      pendingStudents
+    });
+  };
+
+  const handleMarkAllPendingAsAB = async () => {
+    if (!selectedPendingData) return;
+    setPendingModalLoading(true);
+    try {
+      const cls = classes.find(c => c.className === selectedPendingData.className);
+      if (!cls) throw new Error("Class not found");
+
+      const updatedStudents = JSON.parse(JSON.stringify(cls.students));
+      
+      updatedStudents.forEach(s => {
+        if (s.marks[selectedPendingData.subjectIndex] === undefined || s.marks[selectedPendingData.subjectIndex] === null || s.marks[selectedPendingData.subjectIndex] === "") {
+          s.marks[selectedPendingData.subjectIndex] = "AB";
+        }
+      });
+
+      await API.post(`/api/classes/${encodeURIComponent(cls.className)}/marks`, { students: updatedStudents }, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      });
+
+      alert("Successfully marked all pending students as AB.");
+      setSelectedPendingData(null);
+      loadClasses();
+    } catch (err) {
+      alert("Failed to update marks: " + (err.response?.data?.error || err.message));
+    } finally {
+      setPendingModalLoading(false);
+    }
+  };
 
   return (
     <>
@@ -2754,7 +2796,19 @@ export default function AdminPanel() {
                         <td>{row.courseName}</td>
                         <td style={{ textAlign: "center" }}>{row.totalStudents}</td>
                         <td style={{ textAlign: "center", color: "var(--success)", fontWeight: "bold" }}>{row.enteredMarks}</td>
-                        <td style={{ textAlign: "center", color: row.pendingMarks > 0 ? "var(--danger)" : "var(--text-muted)", fontWeight: "bold" }}>{row.pendingMarks}</td>
+                        <td style={{ textAlign: "center", color: row.pendingMarks > 0 ? "var(--danger)" : "var(--text-muted)", fontWeight: "bold" }}>
+                          {row.pendingMarks > 0 ? (
+                            <span 
+                              style={{ cursor: "pointer", textDecoration: "underline", color: "var(--danger)" }}
+                              onClick={() => handlePendingClick(row)}
+                              title="Click to view and mark pending students"
+                            >
+                              {row.pendingMarks}
+                            </span>
+                          ) : (
+                            row.pendingMarks
+                          )}
+                        </td>
                         <td style={{ textAlign: "center" }}>
                           <span className={`status-badge ${row.pendingMarks === 0 ? 'success' : 'danger'}`}>
                             {row.pendingMarks === 0 ? "Completed" : "Pending"}
@@ -4119,6 +4173,65 @@ export default function AdminPanel() {
       {activeTab === "seating" && (
         <div className="admin-grid-1col fade-in">
            <SeatingManager />
+        </div>
+      )}
+
+      {/* Pending Students Modal */}
+      {selectedPendingData && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+          background: "rgba(0, 0, 0, 0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999
+        }}>
+          <div className="glass-card" style={{ width: "90%", maxWidth: "600px", maxHeight: "80vh", overflowY: "auto", position: "relative" }}>
+            <button 
+              onClick={() => setSelectedPendingData(null)}
+              style={{ position: "absolute", top: "10px", right: "15px", background: "none", border: "none", fontSize: "1.5rem", cursor: "pointer", color: "var(--text-muted)" }}
+            >&times;</button>
+            <h3 style={{ marginBottom: "0.5rem" }}>Pending Students</h3>
+            <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem", fontSize: "0.9rem" }}>
+              Course: <strong>{selectedPendingData.courseName} ({selectedPendingData.courseCode})</strong> <br/>
+              Class: <strong>{selectedPendingData.className}</strong>
+            </p>
+            
+            <div className="table-container" style={{ marginBottom: "1.5rem" }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>S.No</th>
+                    <th>Register Number</th>
+                    <th>Name</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedPendingData.pendingStudents.map((s, idx) => (
+                    <tr key={idx}>
+                      <td>{idx + 1}</td>
+                      <td>{s.regNo}</td>
+                      <td>{s.name}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: "flex", gap: "1rem", justifyContent: "flex-end" }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setSelectedPendingData(null)}
+                disabled={pendingModalLoading}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleMarkAllPendingAsAB}
+                disabled={pendingModalLoading}
+                style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+              >
+                {pendingModalLoading ? "Marking..." : "Mark All as Absent (AB)"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
