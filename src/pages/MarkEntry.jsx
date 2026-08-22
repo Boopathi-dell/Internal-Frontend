@@ -1061,7 +1061,8 @@ export default function MarkEntry() {
           <style>{`
               @media print {
                 @page { 
-                  margin: 0.5cm; 
+                  margin: 0.5cm;
+                  margin-top: 0cm; 
                   margin-bottom: 1cm;
                   @bottom-center {
                     content: "Page " counter(page) " of " counter(pages);
