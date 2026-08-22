@@ -1010,7 +1010,7 @@ export default function MarkEntry() {
             </div>
           )}
 
-          <div style={{ marginTop: "20px" }}>
+          <div className="print-no-margin" style={{ marginTop: "20px" }}>
           {(classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) && (
             <div className="no-print" style={{ padding: "12px 20px", background: "rgba(239, 68, 68, 0.15)", color: "#e11d48", borderRadius: "8px", border: "1px solid #fb7185", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px", fontWeight: "700" }}>
               <span>🔒 ENTRY LOCKED:</span>
@@ -1079,7 +1079,7 @@ export default function MarkEntry() {
                 .no-print, .filter-row, .print-btn, h1, .lock-banner {
                   display: none !important;
                 }
-                .page-layout, .faculty-mark-entry-container {
+                .page-layout, .faculty-mark-entry-container, .print-no-margin {
                   padding: 0 !important;
                   margin: 0 !important;
                   border: none !important;
