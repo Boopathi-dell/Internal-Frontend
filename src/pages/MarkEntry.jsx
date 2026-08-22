@@ -1098,6 +1098,13 @@ export default function MarkEntry() {
                 td, th { 
                   padding: 2px 4px !important; 
                   font-size: 12px !important; 
+                  width: auto !important; 
+                  min-width: 0 !important; 
+                  max-width: none !important; 
+                }
+                .sticky-col-header, .sticky-col-body {
+                  position: static !important;
+                  left: auto !important;
                 }
                 .mark-input {
                   padding: 0 !important;
@@ -1211,7 +1218,7 @@ export default function MarkEntry() {
 
 
             <div className="table-responsive-wrapper">
-              <table border="1" style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black", minWidth: "900px" }}>
+              <table border="1" style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black", minWidth: "800px" }}>
 
 
 
