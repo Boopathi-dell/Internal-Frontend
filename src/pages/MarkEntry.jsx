@@ -86,6 +86,7 @@ export default function MarkEntry() {
   const [showAll, setShowAll] = useState(false);
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
   const [printEditAccess, setPrintEditAccess] = useState(true);
+  const [printBold, setPrintBold] = useState(false);
   const examNameOptions = [
     "Model Exam",
     "Model Practical Exam",
@@ -1093,6 +1094,9 @@ export default function MarkEntry() {
                   padding: 0 !important;
                   margin: 0 !important;
                 }
+                .print-bold-text, .print-bold-text th, .print-bold-text td, .print-bold-text span, .print-bold-text div, .print-bold-text p, .print-bold-text h3 {
+                  font-weight: bold !important;
+                }
                 input { border: none !important; outline: none !important; }
                 h1, h2, h3, p { margin: 2px 0 !important; padding: 0 !important; }
                 table { border-collapse: collapse !important; width: 100% !important; margin: 5px 0 !important; }
@@ -1147,6 +1151,11 @@ export default function MarkEntry() {
             Print
           </button>
 
+          <label className="print-btn" style={{ display: "inline-flex", alignItems: "center", gap: "5px", cursor: "pointer", fontWeight: "bold", marginRight: "10px", marginBottom: "20px" }}>
+            <input type="checkbox" checked={printBold} onChange={(e) => setPrintBold(e.target.checked)} style={{ width: "16px", height: "16px" }} />
+            Print in Bold
+          </label>
+
           <button
             className="print-btn"
             onClick={handleExportExcel}
@@ -1187,7 +1196,7 @@ export default function MarkEntry() {
             {!unsavedChanges && lastAutoSave && <span style={{ color: "#10b981" }}>✓ Auto-saved at {lastAutoSave.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>}
           </span>
 
-          <div className="printable-area" style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
+          <div className={`printable-area ${printBold ? 'print-bold-text' : ''}`} style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
 
 
 
