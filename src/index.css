@@ -557,3 +557,11 @@ h3 { font-size: 1.35rem; }
     overflow-x: visible !important;
   }
 }
+
+/* Fix for empty bounding boxes on tables with short rows */
+table[border="1"] {
+  border: none !important;
+}
+table[border="1"] th, table[border="1"] td {
+  border: 1px solid black !important;
+}
