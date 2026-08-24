@@ -464,7 +464,7 @@ export default function ParentLetter() {
 
             return (
               <div key={student.regNo || idx} className={`pl-letter ${printBold ? 'print-bold-text' : ''}`} style={{ ...ltrStyle, padding: "5pt 18pt 5pt", boxSizing: "border-box" }}>
-                <div style={{ textAlign: "right", fontSize: "9pt", fontWeight: "bold", marginBottom: "2pt", minHeight: "12pt" }}>{refNum}</div>
+                <div style={{ textAlign: "right", fontSize: "12px", fontWeight: "bold", marginBottom: "2pt", minHeight: "12pt" }}>{refNum}</div>
                 {template.headerLogo ? (
                   <img src={template.headerLogo} alt="Header Logo" style={{ width: "100%", height: "auto", display: "block" }} />
                 ) : (

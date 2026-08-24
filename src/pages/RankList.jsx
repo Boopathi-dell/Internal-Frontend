@@ -421,7 +421,7 @@ export default function RankList() {
 
             {/* College Header */}
             <div style={{ position: "relative", marginBottom: "10px", width: "100%" }}>
-              <div style={{ textAlign: "right", fontSize: "9px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
+              <div style={{ textAlign: "right", fontSize: "12px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
                 {classData.iqacPrefix || "MEC/IQAC/2026-27/COE/"}002
               </div>
               <img src={headerLogo} alt="MEC Header" style={{ width: "100%", height: "85px", display: "block" }} />

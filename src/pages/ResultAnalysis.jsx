@@ -558,7 +558,7 @@ export default function ResultAnalysis() {
       <div className={`printable-analysis ${printBold ? 'print-bold-text' : ''}`} style={{ background: "white", color: "black", padding: "30px", fontFamily: '"Times New Roman", Times, serif', minWidth: "800px" }}>
         {/* Header Section - Banner Update */}
         <div style={{ position: "relative", marginBottom: "10px", width: "100%" }}>
-          <div style={{ textAlign: "right", fontSize: "10px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
+          <div style={{ textAlign: "right", fontSize: "12px", fontWeight: "bold", color: "black", marginBottom: "2px" }}>
             {classData.iqacPrefix || "MEC/IQAC/2026-27/COE/"}003
           </div>
           <img src={headerLogo} alt="MEC Header" style={{ width: "100%", height: "85px", display: "block" }} />
