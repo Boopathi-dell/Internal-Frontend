@@ -517,6 +517,7 @@ export default function RankList() {
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`total-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
+                  <td colSpan="4" rowSpan="4" style={{ background: "white", border: "none", borderRight: "1px solid black", borderBottom: "1px solid black" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Pass</td>
