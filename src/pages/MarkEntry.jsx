@@ -1305,7 +1305,6 @@ export default function MarkEntry() {
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`total-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
-                  <td colSpan="3" rowSpan="4" style={{ background: "white", border: "none", borderRight: "1px solid black", borderBottom: "1px solid black" }}></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass</td>
