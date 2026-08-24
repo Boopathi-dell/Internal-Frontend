@@ -315,13 +315,23 @@ export default function ResultAnalysis() {
   const hB = students.filter(s => s.studentType === "Hosteller" && s.gender === "Boy");
   const hG = students.filter(s => s.studentType === "Hosteller" && s.gender === "Girl");
 
-  const catPass = (arr) => arr.filter(s => s.result === "Pass").length;
-  const catFail = (arr) => arr.filter(s => s.result === "Fail").length;
-  const catAb = (arr) => arr.filter(s => s.result === "-").length;
+  const getStudentStatus = (s) => {
+    if (s.result === "-") return "Absent";
+    let isStudentAbsent = false;
+    (s.marks || []).forEach(m => {
+      if (isAbsent(m)) isStudentAbsent = true;
+    });
+    if (isStudentAbsent) return "Absent";
+    return s.result === "Pass" ? "Pass" : "Fail";
+  };
+
+  const catPass = (arr) => arr.filter(s => getStudentStatus(s) === "Pass").length;
+  const catFail = (arr) => arr.filter(s => getStudentStatus(s) === "Fail").length;
+  const catAb = (arr) => arr.filter(s => getStudentStatus(s) === "Absent").length;
   const catPassPct = (arr) => arr.length > 0 ? Math.round((catPass(arr) / arr.length) * 100) : 0;
 
   // Toppers and slow learners
-  const validStudents = students.filter(s => s.result !== "-");
+  const validStudents = students.filter(s => getStudentStatus(s) !== "Absent" && s.result !== "-");
   const sortedDesc = [...validStudents].sort((a, b) => b.percentage - a.percentage);
   const toppers = sortedDesc.slice(0, 5);
   const sortedAsc = [...validStudents].sort((a, b) => a.percentage - b.percentage);

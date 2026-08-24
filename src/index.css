@@ -409,12 +409,15 @@ h3 { font-size: 1.35rem; }
     position: static !important;
   }
 
-  .page-layout {
+  .page-layout, .glass-card {
     display: block !important;
     padding: 0 !important;
     margin: 0 !important;
     animation: none !important;
     opacity: 1 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
   
   body {
@@ -424,11 +427,19 @@ h3 { font-size: 1.35rem; }
     height: auto !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   
   .page-container {
-    padding: 0;
-    max-width: 100%;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    border: none !important;
+  }
+
+  ::-webkit-scrollbar {
+    display: none !important;
   }
 
   h1 {
