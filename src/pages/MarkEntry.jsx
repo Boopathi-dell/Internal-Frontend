@@ -5,7 +5,7 @@ import headerLogo from "../assets/logo image.jpg";
 
 
 
-const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDate, handleMarkChange, handleKeyDown, i, inputRef }) => {
+const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDate, handleMarkChange, handleKeyDown, i, inputRef, isAdmin }) => {
   const initialValue = (s.marks && s.marks[j]) || "";
   const [val, setVal] = useState(initialValue);
   const isSaving = useRef(false);
@@ -70,7 +70,7 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
         textAlign: "center"
       }}
       value={val}
-      readOnly={classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess}
+      readOnly={(!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || !printEditAccess}
       onChange={handleChange}
       onBlur={handleBlur}
       onKeyDown={handleKey}
@@ -99,6 +99,7 @@ export default function MarkEntry() {
   const [toast, setToast] = useState({ show: false, message: "", type: "loading" });
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
+  const isAdmin = (sessionStorage.getItem("role") || "").toLowerCase() === "admin";
 
   const inputRefs = useRef({});
 
@@ -1011,17 +1012,17 @@ export default function MarkEntry() {
           )}
 
           <div className="print-no-margin" style={{ marginTop: "20px" }}>
-          {(classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) && (
+          {((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || !printEditAccess) && (
             <div className="no-print" style={{ padding: "12px 20px", background: "rgba(239, 68, 68, 0.15)", color: "#e11d48", borderRadius: "8px", border: "1px solid #fb7185", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px", fontWeight: "700" }}>
               <span>🔒 ENTRY LOCKED:</span>
               <span style={{ fontWeight: "400", fontSize: "0.9rem", flex: 1 }}>
-                {classData.allowEditing === false 
+                {!isAdmin && classData.allowEditing === false 
                   ? "Administrator has restricted mark entry for this session. Changes cannot be saved."
                   : !printEditAccess
                     ? "Read-only mode enabled by Administrator."
                     : isEditingLockedByDate().reason}
               </span>
-              { (classData.allowEditing === false || isEditingLockedByDate().locked) && (
+              { (!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) && (
                 <button
                   onClick={handleRequestExtension}
                   style={{
@@ -1177,18 +1178,18 @@ export default function MarkEntry() {
           <button
             className="print-btn"
             onClick={handleSave}
-            disabled={classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess}
+            disabled={(!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess}
             style={{ 
               marginBottom: "20px", 
               padding: "10px 20px", 
-              background: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess) ? "#9ca3af" : "#4CAF50", 
+              background: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess)) ? "#9ca3af" : "#4CAF50", 
               color: "white", 
-              cursor: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess) ? "not-allowed" : "pointer", 
+              cursor: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess)) ? "not-allowed" : "pointer", 
               border: "none",
-              opacity: (classData.allowEditing === false || isEditingLockedByDate().locked || isSaving || !printEditAccess) ? 0.7 : 1
+              opacity: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess)) ? 0.7 : 1
             }}
           >
-            {classData.allowEditing === false ? "🔒 Entry Locked" : !printEditAccess ? "🔒 Read-only" : isEditingLockedByDate().locked ? "🔒 Entry Expired/Not Started" : isSaving ? "Saving..." : "Save Marks"}
+            {!isAdmin && classData.allowEditing === false ? "🔒 Entry Locked" : !printEditAccess ? "🔒 Read-only" : (!isAdmin && isEditingLockedByDate().locked) ? "🔒 Entry Expired/Not Started" : isSaving ? "Saving..." : "Save Marks"}
           </button>
 
           <span className="no-print" style={{ marginLeft: "15px", fontSize: "14px", fontWeight: "bold", display: "inline-block", verticalAlign: "top", marginTop: "10px", marginBottom: "20px" }}>
@@ -1285,6 +1286,7 @@ export default function MarkEntry() {
                           handleKeyDown={handleKeyDown}
                           i={i}
                           inputRef={(el) => inputRefs.current[`${i}_${j}`] = el}
+                          isAdmin={isAdmin}
                         />
                       </td>
                     ))}
