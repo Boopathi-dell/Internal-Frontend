@@ -409,7 +409,7 @@ h3 { font-size: 1.35rem; }
     position: static !important;
   }
 
-  .page-layout, .glass-card {
+  .page-layout:not(.no-print), .glass-card:not(.no-print) {
     display: block !important;
     padding: 0 !important;
     margin: 0 !important;
