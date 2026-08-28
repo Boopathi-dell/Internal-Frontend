@@ -157,7 +157,7 @@ export default function AttendanceEntry() {
       classData.students.forEach(s => {
         if (s.attendance !== undefined) attendanceMap[s.regNo] = s.attendance;
       });
-      await API.post(`/api/classes/${encodeURIComponent(classData.className)}/attendance`, { attendanceMap });
+      await API.post(`/api/classes/${encodeURIComponent(classData.className)}/attendance`, { attendanceMap, isAdmin: isAdmin });
       
       const userId = sessionStorage.getItem("userId");
       const userName = sessionStorage.getItem("userName") || "Faculty";

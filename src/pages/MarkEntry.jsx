@@ -657,7 +657,8 @@ export default function MarkEntry() {
 
     try {
       await API.post(`/api/classes/${encodeURIComponent(dataToSave.className)}/marks`, {
-        students: dataToSave.students
+        students: dataToSave.students,
+        isAdmin: isAdmin
       });
 
       // Save Attendance
@@ -671,7 +672,8 @@ export default function MarkEntry() {
       });
       if (hasAttendance) {
         await API.post(`/api/classes/${encodeURIComponent(dataToSave.className)}/attendance`, {
-          attendanceMap
+          attendanceMap,
+          isAdmin: isAdmin
         });
       }
 
@@ -697,7 +699,8 @@ export default function MarkEntry() {
     setToast({ show: true, message: "Your marks are in progress... Please wait 🚀", type: "loading" });
     try {
       await API.post(`/api/classes/${encodeURIComponent(classData.className)}/marks`, {
-        students: classData.students
+        students: classData.students,
+        isAdmin: isAdmin
       });
 
       // Save Attendance
@@ -711,7 +714,8 @@ export default function MarkEntry() {
       });
       if (hasAttendance) {
         await API.post(`/api/classes/${encodeURIComponent(classData.className)}/attendance`, {
-          attendanceMap
+          attendanceMap,
+          isAdmin: isAdmin
         });
       }
 
