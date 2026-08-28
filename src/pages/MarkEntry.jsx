@@ -70,7 +70,7 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
         textAlign: "center"
       }}
       value={val}
-      readOnly={(!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || !printEditAccess}
+      readOnly={!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess)}
       onChange={handleChange}
       onBlur={handleBlur}
       onKeyDown={handleKey}
@@ -369,7 +369,7 @@ export default function MarkEntry() {
   };
 
   const handleMarkChange = (studentIndex, subjectIndex, value) => {
-    if (!classData || classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) return false;
+    if (!classData || (!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess))) return false;
 
     const strVal = value.toUpperCase();
     
@@ -462,7 +462,7 @@ export default function MarkEntry() {
   };
 
   const _handleAttendanceChange = (studentIndex, value) => {
-    if (!classData || classData.allowEditing === false || isEditingLockedByDate().locked) return;
+    if (!classData || (!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked))) return;
     const newStudents = [...classData.students];
     newStudents[studentIndex].attendance = value;
     setClassData({ ...classData, students: newStudents });
@@ -532,7 +532,7 @@ export default function MarkEntry() {
       return;
     }
 
-    if (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess) {
+    if (!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess)) {
       alert("Editing is currently locked or you don't have access.");
       e.target.value = null;
       return;
@@ -651,9 +651,9 @@ export default function MarkEntry() {
   }, [classData, unsavedChanges]);
 
   const silentAutoSave = async (dataToSave) => {
-    if (!dataToSave || dataToSave.allowEditing === false || !printEditAccess) return;
+    if (!dataToSave || (!isAdmin && (dataToSave.allowEditing === false || !printEditAccess))) return;
     const dateLock = isEditingLockedByDate();
-    if (dateLock.locked) return;
+    if (!isAdmin && dateLock.locked) return;
 
     try {
       await API.post(`/api/classes/${encodeURIComponent(dataToSave.className)}/marks`, {
@@ -684,12 +684,12 @@ export default function MarkEntry() {
 
   const handleSave = async () => {
     if (!classData) return;
-    if (classData.allowEditing === false || !printEditAccess) {
+    if (!isAdmin && (classData.allowEditing === false || !printEditAccess)) {
       alert("Entry is currently locked by Administrator.");
       return;
     }
     const dateLock = isEditingLockedByDate();
-    if (dateLock.locked) {
+    if (!isAdmin && dateLock.locked) {
       alert(dateLock.reason);
       return;
     }
@@ -1012,7 +1012,7 @@ export default function MarkEntry() {
           )}
 
           <div className="print-no-margin" style={{ marginTop: "20px" }}>
-          {((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || !printEditAccess) && (
+          {(!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess)) && (
             <div className="no-print" style={{ padding: "12px 20px", background: "rgba(239, 68, 68, 0.15)", color: "#e11d48", borderRadius: "8px", border: "1px solid #fb7185", marginBottom: "20px", display: "flex", alignItems: "center", gap: "10px", fontWeight: "700" }}>
               <span>🔒 ENTRY LOCKED:</span>
               <span style={{ fontWeight: "400", fontSize: "0.9rem", flex: 1 }}>
@@ -1176,20 +1176,23 @@ export default function MarkEntry() {
           )}
 
           <button
-            className="print-btn"
+            className="no-print"
             onClick={handleSave}
-            disabled={(!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess}
-            style={{ 
-              marginBottom: "20px", 
-              padding: "10px 20px", 
-              background: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess)) ? "#9ca3af" : "#4CAF50", 
+            disabled={(!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess)) || isSaving}
+            style={{
+              padding: "10px 30px",
+              background: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess)) || isSaving)) ? "#9ca3af" : "#4CAF50", 
               color: "white", 
-              cursor: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess)) ? "not-allowed" : "pointer", 
-              border: "none",
-              opacity: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked)) || isSaving || !printEditAccess)) ? 0.7 : 1
+              border: "none", 
+              cursor: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess)) || isSaving)) ? "not-allowed" : "pointer", 
+              borderRadius: "8px", 
+              opacity: (((!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess)) || isSaving)) ? 0.7 : 1,
+              boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+              fontWeight: "bold",
+              fontSize: "16px"
             }}
           >
-            {!isAdmin && classData.allowEditing === false ? "🔒 Entry Locked" : !printEditAccess ? "🔒 Read-only" : (!isAdmin && isEditingLockedByDate().locked) ? "🔒 Entry Expired/Not Started" : isSaving ? "Saving..." : "Save Marks"}
+            {!isAdmin && classData.allowEditing === false ? "🔒 Entry Locked" : (!isAdmin && !printEditAccess) ? "🔒 Read-only" : (!isAdmin && isEditingLockedByDate().locked) ? "🔒 Entry Expired/Not Started" : isSaving ? "Saving..." : "Save Marks"}
           </button>
 
           <span className="no-print" style={{ marginLeft: "15px", fontSize: "14px", fontWeight: "bold", display: "inline-block", verticalAlign: "top", marginTop: "10px", marginBottom: "20px" }}>
