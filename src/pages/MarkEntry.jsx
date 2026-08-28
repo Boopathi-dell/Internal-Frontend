@@ -371,7 +371,7 @@ export default function MarkEntry() {
   const handleMarkChange = (studentIndex, subjectIndex, value) => {
     if (!classData || (!isAdmin && (classData.allowEditing === false || isEditingLockedByDate().locked || !printEditAccess))) return false;
 
-    const strVal = value.toUpperCase();
+    let strVal = value.toUpperCase();
     
     if (classData.examName === "ESE") {
       const sys1Grades = ["S", "A+", "A", "B+", "B", "C+", "C", "U", "U*"];
@@ -397,6 +397,8 @@ export default function MarkEntry() {
           newStudents[studentIndex].marks[subjectIndex] = "";
           setClassData({ ...classData, students: newStudents });
           return false;
+        } else {
+          strVal = Math.round(numVal).toString();
         }
       }
     }
@@ -622,6 +624,13 @@ export default function MarkEntry() {
                   const validGrades = classData.eseGradingSystem === "System 1" ? sys1Grades : sys2Grades;
                   if (!validGrades.includes(markVal)) {
                     markVal = s.marks[subIdx]; // Reject invalid grade by keeping original
+                  }
+                } else if (classData.examName !== "ESE" && markVal !== "") {
+                  if (markVal !== "A" && markVal !== "AB") {
+                    let numVal = Number(markVal);
+                    if (!isNaN(numVal)) {
+                      markVal = Math.round(numVal).toString();
+                    }
                   }
                 }
                 
