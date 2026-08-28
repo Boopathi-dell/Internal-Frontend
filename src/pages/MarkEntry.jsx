@@ -607,14 +607,21 @@ export default function MarkEntry() {
               const excelColIdx = subjectColMap[subIdx];
               if (excelColIdx !== undefined) {
                 let markVal = (excelRow[excelColIdx] || "").toString().trim().toUpperCase();
-                if (markVal === "UNDEFINED" || markVal === "NULL") markVal = "";
+                
+                if (markVal === "") {
+                  // Preserve existing mark if excel cell is completely empty
+                  markVal = s.marks[subIdx];
+                } else if (markVal === "UNDEFINED" || markVal === "NULL" || markVal === "CLEAR") {
+                  // Explicitly allow clearing a mark
+                  markVal = "";
+                }
                 
                 if (classData.examName === "ESE" && markVal !== "") {
                   const sys1Grades = ["S", "A+", "A", "B+", "B", "C+", "C", "U", "U*"];
                   const sys2Grades = ["O", "A+", "A", "B+", "B", "C", "U", "U*"];
                   const validGrades = classData.eseGradingSystem === "System 1" ? sys1Grades : sys2Grades;
                   if (!validGrades.includes(markVal)) {
-                    markVal = ""; // Reject invalid grade
+                    markVal = s.marks[subIdx]; // Reject invalid grade by keeping original
                   }
                 }
                 
