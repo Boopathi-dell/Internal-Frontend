@@ -247,8 +247,18 @@ export default function MarkEntry() {
         let fail = false;
         const isESE = fullClassData.examName === "ESE";
 
+        s.marks = [...s.marks];
         s.marks.forEach((val, idx) => {
-          const markStr = String(val || "").toUpperCase().trim();
+          let markStr = String(val || "").toUpperCase().trim();
+          
+          if (!isESE && markStr !== "" && markStr !== "A" && markStr !== "AB") {
+            const numVal = Number(markStr);
+            if (!isNaN(numVal)) {
+               markStr = Math.round(numVal).toString();
+               s.marks[idx] = markStr;
+            }
+          }
+
           if (isESE) {
             if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") {
               fail = true;
@@ -274,6 +284,8 @@ export default function MarkEntry() {
         if (isESE) {
           total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
           percentage = Math.round(total * 10);
+        } else {
+          total = Math.round(total);
         }
 
         return {
@@ -452,6 +464,8 @@ export default function MarkEntry() {
     if (isESE) {
       total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
       percentage = Math.round(total * 10);
+    } else {
+      total = Math.round(total);
     }
 
     s.total = total;
