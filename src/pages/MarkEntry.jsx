@@ -1211,6 +1211,18 @@ export default function MarkEntry() {
               }
               @media screen {
                 .focus-hidden { display: none !important; }
+                .faculty-screen-large {
+                  font-size: 16px !important;
+                }
+                .faculty-screen-large th, .faculty-screen-large td {
+                  padding: 8px 6px !important;
+                  font-size: 15px !important;
+                }
+                .faculty-screen-large .mark-input {
+                  font-size: 16px !important;
+                  padding: 4px !important;
+                  font-weight: bold;
+                }
               }
 
               @keyframes toastFadeIn {
@@ -1326,7 +1338,7 @@ export default function MarkEntry() {
 
 
             <div className="table-responsive-wrapper">
-              <table border="1" style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black", minWidth: "800px" }}>
+              <table className={!isAdmin ? "faculty-screen-large" : ""} border="1" style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black", minWidth: "800px" }}>
 
 
 
