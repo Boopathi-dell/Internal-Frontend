@@ -1338,7 +1338,7 @@ export default function MarkEntry() {
 
 
             <div className="table-responsive-wrapper">
-              <table className={!isAdmin ? "faculty-screen-large" : ""} border="1" style={{ width: "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black", minWidth: "800px" }}>
+              <table className={!isAdmin ? "faculty-screen-large" : ""} border="1" style={{ width: focusedSubjectIndices.length > 0 ? "auto" : "100%", borderCollapse: "collapse", textAlign: "center", fontSize: "12px", color: "black", borderColor: "black", minWidth: focusedSubjectIndices.length > 0 ? "auto" : "800px", margin: focusedSubjectIndices.length > 0 ? "0" : "5px 0" }}>
 
 
 
@@ -1357,7 +1357,6 @@ export default function MarkEntry() {
                   <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
                   <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px" }}>Pass %</th>
                   <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px" }}>Pass/<br />Fail</th>
-                  {focusedSubjectIndices.length > 0 && <th rowSpan="2" className="no-print" style={{ width: "100%", padding: 0, border: "none" }}></th>}
                 </tr>
 
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
@@ -1406,7 +1405,6 @@ export default function MarkEntry() {
                     <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>
                       {s.result === "Fail" ? "F" : s.result === "Pass" ? "P" : "-"}
                     </td>
-                    {focusedSubjectIndices.length > 0 && <td className="no-print" style={{ width: "100%", padding: 0, border: "none" }}></td>}
                   </tr>
                 ))}
 
@@ -1419,28 +1417,24 @@ export default function MarkEntry() {
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`total-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
-                  {focusedSubjectIndices.length > 0 && <td className="no-print" colSpan="4" style={{ padding: 0, border: "none" }}></td>}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`pass-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
                   ))}
-                  {focusedSubjectIndices.length > 0 && <td className="no-print" colSpan="4" style={{ padding: 0, border: "none" }}></td>}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Fail</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`fail-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
                   ))}
-                  {focusedSubjectIndices.length > 0 && <td className="no-print" colSpan="4" style={{ padding: 0, border: "none" }}></td>}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass %</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`passpct-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
                   ))}
-                  {focusedSubjectIndices.length > 0 && <td className="no-print" colSpan="4" style={{ padding: 0, border: "none" }}></td>}
                 </tr>
               </tbody>
             </table>
