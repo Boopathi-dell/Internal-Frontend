@@ -1381,7 +1381,7 @@ export default function MarkEntry() {
                           padding: "0",
                           backgroundColor: (s.marks && (classData.examName === "ESE" ? (s.marks[j] === "AB" || s.marks[j] === "U" || s.marks[j] === "U*" || s.marks[j] === "FAIL") : (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark))))
                             ? "rgba(239, 68, 68, 0.45)"
-                            : (s.marks && (s.marks[j] === "" || s.marks[j] === undefined || s.marks[j] === null) ? "#fff9c4" : "transparent"),
+                            : (s.marks && (s.marks[j] === "" || s.marks[j] === undefined || s.marks[j] === null) ? "#ffea00" : "transparent"),
                           WebkitPrintColorAdjust: "exact",
                           printColorAdjust: "exact"
                         }}
