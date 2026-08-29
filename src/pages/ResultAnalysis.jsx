@@ -236,11 +236,11 @@ export default function ResultAnalysis() {
     if (currentExam === "CIA - II") targetKey = "CIA-II";
     if (currentExam === "CIA - III") targetKey = "CIA-III";
     if (currentExam === "Model Exam") targetKey = "MKC";
-    if (currentExam === "Unit Test - I") targetKey = "A1";
-    if (currentExam === "Unit Test - II") targetKey = "A2";
-    if (currentExam === "Unit Test - III") targetKey = "A3";
-    if (currentExam === "Unit Test - IV") targetKey = "A4";
-    if (currentExam === "Unit Test - V") targetKey = "A5";
+    if (currentExam === "Unit Test - I") targetKey = "U1";
+    if (currentExam === "Unit Test - II") targetKey = "U2";
+    if (currentExam === "Unit Test - III") targetKey = "U3";
+    if (currentExam === "Unit Test - IV") targetKey = "U4";
+    if (currentExam === "Unit Test - V") targetKey = "U5";
 
     if (progressKeys.includes(targetKey)) {
       handleProgressChange(targetKey, "total", (students.length || 0).toString());
