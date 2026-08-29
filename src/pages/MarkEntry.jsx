@@ -100,6 +100,7 @@ export default function MarkEntry() {
   const [unsavedChanges, setUnsavedChanges] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState(null);
   const isAdmin = (sessionStorage.getItem("role") || "").toLowerCase() === "admin";
+  const [focusedSubjectIndex, setFocusedSubjectIndex] = useState(-1); // -1 means All Subjects
 
   const inputRefs = useRef({});
 
@@ -1094,6 +1095,34 @@ export default function MarkEntry() {
               🖨️ View & Print Only Mode (Edit Access Disabled by Admin)
             </div>
           )}
+
+          {/* Focus Mode Subject Selector */}
+          <div className="no-print" style={{ 
+            marginBottom: "20px", 
+            padding: "15px", 
+            background: "var(--bg-card)", 
+            borderRadius: "12px", 
+            border: "1px solid var(--border-color)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "15px",
+            boxShadow: "var(--shadow-sm)"
+          }}>
+            <label style={{ fontWeight: "bold", color: "var(--primary)" }}>Focus Mode (Screen Only):</label>
+            <select
+              value={focusedSubjectIndex}
+              onChange={e => setFocusedSubjectIndex(Number(e.target.value))}
+              className="select-input"
+            >
+              <option value={-1}>Show All Subjects</option>
+              {(classData.subjects || []).map((sub, idx) => (
+                <option key={idx} value={idx}>
+                  {getCourseDetails()[idx]?.courseName || sub} ({getCourseDetails()[idx]?.courseCode || sub})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <style>{`
               @media print {
                 @page { 
@@ -1151,6 +1180,10 @@ export default function MarkEntry() {
                   margin: 0 !important;
                 }
                 .sig-cell { height: 75px !important; }
+                .focus-hidden { display: table-cell !important; }
+              }
+              @media screen {
+                .focus-hidden { display: none !important; }
               }
 
               @keyframes toastFadeIn {
@@ -1278,18 +1311,18 @@ export default function MarkEntry() {
                   <th className="sticky-col-header" rowSpan="2" style={{ padding: "3px", left: "40px", minWidth: "100px", width: "100px", maxWidth: "100px" }}>Register<br />Number</th>
                   <th className="sticky-col-header" rowSpan="2" style={{ padding: "3px", left: "140px", minWidth: "160px", width: "160px", maxWidth: "160px", textAlign: "left", paddingLeft: "10px" }}>Name of the<br />Student</th>
                   {(classData.subjects || []).map((sub, idx) => (
-                    <th key={idx} style={{ padding: "2px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px" }}>
+                    <th key={idx} className={focusedSubjectIndex !== -1 && focusedSubjectIndex !== idx ? "focus-hidden" : ""} style={{ padding: "2px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px" }}>
                       {getCourseDetails()[idx]?.courseCode || sub}
                     </th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
-                  <th rowSpan="2" style={{ padding: "3px" }}>Pass %</th>
-                  <th rowSpan="2" style={{ padding: "3px" }}>Pass/<br />Fail</th>
+                  <th rowSpan="2" className={focusedSubjectIndex !== -1 ? "focus-hidden" : ""} style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
+                  <th rowSpan="2" className={focusedSubjectIndex !== -1 ? "focus-hidden" : ""} style={{ padding: "3px" }}>Pass %</th>
+                  <th rowSpan="2" className={focusedSubjectIndex !== -1 ? "focus-hidden" : ""} style={{ padding: "3px" }}>Pass/<br />Fail</th>
                 </tr>
 
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
                   {getCourseDetails().map((cd, idx) => (
-                    <th key={`cn-${idx}`} style={{ padding: "4px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px", fontWeight: "bold", color: "black" }}>
+                    <th key={`cn-${idx}`} className={focusedSubjectIndex !== -1 && focusedSubjectIndex !== idx ? "focus-hidden" : ""} style={{ padding: "4px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px", fontWeight: "bold", color: "black" }}>
                       {cd.shortName || cd.courseName}
                     </th>
                   ))}
@@ -1304,6 +1337,7 @@ export default function MarkEntry() {
                     {(classData.subjects || []).map((sub, j) => (
                       <td
                         key={j}
+                        className={focusedSubjectIndex !== -1 && focusedSubjectIndex !== j ? "focus-hidden" : ""}
                         style={{
                           padding: "0",
                           backgroundColor: (s.marks && (classData.examName === "ESE" ? (s.marks[j] === "AB" || s.marks[j] === "U" || s.marks[j] === "U*" || s.marks[j] === "FAIL") : (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark))))
@@ -1327,9 +1361,9 @@ export default function MarkEntry() {
                         />
                       </td>
                     ))}
-                    <td style={{ padding: "4px", fontWeight: "bold" }}>{s.total}</td>
-                    <td style={{ padding: "4px" }}>{s.percentage}</td>
-                    <td style={{ padding: "4px", fontWeight: "bold" }}>
+                    <td className={focusedSubjectIndex !== -1 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>{s.total}</td>
+                    <td className={focusedSubjectIndex !== -1 ? "focus-hidden" : ""} style={{ padding: "4px" }}>{s.percentage}</td>
+                    <td className={focusedSubjectIndex !== -1 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>
                       {s.result === "Fail" ? "F" : s.result === "Pass" ? "P" : "-"}
                     </td>
                   </tr>
@@ -1342,25 +1376,25 @@ export default function MarkEntry() {
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Total</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`total-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
+                    <td key={`total-${idx}`} className={focusedSubjectIndex !== -1 && focusedSubjectIndex !== idx ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`pass-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
+                    <td key={`pass-${idx}`} className={focusedSubjectIndex !== -1 && focusedSubjectIndex !== idx ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
                   ))}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Fail</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`fail-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
+                    <td key={`fail-${idx}`} className={focusedSubjectIndex !== -1 && focusedSubjectIndex !== idx ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
                   ))}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass %</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`passpct-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
+                    <td key={`passpct-${idx}`} className={focusedSubjectIndex !== -1 && focusedSubjectIndex !== idx ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
                   ))}
                 </tr>
               </tbody>
