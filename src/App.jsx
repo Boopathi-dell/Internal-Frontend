@@ -75,8 +75,15 @@ function App() {
     if (authState === "admin") {
       fetchPendingCount();
       
-      if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-        Notification.requestPermission();
+      try {
+        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+          const promise = Notification.requestPermission();
+          if (promise) {
+            promise.catch(err => console.error("Notification permission error:", err));
+          }
+        }
+      } catch (err) {
+        console.error("Notification request failed", err);
       }
       
       const interval = setInterval(fetchPendingCount, 15000);
