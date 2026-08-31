@@ -1443,7 +1443,7 @@ export default function MarkEntry() {
             {/* Summary Text */}
             <div style={{ textAlign: "left", marginTop: "15px", color: "black" }}>
               <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>PASS % : TARGET : {classData.targetPassPercentage || 85} %</p>
-              <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>Over all Pass %: (No. of students Pass /Total No. of students)*100 = <span style={{ fontSize: "18px" }}>{getOverallPassPercent()} %</span></p>
+              <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>Over all Pass %: (No. of students Pass = {classData?.students?.filter(s => s.result === 'Pass').length || 0} /Total No. of students = {classData?.students?.length || 0})*100 = <span style={{ fontSize: "18px" }}>{getOverallPassPercent()} %</span></p>
             </div>
 
 

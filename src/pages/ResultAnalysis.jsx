@@ -751,7 +751,7 @@ export default function ResultAnalysis() {
 
         {/* C. PASS % TARGET */}
         <h3 style={{ fontSize: "16px", fontWeight: "bold", margin: "20px 0 5px", color: "black" }}>C. PASS % : TARGET : {classData.targetPassPercentage || 85} %</h3>
-        <p style={{ fontSize: "16px", fontWeight: "bold", color: "black" }}>Over all Pass %: (No. of students Pass /Total No. of students)*100 = <span style={{ fontSize: "18px" }}>{overallPassPercent} %</span></p>
+        <p style={{ fontSize: "16px", fontWeight: "bold", color: "black" }}>Over all Pass %: (No. of students Pass = {passStudents.length} /Total No. of students = {totalStudents})*100 = <span style={{ fontSize: "18px" }}>{overallPassPercent} %</span></p>
 
         {/* D. FAST LEARNERS AND SLOW LEARNERS */}
         <h3 style={{ fontSize: "13px", margin: "20px 0 8px", color: "black" }}>D. FAST LEARNERS (TOPPERS) AND SLOW LEARNERS</h3>
