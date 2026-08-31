@@ -229,24 +229,70 @@ export default function ResultAnalysis() {
   };
 
   const autoFillCurrentExam = () => {
-    const currentExam = classData.examName;
-    // Map current exam to the appropriate column if applicable
-    let targetKey = currentExam;
-    if (currentExam === "CIA - I") targetKey = "CIA-1";
-    if (currentExam === "CIA - II") targetKey = "CIA-II";
-    if (currentExam === "CIA - III") targetKey = "CIA-III";
-    if (currentExam === "Model Exam") targetKey = "MKC";
-    if (currentExam === "Unit Test - I") targetKey = "U1";
-    if (currentExam === "Unit Test - II") targetKey = "U2";
-    if (currentExam === "Unit Test - III") targetKey = "U3";
-    if (currentExam === "Unit Test - IV") targetKey = "U4";
-    if (currentExam === "Unit Test - V") targetKey = "U5";
+    // Find all classes in the same cohort
+    const cohortClasses = classes.filter(c => 
+      c.yearSemSec === classData.yearSemSec && 
+      (c.department === classData.department || (!c.department && !classData.department))
+    );
 
-    if (progressKeys.includes(targetKey)) {
-      handleProgressChange(targetKey, "total", (students.length || 0).toString());
-      handleProgressChange(targetKey, "pass", (passStudents.length || 0).toString());
-      handleProgressChange(targetKey, "percentage", (overallPassPercent || 0).toString());
-    }
+    const newProgress = { ...progressData };
+
+    cohortClasses.forEach(c => {
+      let targetKey = c.examName;
+      if (c.examName === "CIA - I") targetKey = "CIA-1";
+      if (c.examName === "CIA - II") targetKey = "CIA-II";
+      if (c.examName === "CIA - III") targetKey = "CIA-III";
+      if (c.examName === "Model Exam") targetKey = "MKC";
+      if (c.examName === "Unit Test - I") targetKey = "U1";
+      if (c.examName === "Unit Test - II") targetKey = "U2";
+      if (c.examName === "Unit Test - III") targetKey = "U3";
+      if (c.examName === "Unit Test - IV") targetKey = "U4";
+      if (c.examName === "Unit Test - V") targetKey = "U5";
+
+      if (progressKeys.includes(targetKey)) {
+        const isESE = c.examName === "ESE";
+        let cTotal = 0;
+        let cPass = 0;
+
+        (c.students || []).forEach(s => {
+          cTotal++;
+          let fail = false;
+          let hasAbsent = false;
+
+          (s.marks || []).forEach(val => {
+            const markStr = String(val || "").toUpperCase().trim();
+            if (isESE) {
+              if (markStr === "AB" || markStr === "U*") hasAbsent = true;
+              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "RA" || markStr === "SA" || markStr === "W" || markStr === "") fail = true;
+            } else {
+              if (markStr === "AB" || markStr === "A") {
+                fail = true;
+                hasAbsent = true;
+              } else {
+                const numVal = Number(markStr || 0);
+                if (numVal < c.passMark) fail = true;
+              }
+            }
+          });
+
+          let res = "Pass";
+          if (hasAbsent) res = "-";
+          else if (fail) res = "Fail";
+
+          if (res === "Pass") cPass++;
+        });
+
+        const pct = cTotal > 0 ? Math.round((cPass / cTotal) * 100) : 0;
+
+        newProgress[targetKey] = {
+          total: cTotal.toString(),
+          pass: cPass.toString(),
+          percentage: pct.toString()
+        };
+      }
+    });
+
+    setProgressData(newProgress);
   };
 
   if (!classData) {
