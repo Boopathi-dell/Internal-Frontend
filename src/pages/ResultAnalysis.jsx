@@ -237,6 +237,19 @@ export default function ResultAnalysis() {
 
     const newProgress = { ...progressData };
 
+    let currentTargetKey = classData.examName;
+    if (classData.examName === "CIA - I") currentTargetKey = "CIA-1";
+    if (classData.examName === "CIA - II") currentTargetKey = "CIA-II";
+    if (classData.examName === "CIA - III") currentTargetKey = "CIA-III";
+    if (classData.examName === "Model Exam") currentTargetKey = "MKC";
+    if (classData.examName === "Unit Test - I") currentTargetKey = "U1";
+    if (classData.examName === "Unit Test - II") currentTargetKey = "U2";
+    if (classData.examName === "Unit Test - III") currentTargetKey = "U3";
+    if (classData.examName === "Unit Test - IV") currentTargetKey = "U4";
+    if (classData.examName === "Unit Test - V") currentTargetKey = "U5";
+    
+    const currentIndex = progressKeys.indexOf(currentTargetKey);
+
     cohortClasses.forEach(c => {
       let targetKey = c.examName;
       if (c.examName === "CIA - I") targetKey = "CIA-1";
@@ -250,6 +263,10 @@ export default function ResultAnalysis() {
       if (c.examName === "Unit Test - V") targetKey = "U5";
 
       if (progressKeys.includes(targetKey)) {
+        const targetIndex = progressKeys.indexOf(targetKey);
+        
+        // Only autofill if this exam comes BEFORE or IS the current exam
+        if (currentIndex === -1 || targetIndex <= currentIndex) {
         const isESE = c.examName === "ESE";
         let cTotal = 0;
         let cPass = 0;
@@ -289,6 +306,7 @@ export default function ResultAnalysis() {
           pass: cPass.toString(),
           percentage: pct.toString()
         };
+        }
       }
     });
 
