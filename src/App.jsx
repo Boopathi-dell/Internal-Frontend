@@ -61,12 +61,18 @@ function App() {
   useEffect(() => {
     // If authState is loading, we just check session storage and set initial state
     if (authState === "loading") {
-      const token = sessionStorage.getItem("token");
-      const role = sessionStorage.getItem("role");
-      if (token && role) {
-        setAuthState(role);
-      } else {
-        setAuthState("studentLogin"); // Default to student portal
+      try {
+        const token = sessionStorage.getItem("token");
+        const role = sessionStorage.getItem("role");
+        const validRoles = ["admin", "printAdmin", "user", "student"];
+        if (token && role && validRoles.includes(role)) {
+          setAuthState(role);
+        } else {
+          setAuthState("studentLogin"); // Default to student portal
+        }
+      } catch (e) {
+        // sessionStorage not available (e.g. Safari private mode)
+        setAuthState("studentLogin");
       }
       return;
     }
@@ -201,7 +207,13 @@ function App() {
   };
 
   if (authState === "loading") {
-    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#16171d", color: "#fff" }}>Loading...</div>;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", background: "#0b0f19", color: "#fff", gap: "16px" }}>
+        <div style={{ width: "48px", height: "48px", border: "4px solid rgba(99,102,241,0.3)", borderTop: "4px solid #6366f1", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <span style={{ color: "#94a3b8", fontSize: "14px", fontWeight: 500 }}>Loading...</span>
+      </div>
+    );
   }
 
   const renderLoginWatermark = () => (
