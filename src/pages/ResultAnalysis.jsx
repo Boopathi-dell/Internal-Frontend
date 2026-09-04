@@ -1126,15 +1126,17 @@ export default function ResultAnalysis() {
           <h3 style={{ fontSize: "14px", fontWeight: "bold", margin: "10px 0", color: "black" }}>H. ACTION TAKEN REPORT</h3>
 
           <div style={{ flex: 1 }}>
-            {cd.map((c, i) => {
+            {getActiveSubjectIndices().map((idx, displayIndex) => {
+              const c = cd[idx];
+              if (!c) return null;
               if (classData.actionTakenSubjects && classData.actionTakenSubjects.length > 0 && !classData.actionTakenSubjects.includes(c.courseCode)) {
                 return null;
               }
               return (
-              <div key={i} style={{ border: "1px solid black", padding: "10px", marginBottom: "12px", fontSize: "12px", color: "black", minHeight: "90px", fontWeight: "bold" }}>
+              <div key={idx} style={{ border: "1px solid black", padding: "10px", marginBottom: "12px", fontSize: "12px", color: "black", minHeight: "90px", fontWeight: "bold" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", margin: "0 0 5px" }}>
-                  <strong>Course {i + 1}: {c.courseCode} - {c.courseName}</strong>
-                  <span>Pass %: <strong>{getSubjectStats(i).passPercent}%</strong></span>
+                  <strong>Course {displayIndex + 1}: {c.courseCode} - {c.courseName}</strong>
+                  <span>Pass %: <strong>{getSubjectStats(idx).passPercent}%</strong></span>
                 </div>
                 <p style={{ margin: "10px 0 5px", minHeight: "45px", borderBottom: "1px dotted gray" }}></p>
                 <div style={{ display: "flex", justifyContent: "space-between", margin: "5px 0 0", fontSize: "11px" }}>
