@@ -1529,13 +1529,16 @@ export default function MarkEntry() {
                 </tr>
               </thead>
               <tbody>
-                {getCourseDetails().map((c, i) => (
-                  <tr key={i}>
-                    <td style={{ padding: "4px" }}>{i + 1}</td>
+                {getCourseDetails()
+                  .map((c, i) => ({ c, originalIndex: i }))
+                  .filter(({ originalIndex }) => focusedSubjectIndices.length === 0 || focusedSubjectIndices.includes(originalIndex))
+                  .map(({ c, originalIndex }, displayIndex) => (
+                  <tr key={originalIndex}>
+                    <td style={{ padding: "4px" }}>{displayIndex + 1}</td>
                     <td style={{ padding: "4px" }}>{c.courseCode}</td>
                     <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px" }}>{c.courseName}</td>
                     <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px" }}>{c.facultyName}</td>
-                    <td style={{ padding: "4px" }}>{calculateSubjectStats(i).passPercent}</td>
+                    <td style={{ padding: "4px" }}>{calculateSubjectStats(originalIndex).passPercent}</td>
                     <td style={{ padding: "4px", minWidth: "100px" }}></td>
                   </tr>
                 ))}
