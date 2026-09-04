@@ -460,15 +460,7 @@ export default function ResultAnalysis() {
   const hB = students.filter(s => s.studentType === "Hosteller" && s.gender === "Boy");
   const hG = students.filter(s => s.studentType === "Hosteller" && s.gender === "Girl");
 
-  const getStudentStatus = (s) => {
-    if (s.result === "-") return "Absent";
-    let isStudentAbsent = false;
-    (s.marks || []).forEach(m => {
-      if (isAbsent(m)) isStudentAbsent = true;
-    });
-    if (isStudentAbsent) return "Absent";
-    return s.result === "Pass" ? "Pass" : "Fail";
-  };
+
 
   const catPass = (arr) => arr.filter(s => getStudentStatus(s) === "Pass").length;
   const catFail = (arr) => arr.filter(s => getStudentStatus(s) === "Fail").length;

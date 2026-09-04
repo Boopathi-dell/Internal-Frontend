@@ -617,8 +617,10 @@ export default function RankList() {
                         isFail = (m === "AB" || m === "A" || (m !== "" && !isNaN(Number(m)) && Number(m) < classData.passMark));
                       }
                       return (
-                        className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(j) ? "focus-hidden" : ""}
-                        style={{ 
+                        <td 
+                          key={j}
+                          className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(j) ? "focus-hidden" : ""}
+                          style={{ 
                           padding: "4px",
                           backgroundColor: isFail ? "rgba(239, 68, 68, 0.45)" : "transparent",
                           color: "black",
