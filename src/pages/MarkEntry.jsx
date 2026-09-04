@@ -1418,9 +1418,9 @@ export default function MarkEntry() {
                       {getCourseDetails()[idx]?.courseCode || sub}
                     </th>
                   ))}
-                  <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
-                  <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px" }}>Pass %</th>
-                  <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px" }}>Pass/<br />Fail</th>
+                  <th rowSpan="2" style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
+                  <th rowSpan="2" style={{ padding: "3px" }}>Pass %</th>
+                  <th rowSpan="2" style={{ padding: "3px" }}>Pass/<br />Fail</th>
                 </tr>
 
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
@@ -1466,9 +1466,9 @@ export default function MarkEntry() {
                         />
                       </td>
                     ))}
-                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>{focusedStats.total}</td>
-                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px" }}>{focusedStats.percentage}</td>
-                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>
+                    <td style={{ padding: "4px", fontWeight: "bold" }}>{focusedStats.total}</td>
+                    <td style={{ padding: "4px" }}>{focusedStats.percentage}</td>
+                    <td style={{ padding: "4px", fontWeight: "bold" }}>
                       {focusedStats.result === "Fail" ? "F" : focusedStats.result === "Pass" ? "P" : "-"}
                     </td>
                   </tr>
@@ -1483,24 +1483,28 @@ export default function MarkEntry() {
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`total-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
+                  <td colSpan="3"></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`pass-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
                   ))}
+                  <td colSpan="3"></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Fail</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`fail-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
                   ))}
+                  <td colSpan="3"></td>
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" className="sticky-col-body" style={{ textAlign: "right", padding: "4px", left: 0 }}>Pass %</td>
                   {(classData.subjects || []).map((_, idx) => (
                     <td key={`passpct-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
                   ))}
+                  <td colSpan="3"></td>
                 </tr>
               </tbody>
             </table>
@@ -1517,33 +1521,42 @@ export default function MarkEntry() {
 
 
             {/* Faculty Table */}
-            <table border="1" style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px", textAlign: "center", fontSize: "14px", fontWeight: "bold", borderColor: "black", color: "black" }}>
-              <thead>
-                <tr style={{ background: "#f2f2f2", fontSize: "14px" }}>
-                  <th style={{ padding: "6px" }}>S.No.</th>
-                  <th style={{ padding: "6px" }}>COURSE CODE</th>
-                  <th style={{ padding: "6px" }}>COURSE NAME</th>
-                  <th style={{ padding: "6px" }}>NAME OF THE FACULTY</th>
-                  <th style={{ padding: "6px" }}>PASS %</th>
-                  <th style={{ padding: "6px" }}>SIGNATURE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {getCourseDetails()
-                  .map((c, i) => ({ c, originalIndex: i }))
-                  .filter(({ originalIndex }) => focusedSubjectIndices.length === 0 || focusedSubjectIndices.includes(originalIndex))
-                  .map(({ c, originalIndex }, displayIndex) => (
-                  <tr key={originalIndex}>
-                    <td style={{ padding: "4px" }}>{displayIndex + 1}</td>
-                    <td style={{ padding: "4px" }}>{c.courseCode}</td>
-                    <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px" }}>{c.courseName}</td>
-                    <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px" }}>{c.facultyName}</td>
-                    <td style={{ padding: "4px" }}>{calculateSubjectStats(originalIndex).passPercent}</td>
-                    <td style={{ padding: "4px", minWidth: "100px" }}></td>
+            {focusedSubjectIndices.length === 1 ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid black", padding: "10px", marginTop: "15px", fontWeight: "bold", fontSize: "14px", color: "black" }}>
+                <div>COURSE CODE: {getCourseDetails()[focusedSubjectIndices[0]].courseCode}</div>
+                <div>COURSE NAME: {getCourseDetails()[focusedSubjectIndices[0]].courseName}</div>
+                <div>FACULTY: {getCourseDetails()[focusedSubjectIndices[0]].facultyName}</div>
+                <div>SIGNATURE: ___________________</div>
+              </div>
+            ) : (
+              <table border="1" style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px", textAlign: "center", fontSize: "14px", fontWeight: "bold", borderColor: "black", color: "black" }}>
+                <thead>
+                  <tr style={{ background: "#f2f2f2", fontSize: "14px" }}>
+                    <th style={{ padding: "6px" }}>S.No.</th>
+                    <th style={{ padding: "6px" }}>COURSE CODE</th>
+                    <th style={{ padding: "6px" }}>COURSE NAME</th>
+                    <th style={{ padding: "6px" }}>NAME OF THE FACULTY</th>
+                    <th style={{ padding: "6px" }}>PASS %</th>
+                    <th style={{ padding: "6px" }}>SIGNATURE</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {getCourseDetails()
+                    .map((c, i) => ({ c, originalIndex: i }))
+                    .filter(({ originalIndex }) => focusedSubjectIndices.length === 0 || focusedSubjectIndices.includes(originalIndex))
+                    .map(({ c, originalIndex }, displayIndex) => (
+                    <tr key={originalIndex}>
+                      <td style={{ padding: "4px" }}>{displayIndex + 1}</td>
+                      <td style={{ padding: "4px" }}>{c.courseCode}</td>
+                      <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px" }}>{c.courseName}</td>
+                      <td style={{ padding: "4px", textAlign: "left", paddingLeft: "10px" }}>{c.facultyName}</td>
+                      <td style={{ padding: "4px" }}>{calculateSubjectStats(originalIndex).passPercent}</td>
+                      <td style={{ padding: "4px", minWidth: "100px" }}></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
 
 
