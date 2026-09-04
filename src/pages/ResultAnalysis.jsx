@@ -14,6 +14,20 @@ export default function ResultAnalysis() {
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [printBold, setPrintBold] = useState(false);
+  const [focusedSubjectIndices, setFocusedSubjectIndices] = useState([]);
+  const [focusDropdownOpen, setFocusDropdownOpen] = useState(false);
+
+  const toggleSubjectFocus = (idx) => {
+    setFocusedSubjectIndices(prev => {
+      if (prev.includes(idx)) return prev.filter(i => i !== idx);
+      return [...prev, idx];
+    });
+  };
+
+  const getActiveSubjectIndices = () => {
+    if (focusedSubjectIndices.length > 0) return focusedSubjectIndices;
+    return (classData?.subjects || []).map((_, i) => i);
+  };
 
   const examNameOptions = [
     "Model Exam",
@@ -368,9 +382,76 @@ export default function ResultAnalysis() {
     return { total, pass, fail, ab, passPercent: total > 0 ? Math.round((pass / total) * 100) : 0 };
   };
 
+  const getStudentFocusedStats = (s) => {
+    if (!classData) return { total: 0, percentage: 0, result: "-", isStudentAbsent: false };
+    const activeIndices = getActiveSubjectIndices();
+
+    let total = 0;
+    let totalGradePoints = 0;
+    let totalCredits = 0;
+    let fail = false;
+    let hasAbsent = false;
+    const isESE = classData.examName === "ESE";
+
+    const getGradePoint = (grade, system) => {
+      const g = String(grade).toUpperCase().trim();
+      if (system === "System 1") {
+        const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      } else {
+        const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      }
+    };
+
+    (s.marks || []).forEach((val, idx) => {
+      if (!activeIndices.includes(idx)) return;
+      const markStr = String(val || "").toUpperCase().trim();
+      if (isESE) {
+        if (markStr === "AB" || markStr === "U*") hasAbsent = true;
+        if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "RA" || markStr === "SA" || markStr === "W" || markStr === "") fail = true;
+        const gp = getGradePoint(markStr, classData.eseGradingSystem || "System 2");
+        const credits = (classData.courseDetails && classData.courseDetails[idx] && classData.courseDetails[idx].credits !== undefined) ? Number(classData.courseDetails[idx].credits) : 3;
+        totalGradePoints += (gp * credits);
+        totalCredits += credits;
+      } else {
+        if (markStr === "AB" || markStr === "A") {
+          fail = true;
+          hasAbsent = true;
+        } else {
+          const numVal = Number(markStr || 0);
+          total += (isNaN(numVal) ? 0 : numVal);
+          if (numVal < classData.passMark) fail = true;
+        }
+      }
+    });
+
+    const maxTotal = isESE ? activeIndices.length * 10 : activeIndices.length * classData.markPerSubject;
+    let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+    if (isESE) {
+      total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+      percentage = Math.round(total * 10);
+    } else {
+      total = Math.round(total);
+    }
+
+    let res = "Pass";
+    if (hasAbsent) res = "-";
+    else if (fail) res = "Fail";
+
+    return { total, percentage: Math.round(percentage), result: res, isStudentAbsent: hasAbsent };
+  };
+
+  const getStudentStatus = (s) => {
+    const stats = getStudentFocusedStats(s);
+    if (stats.result === "-") return "Absent";
+    return stats.result;
+  };
+
   // Overall pass/fail
-  const passStudents = students.filter(s => s.result === "Pass");
-  const failStudents = students.filter(s => s.result === "Fail");
+  const passStudents = students.filter(s => getStudentStatus(s) === "Pass");
+  const failStudents = students.filter(s => getStudentStatus(s) === "Fail");
   const overallPassPercent = totalStudents > 0 ? Math.round((passStudents.length / totalStudents) * 100) : 0;
 
   // Day Scholar / Hosteller breakdown
@@ -395,10 +476,11 @@ export default function ResultAnalysis() {
   const catPassPct = (arr) => arr.length > 0 ? Math.round((catPass(arr) / arr.length) * 100) : 0;
 
   // Toppers and slow learners
-  const validStudents = students.filter(s => getStudentStatus(s) !== "Absent" && s.result !== "-");
-  const sortedDesc = [...validStudents].sort((a, b) => b.percentage - a.percentage);
+  const validStudents = students.filter(s => getStudentStatus(s) !== "Absent" && getStudentFocusedStats(s).result !== "-");
+  const studentsWithPct = validStudents.map(s => ({ ...s, focusedPercentage: getStudentFocusedStats(s).percentage }));
+  const sortedDesc = [...studentsWithPct].sort((a, b) => b.focusedPercentage - a.focusedPercentage);
   const toppers = sortedDesc.slice(0, 5);
-  const sortedAsc = [...validStudents].sort((a, b) => a.percentage - b.percentage);
+  const sortedAsc = [...studentsWithPct].sort((a, b) => a.focusedPercentage - b.focusedPercentage);
   const slowLearners = sortedAsc.slice(0, 5);
 
   // Course-wise absentees
@@ -408,11 +490,13 @@ export default function ResultAnalysis() {
 
   // Students absent grouped by number of courses
   const getAbsentCounts = () => {
+    const activeIndices = getActiveSubjectIndices();
     const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, all: 0 };
     students.forEach(s => {
       let abCount = 0;
-      s.marks.forEach(m => { if (isAbsent(m)) abCount++; });
-      if (abCount >= (classData.subjects || []).length) counts.all++;
+      activeIndices.forEach(idx => { if (isAbsent(s.marks[idx])) abCount++; });
+      if (abCount === 0) return;
+      if (abCount >= activeIndices.length) counts.all++;
       else if (abCount >= 5) counts[5]++;
       else if (abCount >= 4) counts[4]++;
       else if (abCount >= 3) counts[3]++;
@@ -424,12 +508,14 @@ export default function ResultAnalysis() {
 
   // Students failed grouped by number of courses
   const getFailCounts = () => {
+    const activeIndices = getActiveSubjectIndices();
     const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
     students.forEach(s => {
       let failCount = 0;
-      s.marks.forEach((m, idx) => {
-        if (isFail(m)) failCount++;
+      activeIndices.forEach(idx => {
+        if (isFail(s.marks[idx])) failCount++;
       });
+      if (failCount === 0) return;
       if (failCount >= 6) counts[6]++;
       else if (failCount >= 5) counts[5]++;
       else if (failCount >= 4) counts[4]++;
@@ -440,23 +526,23 @@ export default function ResultAnalysis() {
     return counts;
   };
 
-  // List of absentees (students who were absent in at least 1 subject)
+  // List of absentees (students who were absent in at least 1 active subject)
   const absenteeList = students.filter(s => {
-    return s.marks.some(m => isAbsent(m));
+    return getActiveSubjectIndices().some(idx => isAbsent(s.marks[idx]));
   }).map(s => {
     let abCount = 0;
-    s.marks.forEach(m => { if (isAbsent(m)) abCount++; });
+    getActiveSubjectIndices().forEach(idx => { if (isAbsent(s.marks[idx])) abCount++; });
     return { ...s, absentCount: abCount };
   });
 
-  // List of failed students (due to marks, not absence)
+  // List of failed students (due to marks, not absence, in active subjects)
   const failedDueToMarks = students.filter(s => {
     let failCount = 0;
-    s.marks.forEach(m => { if (isFail(m)) failCount++; });
+    getActiveSubjectIndices().forEach(idx => { if (isFail(s.marks[idx])) failCount++; });
     return failCount > 0;
   }).map(s => {
     let failCount = 0;
-    s.marks.forEach(m => { if (isFail(m)) failCount++; });
+    getActiveSubjectIndices().forEach(idx => { if (isFail(s.marks[idx])) failCount++; });
     return { ...s, failCount };
   });
 
@@ -470,8 +556,9 @@ export default function ResultAnalysis() {
       const wb = XLSX.utils.book_new();
 
       // 1. Course Wise Results
-      const courseWiseData = cd.map((c, i) => {
-        const stats = getSubjectStats(i);
+      const activeCd = getActiveSubjectIndices().map(idx => ({ ...cd[idx], originalIndex: idx }));
+      const courseWiseData = activeCd.map((c, i) => {
+        const stats = getSubjectStats(c.originalIndex);
         return {
           "S.No": i + 1,
           "Course Code": c.courseCode,
@@ -488,12 +575,12 @@ export default function ResultAnalysis() {
       XLSX.utils.book_append_sheet(wb, ws1, "Course Wise Results");
 
       // 2. Toppers
-      const toppersData = toppers.map((s, i) => ({ "Rank": i + 1, "Reg No": s.regNo, "Name": s.name, "Percentage": s.percentage }));
+      const toppersData = toppers.map((s, i) => ({ "Rank": i + 1, "Reg No": s.regNo, "Name": s.name, "Percentage": s.focusedPercentage }));
       const ws2 = XLSX.utils.json_to_sheet(toppersData);
       XLSX.utils.book_append_sheet(wb, ws2, "Toppers");
 
       // 3. Slow Learners
-      const slowLearnersData = slowLearners.map((s, i) => ({ "S.No": i + 1, "Reg No": s.regNo, "Name": s.name, "Percentage": s.percentage }));
+      const slowLearnersData = slowLearners.map((s, i) => ({ "S.No": i + 1, "Reg No": s.regNo, "Name": s.name, "Percentage": s.focusedPercentage }));
       const ws3 = XLSX.utils.json_to_sheet(slowLearnersData);
       XLSX.utils.book_append_sheet(wb, ws3, "Slow Learners");
 
@@ -574,9 +661,54 @@ export default function ResultAnalysis() {
                 .print-bold-text, .print-bold-text th, .print-bold-text td, .print-bold-text span, .print-bold-text div, .print-bold-text p, .print-bold-text h3 {
                   font-weight: bold !important;
                 }
-                .no-print { display: none !important; }
               }
       `}</style>
+
+      {/* Focus Mode Subject Selector */}
+      <div className="no-print" style={{ 
+        marginBottom: "20px", 
+        padding: "15px", 
+        background: "var(--bg-card)", 
+        borderRadius: "12px", 
+        border: "1px solid var(--border-color)",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "15px",
+        boxShadow: "var(--shadow-sm)"
+      }}>
+        <label style={{ fontWeight: "bold", color: "var(--primary)" }}>Focus Mode:</label>
+        <div style={{ position: "relative" }}>
+          <button 
+            className="select-input"
+            style={{ background: "white", cursor: "pointer", textAlign: "left", minWidth: "250px", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px" }}
+            onClick={() => setFocusDropdownOpen(!focusDropdownOpen)}
+          >
+            {focusedSubjectIndices.length === 0 ? "Show All Subjects" : `${focusedSubjectIndices.length} Subject(s) Selected`}
+            <span>▼</span>
+          </button>
+          {focusDropdownOpen && (
+            <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #ccc", borderRadius: "4px", marginTop: "4px", zIndex: 100, maxHeight: "250px", overflowY: "auto", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", textAlign: "left" }}>
+              <div 
+                style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", background: "#f8f9fa", fontWeight: "bold", color: "black" }}
+                onClick={() => { setFocusedSubjectIndices([]); setFocusDropdownOpen(false); }}
+              >
+                Show All Subjects
+              </div>
+              {(classData.subjects || []).map((sub, idx) => (
+                <label key={idx} style={{ display: "flex", alignItems: "center", padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", color: "black", margin: 0 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={focusedSubjectIndices.includes(idx)} 
+                    onChange={() => toggleSubjectFocus(idx)} 
+                    style={{ marginRight: "10px", width: "16px", height: "16px" }}
+                  />
+                  <span style={{ fontSize: "12px" }}>{(cd && cd[idx]) ? cd[idx].courseName || sub : sub} ({(cd && cd[idx]) ? cd[idx].courseCode || sub : sub})</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
         <button onClick={() => window.print()} style={{ padding: "10px 20px", background: "#007bff", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}>
@@ -731,8 +863,9 @@ export default function ResultAnalysis() {
             </tr>
           </thead>
           <tbody>
-            {cd.map((c, i) => {
-              const stats = getSubjectStats(i);
+            {getActiveSubjectIndices().map((idx, i) => {
+              const c = cd[idx] || { courseCode: "", courseName: "", facultyName: "" };
+              const stats = getSubjectStats(idx);
               return (
                 <tr key={i}>
                   <td style={tdStyle}>{i + 1}</td>
@@ -773,7 +906,7 @@ export default function ResultAnalysis() {
                     <td style={tdStyle}>{i + 1}</td>
                     <td style={tdStyle}>{s.regNo}</td>
                     <td style={{ ...tdStyle, textAlign: "left", paddingLeft: "8px" }}>{s.name}</td>
-                    <td style={tdStyle}>{s.percentage}</td>
+                    <td style={tdStyle}>{s.focusedPercentage}</td>
                   </tr>
                 ))}
               </tbody>
@@ -796,7 +929,7 @@ export default function ResultAnalysis() {
                     <td style={tdStyle}>{i + 1}</td>
                     <td style={tdStyle}>{s.regNo}</td>
                     <td style={{ ...tdStyle, textAlign: "left", paddingLeft: "8px" }}>{s.name}</td>
-                    <td style={tdStyle}>{s.percentage}</td>
+                    <td style={tdStyle}>{s.focusedPercentage}</td>
                   </tr>
                 ))}
               </tbody>
@@ -875,13 +1008,16 @@ export default function ResultAnalysis() {
           <thead>
             <tr>
               <th style={thStyle}></th>
-              {cd.map((c, i) => <th key={i} style={thStyle}>{c.shortName || c.courseCode}</th>)}
+              {getActiveSubjectIndices().map((idx, i) => {
+                const c = cd[idx] || { shortName: "", courseCode: "" };
+                return <th key={i} style={thStyle}>{c.shortName || c.courseCode}</th>
+              })}
             </tr>
           </thead>
           <tbody>
             <tr>
               <td style={{ ...tdStyle, fontWeight: "bold" }}>No. of Absent</td>
-              {cd.map((_, i) => <td key={i} style={{ ...tdStyle, color: "red" }}>{getAbsenteesForSubject(i).length}</td>)}
+              {getActiveSubjectIndices().map((idx, i) => <td key={i} style={{ ...tdStyle, color: "red" }}>{getAbsenteesForSubject(idx).length}</td>)}
             </tr>
           </tbody>
         </table>

@@ -173,12 +173,76 @@ export default function MarkEntry() {
     return { total, pass, fail, passPercent };
   };
 
+  const getStudentFocusedStats = (s) => {
+    if (!classData) return { total: 0, percentage: 0, result: "-" };
+    if (!focusedSubjectIndices || focusedSubjectIndices.length === 0) {
+      return { total: s.total, percentage: s.percentage, result: s.result };
+    }
+
+    let total = 0;
+    let totalGradePoints = 0;
+    let totalCredits = 0;
+    let fail = false;
+    const isESE = classData.examName === "ESE";
+
+    const getGradePoint = (grade, system) => {
+      const g = String(grade).toUpperCase().trim();
+      if (system === "System 1") {
+        const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      } else {
+        const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      }
+    };
+
+    (s.marks || []).forEach((val, idx) => {
+      if (!focusedSubjectIndices.includes(idx)) return; // Skip ignored subjects
+
+      const markStr = String(val || "").toUpperCase().trim();
+      if (isESE) {
+        if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") {
+          fail = true;
+        }
+        const gp = getGradePoint(markStr, classData.eseGradingSystem || "System 2");
+        const credits = (classData.courseDetails && classData.courseDetails[idx] && classData.courseDetails[idx].credits !== undefined) ? Number(classData.courseDetails[idx].credits) : 3;
+        totalGradePoints += (gp * credits);
+        totalCredits += credits;
+      } else {
+        if (markStr === "AB" || markStr === "A") {
+          fail = true;
+        } else {
+          const numVal = Number(markStr || 0);
+          total += (isNaN(numVal) ? 0 : numVal);
+          if (numVal < classData.passMark) fail = true;
+        }
+      }
+    });
+
+    const maxTotal = isESE ? focusedSubjectIndices.length * 10 : focusedSubjectIndices.length * classData.markPerSubject;
+    let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+    if (isESE) {
+      total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+      percentage = Math.round(total * 10);
+    } else {
+      total = Math.round(total);
+    }
+
+    return {
+      total,
+      percentage: Number(percentage.toFixed(2)),
+      result: fail ? "Fail" : "Pass"
+    };
+  };
+
   const getOverallPassPercent = () => {
     if (!classData || !classData.students || classData.students.length === 0) return 0;
     const total = classData.students.length;
     let pass = 0;
     classData.students.forEach(s => {
-      if (s.result === "Pass") pass++;
+      const stats = getStudentFocusedStats(s);
+      if (stats.result === "Pass") pass++;
     });
     return total === 0 ? 0 : Math.round((pass / total) * 100);
   };
@@ -1207,7 +1271,7 @@ export default function MarkEntry() {
                   margin: 0 !important;
                 }
                 .sig-cell { height: 75px !important; }
-                .focus-hidden { display: table-cell !important; }
+                .focus-hidden { display: none !important; }
               }
               @media screen {
                 .focus-hidden { display: none !important; }
@@ -1368,7 +1432,9 @@ export default function MarkEntry() {
                 </tr>
               </thead>
               <tbody>
-                {(classData.students || []).map((s, i) => (
+                {(classData.students || []).map((s, i) => {
+                  const focusedStats = getStudentFocusedStats(s);
+                  return (
                   <tr key={s._id || i}>
                     <td className="sticky-col-body" style={{ padding: "4px", left: 0, minWidth: "40px", width: "40px", maxWidth: "40px" }}>{i + 1}</td>
                     <td className="sticky-col-body" style={{ padding: "4px", left: "40px", minWidth: "100px", width: "100px", maxWidth: "100px" }}>{s.regNo}</td>
@@ -1400,13 +1466,13 @@ export default function MarkEntry() {
                         />
                       </td>
                     ))}
-                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>{s.total}</td>
-                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px" }}>{s.percentage}</td>
+                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>{focusedStats.total}</td>
+                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px" }}>{focusedStats.percentage}</td>
                     <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>
-                      {s.result === "Fail" ? "F" : s.result === "Pass" ? "P" : "-"}
+                      {focusedStats.result === "Fail" ? "F" : focusedStats.result === "Pass" ? "P" : "-"}
                     </td>
                   </tr>
-                ))}
+                )})}
 
 
 
@@ -1443,7 +1509,7 @@ export default function MarkEntry() {
             {/* Summary Text */}
             <div style={{ textAlign: "left", marginTop: "15px", color: "black" }}>
               <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>PASS % : TARGET : {classData.targetPassPercentage || 85} %</p>
-              <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>Over all Pass %: (No. of students Pass = {classData?.students?.filter(s => s.result === 'Pass').length || 0} /Total No. of students = {classData?.students?.length || 0})*100 = <span style={{ fontSize: "18px" }}>{getOverallPassPercent()} %</span></p>
+              <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>Over all Pass %: (No. of students Pass = {classData?.students?.filter(s => getStudentFocusedStats(s).result === 'Pass').length || 0} /Total No. of students = {classData?.students?.length || 0})*100 = <span style={{ fontSize: "18px" }}>{getOverallPassPercent()} %</span></p>
             </div>
 
 

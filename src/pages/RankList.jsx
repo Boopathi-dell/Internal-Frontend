@@ -12,6 +12,15 @@ export default function RankList() {
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [printBold, setPrintBold] = useState(false);
+  const [focusedSubjectIndices, setFocusedSubjectIndices] = useState([]);
+  const [focusDropdownOpen, setFocusDropdownOpen] = useState(false);
+
+  const toggleSubjectFocus = (idx) => {
+    setFocusedSubjectIndices(prev => {
+      if (prev.includes(idx)) return prev.filter(i => i !== idx);
+      return [...prev, idx];
+    });
+  };
 
   const examNameOptions = [
     "Model Exam",
@@ -237,12 +246,85 @@ export default function RankList() {
     return { total, pass, fail: total - pass, passPercent: total === 0 ? 0 : Math.round((pass / total) * 100) };
   };
 
+  const getStudentFocusedStats = (s) => {
+    if (!classData) return { total: 0, percentage: 0, result: "-" };
+    if (!focusedSubjectIndices || focusedSubjectIndices.length === 0) {
+      return { total: s.total, percentage: s.percentage, result: s.result };
+    }
+
+    let total = 0;
+    let totalGradePoints = 0;
+    let totalCredits = 0;
+    let fail = false;
+    const isESE = classData.examName === "ESE";
+
+    const getGradePoint = (grade, system) => {
+      const g = String(grade).toUpperCase().trim();
+      if (system === "System 1") {
+        const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      } else {
+        const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      }
+    };
+
+    (s.marks || []).forEach((val, idx) => {
+      if (!focusedSubjectIndices.includes(idx)) return; // Skip ignored subjects
+
+      const markStr = String(val || "").toUpperCase().trim();
+      if (isESE) {
+        if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") {
+          fail = true;
+        }
+        const gp = getGradePoint(markStr, classData.eseGradingSystem || "System 2");
+        const credits = (classData.courseDetails && classData.courseDetails[idx] && classData.courseDetails[idx].credits !== undefined) ? Number(classData.courseDetails[idx].credits) : 3;
+        totalGradePoints += (gp * credits);
+        totalCredits += credits;
+      } else {
+        if (markStr === "AB" || markStr === "A") {
+          fail = true;
+        } else {
+          const numVal = Number(markStr || 0);
+          total += (isNaN(numVal) ? 0 : numVal);
+          if (numVal < classData.passMark) fail = true;
+        }
+      }
+    });
+
+    const maxTotal = isESE ? focusedSubjectIndices.length * 10 : focusedSubjectIndices.length * classData.markPerSubject;
+    let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+    if (isESE) {
+      total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+      percentage = Math.round(total * 10);
+    } else {
+      total = Math.round(total);
+    }
+
+    return {
+      total,
+      percentage: Number(percentage.toFixed(2)),
+      result: fail ? "Fail" : "Pass"
+    };
+  };
+
+  const getSortedFocusedStudents = () => {
+    if (!classData || !classData.students) return [];
+    const studentsWithStats = classData.students.map(s => ({
+      ...s,
+      focusedStats: getStudentFocusedStats(s)
+    }));
+    return studentsWithStats.sort((a, b) => b.focusedStats.total - a.focusedStats.total);
+  };
+
   const getOverallPassPercent = () => {
     if (!classData || !classData.students || classData.students.length === 0) return 0;
     const total = classData.students.length;
     let pass = 0;
     classData.students.forEach(s => {
-      if (s.result === "Pass") pass++;
+      const stats = getStudentFocusedStats(s);
+      if (stats.result === "Pass") pass++;
     });
     return total === 0 ? 0 : Math.round((pass / total) * 100);
   };
@@ -388,6 +470,7 @@ export default function RankList() {
                 font-weight: bold !important;
               }
               .no-print { display: none !important; }
+              .focus-hidden { display: none !important; }
               h1, h2, h3, p { margin: 2px 0 !important; padding: 0 !important; }
               table { border-collapse: collapse !important; width: 100% !important; margin: 5px 0 !important; }
               td, th { padding: 2px 4px !important; font-size: 12px !important; }
@@ -395,10 +478,56 @@ export default function RankList() {
               .main-report-table th { width: auto !important; min-width: 0 !important; max-width: none !important; }
               .sig-cell { height: 75px !important; }
             }
-
-
+            @media screen {
+              .focus-hidden { display: none !important; }
+            }
           `}</style>
 
+          {/* Focus Mode Subject Selector */}
+          <div className="no-print" style={{ 
+            marginBottom: "20px", 
+            padding: "15px", 
+            background: "var(--bg-card)", 
+            borderRadius: "12px", 
+            border: "1px solid var(--border-color)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "15px",
+            boxShadow: "var(--shadow-sm)"
+          }}>
+            <label style={{ fontWeight: "bold", color: "var(--primary)" }}>Focus Mode:</label>
+            <div style={{ position: "relative" }}>
+              <button 
+                className="select-input"
+                style={{ background: "white", cursor: "pointer", textAlign: "left", minWidth: "250px", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px" }}
+                onClick={() => setFocusDropdownOpen(!focusDropdownOpen)}
+              >
+                {focusedSubjectIndices.length === 0 ? "Show All Subjects" : `${focusedSubjectIndices.length} Subject(s) Selected`}
+                <span>▼</span>
+              </button>
+              {focusDropdownOpen && (
+                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #ccc", borderRadius: "4px", marginTop: "4px", zIndex: 100, maxHeight: "250px", overflowY: "auto", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", textAlign: "left" }}>
+                  <div 
+                    style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", background: "#f8f9fa", fontWeight: "bold", color: "black" }}
+                    onClick={() => { setFocusedSubjectIndices([]); setFocusDropdownOpen(false); }}
+                  >
+                    Show All Subjects
+                  </div>
+                  {(classData.subjects || []).map((sub, idx) => (
+                    <label key={idx} style={{ display: "flex", alignItems: "center", padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", color: "black", margin: 0 }}>
+                      <input 
+                        type="checkbox" 
+                        checked={focusedSubjectIndices.includes(idx)} 
+                        onChange={() => toggleSubjectFocus(idx)} 
+                        style={{ marginRight: "10px", width: "16px", height: "16px" }}
+                      />
+                      <span style={{ fontSize: "12px" }}>{getCourseDetails()[idx]?.courseName || sub} ({getCourseDetails()[idx]?.courseCode || sub})</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="no-print" style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
             <button onClick={() => window.print()} style={{ padding: "10px 20px", background: "#007bff", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}>
@@ -458,22 +587,22 @@ export default function RankList() {
                   <th rowSpan="2" style={{ padding: "3px", width: "100px" }}>Register<br />Number</th>
                   <th rowSpan="2" style={{ padding: "3px", minWidth: "200px" }}>Name of the<br />Student</th>
                   {getCourseDetails().map((cd, idx) => (
-                    <th key={idx} style={{ padding: "2px", width: "65px", wordWrap: "break-word", fontSize: "10px" }}>{cd.courseCode}</th>
+                    <th key={idx} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "2px", width: "65px", wordWrap: "break-word", fontSize: "10px" }}>{cd.courseCode}</th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px", width: "60px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
-                  <th rowSpan="2" style={{ padding: "3px", width: "55px" }}>Pass %</th>
-                  <th rowSpan="2" style={{ padding: "3px", width: "50px" }}>Pass/<br />Fail</th>
+                  <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px", width: "60px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
+                  <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px", width: "55px" }}>Pass %</th>
+                  <th rowSpan="2" className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "3px", width: "50px" }}>Pass/<br />Fail</th>
                   <th rowSpan="2" style={{ padding: "3px", width: "80px" }}>Student<br />Signature</th>
                 </tr>
 
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
                   {getCourseDetails().map((cd, idx) => (
-                    <th key={`cn-${idx}`} style={{ padding: "4px", width: "65px", wordWrap: "break-word", fontSize: "10px", fontWeight: "bold" }}>{cd.shortName || cd.courseName}</th>
+                    <th key={`cn-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px", width: "65px", wordWrap: "break-word", fontSize: "10px", fontWeight: "bold" }}>{cd.shortName || cd.courseName}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {(classData.students || []).map((s, i) => (
+                {getSortedFocusedStudents().map((s, i) => (
                   <tr key={s._id || i}>
                     <td style={{ padding: "4px" }}>{i + 1}</td>
                     <td style={{ padding: "4px" }}>{s.regNo}</td>
@@ -488,8 +617,7 @@ export default function RankList() {
                         isFail = (m === "AB" || m === "A" || (m !== "" && !isNaN(Number(m)) && Number(m) < classData.passMark));
                       }
                       return (
-                      <td 
-                        key={j} 
+                        className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(j) ? "focus-hidden" : ""}
                         style={{ 
                           padding: "4px",
                           backgroundColor: isFail ? "rgba(239, 68, 68, 0.45)" : "transparent",
@@ -502,10 +630,10 @@ export default function RankList() {
                         {m || "-"}
                       </td>
                     )})}
-                    <td style={{ padding: "4px", fontWeight: "bold" }}>{s.total}</td>
-                    <td style={{ padding: "4px" }}>{s.percentage}</td>
-                    <td style={{ padding: "4px", fontWeight: "bold" }}>
-                      {s.result === "Fail" ? "F" : s.result === "Pass" ? "P" : "-"}
+                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>{s.focusedStats.total}</td>
+                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px" }}>{s.focusedStats.percentage}</td>
+                    <td className={focusedSubjectIndices.length > 0 ? "focus-hidden" : ""} style={{ padding: "4px", fontWeight: "bold" }}>
+                      {s.focusedStats.result === "Fail" ? "F" : s.focusedStats.result === "Pass" ? "P" : "-"}
                     </td>
                     <td style={{ padding: "4px" }}></td>
                   </tr>
@@ -515,25 +643,25 @@ export default function RankList() {
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Total</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`total-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
+                    <td key={`total-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).total}</td>
                   ))}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Pass</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`pass-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
+                    <td key={`pass-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).pass}</td>
                   ))}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Fail</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`fail-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
+                    <td key={`fail-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).fail}</td>
                   ))}
                 </tr>
                 <tr style={{ fontWeight: "bold", background: "#f2f2f2" }}>
                   <td colSpan="3" style={{ textAlign: "right", padding: "4px" }}>Pass %</td>
                   {(classData.subjects || []).map((_, idx) => (
-                    <td key={`passpct-${idx}`} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
+                    <td key={`passpct-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px" }}>{calculateSubjectStats(idx).passPercent}</td>
                   ))}
                 </tr>
               </tbody>
@@ -542,7 +670,7 @@ export default function RankList() {
             {/* Target & Overall Pass % */}
             <div style={{ textAlign: "left", marginTop: "15px", color: "black" }}>
               <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>C. PASS % : TARGET : {classData.targetPassPercentage || 85} %</p>
-              <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>Over all Pass %: (No. of students Pass = {classData?.students?.filter(s => s.result === 'Pass').length || 0} /Total No. of students = {classData?.students?.length || 0})*100 = <span style={{ fontSize: "18px" }}>{getOverallPassPercent()} %</span></p>
+              <p style={{ margin: "5px 0", fontSize: "16px", fontWeight: "bold" }}>Over all Pass %: (No. of students Pass = {classData?.students?.filter(s => getStudentFocusedStats(s).result === 'Pass').length || 0} /Total No. of students = {classData?.students?.length || 0})*100 = <span style={{ fontSize: "18px" }}>{getOverallPassPercent()} %</span></p>
             </div>
 
 
