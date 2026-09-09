@@ -709,8 +709,7 @@ export default function SeatingManager() {
                                <div>HALL NO : <span>{alloc.hallNumber}</span></div>
                                <div style={{ textAlign: 'right' }}>
                                   <div style={{ marginBottom: '4px' }}>Branch : {generatedPlan.branchName || "Multiple"}</div>
-                                  <div>Date : {generatedPlan.examDate} {generatedPlan.session ? `(${generatedPlan.session})` : ''}</div>
-                                  {generatedPlan.time && <div>Time : {generatedPlan.time}</div>}
+                                  <div>Date : {generatedPlan.examDate}</div>
                                </div>
                              </div>
                           </div>
@@ -843,6 +842,12 @@ export default function SeatingManager() {
                               </tr>
                             </tbody>
                           </table>
+
+                          {(generatedPlan.session || generatedPlan.time) && (
+                            <div style={{ marginTop: '15px', fontWeight: 'bold', fontSize: '13px', fontFamily: 'Times New Roman, serif' }}>
+                               NOTE : {generatedPlan.session && `SESSION : ${generatedPlan.session}`}{generatedPlan.session && generatedPlan.time && ' | '}{generatedPlan.time && `TIME : ${generatedPlan.time}`}
+                            </div>
+                          )}
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '90px', padding: '0 40px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
                              <div>{generatedPlan.showEcSignature !== false ? 'EC' : ''}</div>
