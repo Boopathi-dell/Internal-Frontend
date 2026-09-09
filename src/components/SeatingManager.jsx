@@ -22,6 +22,17 @@ export default function SeatingManager() {
   const [subHeaderText, setSubHeaderText] = useState(() => localStorage.getItem("seatingSubHeaderText") || "OFFICE OF THE CONTROLLER OF THE EXAMINATION");
   const [branchName, setBranchName] = useState(() => localStorage.getItem("seatingBranchName") || "CSE");
   const [iqacNumber, setIqacNumber] = useState(() => localStorage.getItem("seatingIqacNumber") || "");
+  const [session, setSession] = useState(() => localStorage.getItem("seatingSession") || "FN");
+  const [fnTime, setFnTime] = useState(() => localStorage.getItem("seatingFnTime") || "10.00 am to 01.00 pm");
+  const [anTime, setAnTime] = useState(() => localStorage.getItem("seatingAnTime") || "02.00 pm to 05.00 pm");
+  const [showEcSignature, setShowEcSignature] = useState(() => {
+    const val = localStorage.getItem("seatingShowEcSignature");
+    return val !== null ? val === "true" : true;
+  });
+  const [showHodSignature, setShowHodSignature] = useState(() => {
+    const val = localStorage.getItem("seatingShowHodSignature");
+    return val !== null ? val === "true" : true;
+  });
   const [selectedRosters, setSelectedRosters] = useState([]);
   const [selectedHalls, setSelectedHalls] = useState([]);
   const [shuffleClasses, setShuffleClasses] = useState(false);
@@ -49,7 +60,12 @@ export default function SeatingManager() {
     localStorage.setItem("seatingSubHeaderText", subHeaderText);
     localStorage.setItem("seatingBranchName", branchName);
     localStorage.setItem("seatingIqacNumber", iqacNumber);
-  }, [examDate, examName, academicYear, subHeaderText, branchName, iqacNumber]);
+    localStorage.setItem("seatingSession", session);
+    localStorage.setItem("seatingFnTime", fnTime);
+    localStorage.setItem("seatingAnTime", anTime);
+    localStorage.setItem("seatingShowEcSignature", showEcSignature);
+    localStorage.setItem("seatingShowHodSignature", showHodSignature);
+  }, [examDate, examName, academicYear, subHeaderText, branchName, iqacNumber, session, fnTime, anTime, showEcSignature, showHodSignature]);
 
   const fetchHalls = async () => {
     try {
@@ -128,6 +144,10 @@ export default function SeatingManager() {
         branchName,
         subHeaderText,
         iqacNumber,
+        session,
+        time: session === 'FN' ? fnTime : anTime,
+        showEcSignature,
+        showHodSignature,
         rosterIds: selectedRosters,
         hallIds: selectedHalls,
         shuffleClasses,
@@ -205,7 +225,10 @@ export default function SeatingManager() {
 
     generatedPlan.allocations.forEach(alloc => {
       let sheetData = [];
-      sheetData.push([`HALL NO: ${alloc.hallNumber}`, "", "", `Date: ${generatedPlan.examDate}`]);
+      sheetData.push([`HALL NO: ${alloc.hallNumber}`, "", "", `Date: ${generatedPlan.examDate} ${generatedPlan.session ? `(${generatedPlan.session})` : ''}`]);
+      if (generatedPlan.time) {
+        sheetData.push(["", "", "", `Time: ${generatedPlan.time}`]);
+      }
       sheetData.push(["", "", "", `Branch: ${generatedPlan.branchName || 'Multiple'}`]);
       sheetData.push([]);
       
@@ -452,9 +475,34 @@ export default function SeatingManager() {
                        </div>
                     )}
                  </div>
-                 <div className="form-group">
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
                     <label className="input-label">IQAC Number (Optional)</label>
                     <input type="text" className="text-input" value={iqacNumber} onChange={e => setIqacNumber(e.target.value)} />
+                 </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">Session</label>
+                    <select className="select-input" value={session} onChange={e => setSession(e.target.value)}>
+                      <option value="FN">Forenoon (FN)</option>
+                      <option value="AN">Afternoon (AN)</option>
+                    </select>
+                 </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">FN Time</label>
+                    <input type="text" className="text-input" value={fnTime} onChange={e => setFnTime(e.target.value)} />
+                 </div>
+                 <div className="form-group" style={{ marginBottom: '1rem' }}>
+                    <label className="input-label">AN Time</label>
+                    <input type="text" className="text-input" value={anTime} onChange={e => setAnTime(e.target.value)} />
+                 </div>
+                 <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                     <input type="checkbox" checked={showEcSignature} onChange={e => setShowEcSignature(e.target.checked)} />
+                     Print EC Signature
+                   </label>
+                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                     <input type="checkbox" checked={showHodSignature} onChange={e => setShowHodSignature(e.target.checked)} />
+                     Print HOD Signature
+                   </label>
                  </div>
               </div>
 
@@ -657,14 +705,14 @@ export default function SeatingManager() {
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0 0 4px 0', fontFamily: 'Times New Roman, serif' }}>SEATING ARRANGEMENT</h4>
                                <h4 style={{ fontSize: '14px', fontWeight: 'bold', margin: '0', fontFamily: 'Times New Roman, serif' }}>{generatedPlan.examName}</h4>
                             </div>
-                          </div>
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '14px', fontWeight: 'bold' }}>
-                            <div>HALL NO : <span>{alloc.hallNumber}</span></div>
-                            <div style={{ textAlign: 'right' }}>
-                               <div style={{ marginBottom: '4px' }}>Branch : {generatedPlan.branchName || "Multiple"}</div>
-                               <div>Date : {generatedPlan.examDate}</div>
-                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '5px', marginBottom: '15px', fontFamily: 'Times New Roman, serif', fontSize: '14px', fontWeight: 'bold' }}>
+                               <div>HALL NO : <span>{alloc.hallNumber}</span></div>
+                               <div style={{ textAlign: 'right' }}>
+                                  <div style={{ marginBottom: '4px' }}>Branch : {generatedPlan.branchName || "Multiple"}</div>
+                                  <div>Date : {generatedPlan.examDate} {generatedPlan.session ? `(${generatedPlan.session})` : ''}</div>
+                                  {generatedPlan.time && <div>Time : {generatedPlan.time}</div>}
+                               </div>
+                             </div>
                           </div>
 
                           <h3 style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '14px', marginBottom: '15px', fontFamily: 'Times New Roman, serif' }}>REGISTER NO. OF THE CANDIDATES</h3>
@@ -797,8 +845,8 @@ export default function SeatingManager() {
                           </table>
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '90px', padding: '0 40px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
-                             <div>EC</div>
-                             <div>HOD</div>
+                             <div>{generatedPlan.showEcSignature !== false ? 'EC' : ''}</div>
+                             <div>{generatedPlan.showHodSignature !== false ? 'HOD' : ''}</div>
                           </div>
                           
                         </div>
@@ -886,8 +934,8 @@ export default function SeatingManager() {
                       </table>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '90px', padding: '0 40px', fontWeight: 'bold', fontSize: '14px', fontFamily: 'Times New Roman, serif' }}>
-                         <div>EC</div>
-                         <div>HOD</div>
+                         <div>{generatedPlan.showEcSignature !== false ? 'EC' : ''}</div>
+                         <div>{generatedPlan.showHodSignature !== false ? 'HOD' : ''}</div>
                       </div>
                    </div>
 
