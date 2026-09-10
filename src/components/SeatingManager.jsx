@@ -22,9 +22,7 @@ export default function SeatingManager() {
   const [subHeaderText, setSubHeaderText] = useState(() => localStorage.getItem("seatingSubHeaderText") || "OFFICE OF THE CONTROLLER OF THE EXAMINATION");
   const [branchName, setBranchName] = useState(() => localStorage.getItem("seatingBranchName") || "CSE");
   const [iqacNumber, setIqacNumber] = useState(() => localStorage.getItem("seatingIqacNumber") || "");
-  const [session, setSession] = useState(() => localStorage.getItem("seatingSession") || "FN");
-  const [fnTime, setFnTime] = useState(() => localStorage.getItem("seatingFnTime") || "10.00 am to 01.00 pm");
-  const [anTime, setAnTime] = useState(() => localStorage.getItem("seatingAnTime") || "02.00 pm to 05.00 pm");
+  const [noteText, setNoteText] = useState(() => localStorage.getItem("seatingNoteText") || "SESSION : FN | TIME : 10.00 am to 01.00 pm");
   const [showEcSignature, setShowEcSignature] = useState(() => {
     const val = localStorage.getItem("seatingShowEcSignature");
     return val !== null ? val === "true" : true;
@@ -60,12 +58,10 @@ export default function SeatingManager() {
     localStorage.setItem("seatingSubHeaderText", subHeaderText);
     localStorage.setItem("seatingBranchName", branchName);
     localStorage.setItem("seatingIqacNumber", iqacNumber);
-    localStorage.setItem("seatingSession", session);
-    localStorage.setItem("seatingFnTime", fnTime);
-    localStorage.setItem("seatingAnTime", anTime);
+    localStorage.setItem("seatingNoteText", noteText);
     localStorage.setItem("seatingShowEcSignature", showEcSignature);
     localStorage.setItem("seatingShowHodSignature", showHodSignature);
-  }, [examDate, examName, academicYear, subHeaderText, branchName, iqacNumber, session, fnTime, anTime, showEcSignature, showHodSignature]);
+  }, [examDate, examName, academicYear, subHeaderText, branchName, iqacNumber, noteText, showEcSignature, showHodSignature]);
 
   const fetchHalls = async () => {
     try {
@@ -144,8 +140,7 @@ export default function SeatingManager() {
         branchName,
         subHeaderText,
         iqacNumber,
-        session,
-        time: session === 'FN' ? fnTime : anTime,
+        noteText,
         showEcSignature,
         showHodSignature,
         rosterIds: selectedRosters,
@@ -225,9 +220,9 @@ export default function SeatingManager() {
 
     generatedPlan.allocations.forEach(alloc => {
       let sheetData = [];
-      sheetData.push([`HALL NO: ${alloc.hallNumber}`, "", "", `Date: ${generatedPlan.examDate} ${generatedPlan.session ? `(${generatedPlan.session})` : ''}`]);
-      if (generatedPlan.time) {
-        sheetData.push(["", "", "", `Time: ${generatedPlan.time}`]);
+      sheetData.push([`HALL NO: ${alloc.hallNumber}`, "", "", `Date: ${generatedPlan.examDate}`]);
+      if (generatedPlan.noteText) {
+        sheetData.push(["", "", "", `Note: ${generatedPlan.noteText}`]);
       }
       sheetData.push(["", "", "", `Branch: ${generatedPlan.branchName || 'Multiple'}`]);
       sheetData.push([]);
@@ -480,19 +475,8 @@ export default function SeatingManager() {
                     <input type="text" className="text-input" value={iqacNumber} onChange={e => setIqacNumber(e.target.value)} />
                  </div>
                  <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label className="input-label">Session</label>
-                    <select className="select-input" value={session} onChange={e => setSession(e.target.value)}>
-                      <option value="FN">Forenoon (FN)</option>
-                      <option value="AN">Afternoon (AN)</option>
-                    </select>
-                 </div>
-                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label className="input-label">FN Time</label>
-                    <input type="text" className="text-input" value={fnTime} onChange={e => setFnTime(e.target.value)} />
-                 </div>
-                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label className="input-label">AN Time</label>
-                    <input type="text" className="text-input" value={anTime} onChange={e => setAnTime(e.target.value)} />
+                    <label className="input-label">Note Text</label>
+                    <input type="text" className="text-input" value={noteText} onChange={e => setNoteText(e.target.value)} />
                  </div>
                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -843,9 +827,9 @@ export default function SeatingManager() {
                             </tbody>
                           </table>
 
-                          {(generatedPlan.session || generatedPlan.time) && (
+                          {(generatedPlan.noteText) && (
                             <div style={{ marginTop: '15px', fontWeight: 'bold', fontSize: '13px', fontFamily: 'Times New Roman, serif' }}>
-                               NOTE : {generatedPlan.session && `SESSION : ${generatedPlan.session}`}{generatedPlan.session && generatedPlan.time && ' | '}{generatedPlan.time && `TIME : ${generatedPlan.time}`}
+                               NOTE : {generatedPlan.noteText}
                             </div>
                           )}
 
