@@ -156,6 +156,7 @@ export default function AdminPanel() {
   const [missingAttendance, setMissingAttendance] = useState([]);
   const [missingLoading, setMissingLoading] = useState(false);
   const [missingSearchQuery, setMissingSearchQuery] = useState("");
+  const [missingReportYear, setMissingReportYear] = useState("");
 
   const [reportYear, setReportYear] = useState("II");
   const [reportSem, setReportSem] = useState("III");
@@ -4473,21 +4474,36 @@ export default function AdminPanel() {
             </div>
             
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
-              <p style={{ color: "var(--text-muted)", margin: 0, flex: 1, minWidth: "250px" }}>
-                This report shows dates where attendance was NOT marked for configured working days (excluding Sundays).
-              </p>
-              <input 
-                type="text" 
-                placeholder="Filter by Date or Class..." 
-                className="text-input" 
-                value={missingSearchQuery}
-                onChange={(e) => setMissingSearchQuery(e.target.value)}
-                style={{ width: "250px", padding: "8px 12px" }}
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <select 
+                  className="select-input" 
+                  value={missingReportYear}
+                  onChange={(e) => setMissingReportYear(e.target.value)}
+                  style={{ minWidth: "150px", padding: "8px 12px" }}
+                >
+                  <option value="">-- Select Year --</option>
+                  <option value="I">I Year</option>
+                  <option value="II">II Year</option>
+                  <option value="III">III Year</option>
+                  <option value="IV">IV Year</option>
+                </select>
+                <input 
+                  type="text" 
+                  placeholder="Filter by Date or Class..." 
+                  className="text-input" 
+                  value={missingSearchQuery}
+                  onChange={(e) => setMissingSearchQuery(e.target.value)}
+                  style={{ width: "250px", padding: "8px 12px" }}
+                />
+              </div>
             </div>
 
             {missingLoading ? (
               <div className="loading-spinner"></div>
+            ) : !missingReportYear ? (
+              <div className="empty-state">
+                <p>Please select a Year to view missing attendance.</p>
+              </div>
             ) : missingAttendance.length === 0 ? (
               <div className="empty-state">
                 <EyeOff size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
@@ -4507,6 +4523,7 @@ export default function AdminPanel() {
                   </thead>
                   <tbody>
                     {missingAttendance
+                      .filter(item => item.cohortName.includes(`- ${missingReportYear}/`))
                       .filter(item => 
                         item.date.includes(missingSearchQuery) || 
                         item.cohortName.toLowerCase().includes(missingSearchQuery.toLowerCase())
