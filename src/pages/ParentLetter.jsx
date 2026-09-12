@@ -72,7 +72,7 @@ export default function ParentLetter() {
   
   const dynamicExamNameOptions = Array.from(new Set([
     ...examNameOptions,
-    ...classes.map(c => c.examName)
+    ...(Array.isArray(classes) ? classes.map(c => c.examName) : [])
   ])).filter(Boolean);
 
   const getSemOptionsForYear = (y) => {
