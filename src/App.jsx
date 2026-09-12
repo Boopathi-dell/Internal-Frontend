@@ -84,7 +84,9 @@ function App() {
       
       const verifySession = async () => {
         try {
-          await API.get('/api/auth/admin/verify-session');
+          await API.get('/api/auth/admin/verify-session', {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+          });
         } catch (err) {
           if (err.response && err.response.status === 401) {
             handleLogout();
