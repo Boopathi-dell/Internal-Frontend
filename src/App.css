@@ -191,6 +191,45 @@
     flex-direction: column;
   }
   
+  /* Fix zoom issue on mobile inputs (iOS Safari zooms if font-size < 16px) */
+  input[type="text"], input[type="number"], select, textarea {
+    font-size: 16px !important;
+  }
+  
+  /* Make Mark Entry inputs bigger on mobile for easier tapping */
+  table[border="1"] input[type="text"], .admin-table input[type="text"] {
+    width: 45px !important;
+    height: 35px !important;
+    font-size: 16px !important;
+    border-radius: 6px !important;
+  }
+
+  /* Increase touch targets in tables */
+  .admin-table td, .admin-table th, table[border="1"] td, table[border="1"] th {
+    padding: 8px 4px !important;
+  }
+
+  /* Reduce layout padding on mobile to maximize screen real estate */
+  .page-layout {
+    padding: 1rem 0.5rem !important;
+  }
+  
+  .glass-card {
+    padding: 1rem !important;
+    border-radius: 12px !important;
+  }
+
+  /* Enable smooth scrolling on responsive tables */
+  .table-responsive-wrapper {
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px; /* space for scrollbar */
+  }
+
+  /* Stack admin grids vertically */
+  .admin-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
   .sidebar {
     margin: 0;
     border-radius: 0 24px 24px 0;
