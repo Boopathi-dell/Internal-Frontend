@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Calendar, CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { Save, Calendar, CheckCircle, XCircle, AlertCircle, RefreshCw, Printer } from "lucide-react";
 import API from "../api";
 
 export default function DailyAttendance() {
@@ -190,20 +190,41 @@ export default function DailyAttendance() {
           <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Mark daily attendance and manage session holidays.</p>
         </div>
         {attendanceData && (
-          <button 
-            onClick={saveAttendance}
-            disabled={saving}
-            className="btn btn-primary"
-            style={{ padding: '0.75rem 1.5rem', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.3)' }}
-          >
-            {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-            {saving ? "Saving..." : "Save Attendance"}
-          </button>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button 
+              onClick={() => window.print()}
+              className="btn btn-secondary no-print"
+              style={{ padding: '0.75rem 1.5rem', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(0,0,0,0.1)' }}
+            >
+              <Printer size={20} /> Print
+            </button>
+            <button 
+              onClick={saveAttendance}
+              disabled={saving}
+              className="btn btn-primary no-print"
+              style={{ padding: '0.75rem 1.5rem', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.3)' }}
+            >
+              {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
+              {saving ? "Saving..." : "Save Attendance"}
+            </button>
+          </div>
         )}
       </div>
 
+      <div className="print-only" style={{ textAlign: "center", marginBottom: "2rem", borderBottom: "2px solid #333", paddingBottom: "1.5rem", display: "none" }}>
+        <h2 style={{ fontSize: "1.5rem", letterSpacing: "0.05em", color: "#000", marginBottom: "0.5rem" }}>CONTROLLER OF CSE DEPARTMENT</h2>
+        <h3 style={{ fontSize: "1.2rem", color: "#444", marginBottom: "1.5rem" }}>DAILY ATTENDANCE SHEET</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", fontSize: "1.1rem", textAlign: "left", maxWidth: "800px", margin: "0 auto" }}>
+          <div><strong>Programme:</strong> {filters.programme}</div>
+          <div><strong>Department:</strong> {filters.department}</div>
+          <div><strong>Year / Sem:</strong> {filters.year} / {filters.semester}</div>
+          <div><strong>Section:</strong> {filters.section}</div>
+          <div style={{ gridColumn: "span 2", textAlign: "center", marginTop: "1rem", fontSize: "1.3rem" }}><strong>Date:</strong> {new Date(filters.date).toLocaleDateString('en-GB')}</div>
+        </div>
+      </div>
+
       {/* Filters */}
-      <div className="filter-row">
+      <div className="filter-row no-print">
         <div className="input-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
           <label className="input-label">Programme</label>
           <select name="programme" value={filters.programme} onChange={handleFilterChange} className="select-input">
