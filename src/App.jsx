@@ -141,17 +141,26 @@ function App() {
     }
   }, [authState]);
 
-  // Block mobile swipe-back / browser back button when logged in
+  // Block mobile swipe-back / browser back — show logout confirmation
   useEffect(() => {
     const loggedInStates = ["admin", "printAdmin", "user", "student"];
     if (!loggedInStates.includes(authState)) return;
 
-    // Push a sentinel state so there's always something to pop back to
-    window.history.pushState({ blocked: true }, "");
+    // Push sentinel state so there is always a state to pop
+    window.history.pushState({ appSentinel: true }, "");
 
     const handlePopState = (e) => {
-      // Push forward again to trap the user in the app
-      window.history.pushState({ blocked: true }, "");
+      // Push forward immediately to prevent any navigation
+      window.history.pushState({ appSentinel: true }, "");
+
+      // Show confirmation — using setTimeout so the pushState settles first
+      setTimeout(() => {
+        const confirmed = window.confirm("Do you want to logout?");
+        if (confirmed) {
+          handleLogout();
+        }
+        // If NO — we already pushed forward, so user stays in app
+      }, 50);
     };
 
     window.addEventListener("popstate", handlePopState);
