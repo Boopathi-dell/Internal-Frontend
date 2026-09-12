@@ -621,13 +621,33 @@ export default function StudentDashboard() {
             )}
           </p>
         </div>
-        <div style={{ display: "flex", gap: "0.75rem" }}>
-          <button onClick={fetchResults} className="btn-reload">
-            <RefreshCw size={16} /> Reload
-          </button>
-          <button onClick={handlePrint} className="btn-print">
-            <Printer size={16} /> Print Statement
-          </button>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "1rem" }}>
+          {data.attendancePercentage !== null && data.attendancePercentage !== undefined && (
+            <div style={{
+              background: data.attendancePercentage >= 75 ? "linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(5,150,105,0.1) 100%)" : "linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(220,38,38,0.1) 100%)",
+              border: `1px solid ${data.attendancePercentage >= 75 ? "rgba(16, 185, 129, 0.4)" : "rgba(239, 68, 68, 0.4)"}`,
+              padding: "0.4rem 1rem",
+              borderRadius: "50px",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              color: data.attendancePercentage >= 75 ? "#34d399" : "#fca5a5",
+              fontWeight: "700",
+              fontSize: "0.9rem",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              backdropFilter: "blur(4px)"
+            }}>
+              <CheckCircle2 size={16} /> Overall Attendance: {data.attendancePercentage}%
+            </div>
+          )}
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <button onClick={fetchResults} className="btn-reload">
+              <RefreshCw size={16} /> Reload
+            </button>
+            <button onClick={handlePrint} className="btn-print">
+              <Printer size={16} /> Print Statement
+            </button>
+          </div>
         </div>
       </div>
 
