@@ -79,11 +79,37 @@ function App() {
     }
 
     // Now start polling based on the current authState
-    if (authState === "admin") {
-      fetchPendingCount();
+    if (authState === "admin" || authState === "printAdmin") {
+      if (authState === "admin") fetchPendingCount();
+      
+      const verifySession = async () => {
+        try {
+          await API.get('/api/auth/admin/verify-session');
+        } catch (err) {
+          if (err.response && err.response.status === 401) {
+            handleLogout();
+            alert("Session securely logged out because your account was signed in on another device.");
+          }
+        }
+      };
+
+      let inactivityTimer;
+      const resetInactivityTimer = () => {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+          handleLogout();
+          alert("Session securely logged out due to 10 minutes of inactivity.");
+        }, 10 * 60 * 1000); // 10 minutes
+      };
+
+      window.addEventListener('mousemove', resetInactivityTimer);
+      window.addEventListener('keydown', resetInactivityTimer);
+      window.addEventListener('click', resetInactivityTimer);
+      window.addEventListener('scroll', resetInactivityTimer);
+      resetInactivityTimer();
       
       try {
-        if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
+        if (authState === "admin" && "Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
           const promise = Notification.requestPermission();
           if (promise) {
             promise.catch(err => console.error("Notification permission error:", err));
@@ -93,8 +119,18 @@ function App() {
         console.error("Notification request failed", err);
       }
       
-      const interval = setInterval(fetchPendingCount, 15000);
-      return () => clearInterval(interval);
+      const pendingInterval = authState === "admin" ? setInterval(fetchPendingCount, 15000) : null;
+      const sessionInterval = setInterval(verifySession, 30000);
+      
+      return () => {
+        if (pendingInterval) clearInterval(pendingInterval);
+        clearInterval(sessionInterval);
+        clearTimeout(inactivityTimer);
+        window.removeEventListener('mousemove', resetInactivityTimer);
+        window.removeEventListener('keydown', resetInactivityTimer);
+        window.removeEventListener('click', resetInactivityTimer);
+        window.removeEventListener('scroll', resetInactivityTimer);
+      };
     } else if (authState === "student") {
       fetchStudentUnreadCount();
       subscribeStudentToPushNotifications();
