@@ -2020,13 +2020,6 @@ export default function AdminPanel() {
         >
           📅 Attendance Tracker
         </button>
-        <button 
-          className={`btn ${activeTab === "attendance-report" ? "btn-primary" : "btn-secondary"}`} 
-          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
-          onClick={() => setActiveTab("attendance-report")}
-        >
-          📊 Attendance Report
-        </button>
       </div>
 
       {/* CLASS SETUP TAB */}
@@ -4538,12 +4531,7 @@ export default function AdminPanel() {
             )}
           </div>
 
-        </div>
-      )}
-
-      {/* ATTENDANCE REPORT TAB */}
-      {activeTab === "attendance-report" && (
-        <div className="glass-card" style={{ padding: "2rem" }}>
+          <div className="glass-card" style={{ padding: "2rem", marginTop: "2rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
             <h2 className="section-title" style={{ margin: 0 }}>Attendance Report</h2>
             <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -4630,21 +4618,29 @@ export default function AdminPanel() {
                     {attendanceReportData.sections.map(sec => (
                       <tr key={sec.section}>
                         <td style={{ fontWeight: "600", fontSize: "1.1rem" }}>{sec.section}</td>
-                        <td style={{ textAlign: "right" }}>{sec.totalStrength}</td>
-                        <td style={{ textAlign: "right" }}>{sec.totalPossible}</td>
-                        <td style={{ textAlign: "right", fontWeight: "600", color: "var(--primary)" }}>{sec.totalPresent}</td>
-                        <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.totalAbsent}</td>
-                        <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.totalOD}</td>
-                        <td style={{ textAlign: "right", fontWeight: "bold" }}>
-                          <span style={{ 
-                            padding: "4px 8px", 
-                            borderRadius: "4px", 
-                            background: parseFloat(sec.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
-                            color: parseFloat(sec.percentage) < 75 ? "var(--danger)" : "#10b981"
-                          }}>
-                            {sec.percentage}%
-                          </span>
-                        </td>
+                        {!sec.isMarked ? (
+                          <td colSpan="6" style={{ textAlign: "center", color: "var(--danger)", fontWeight: "600", background: "rgba(239, 68, 68, 0.05)" }}>
+                            Attendance Not Marked
+                          </td>
+                        ) : (
+                          <>
+                            <td style={{ textAlign: "right" }}>{sec.totalStrength}</td>
+                            <td style={{ textAlign: "right" }}>{sec.totalPossible}</td>
+                            <td style={{ textAlign: "right", fontWeight: "600", color: "var(--primary)" }}>{sec.totalPresent}</td>
+                            <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.totalAbsent}</td>
+                            <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.totalOD}</td>
+                            <td style={{ textAlign: "right", fontWeight: "bold" }}>
+                              <span style={{ 
+                                padding: "4px 8px", 
+                                borderRadius: "4px", 
+                                background: parseFloat(sec.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                                color: parseFloat(sec.percentage) < 75 ? "var(--danger)" : "#10b981"
+                              }}>
+                                {sec.percentage}%
+                              </span>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -4705,6 +4701,7 @@ export default function AdminPanel() {
               </div>
             </>
           )}
+        </div>
         </div>
       )}
 

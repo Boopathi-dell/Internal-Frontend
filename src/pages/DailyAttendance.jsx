@@ -289,19 +289,45 @@ export default function DailyAttendance() {
             <div className="table-container" style={{ margin: '0', borderRadius: '0' }}>
               
               <div style={{ padding: '1rem 1.5rem', background: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
-                  <input 
-                    type="text" 
-                    placeholder="Search Roll No or Name..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="text-input"
-                    style={{ maxWidth: '300px' }}
-                  />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Search Roll No or Name..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="text-input"
+                      style={{ maxWidth: '300px' }}
+                    />
+                    {selectedStudents.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--primary)' }}>
+                          {selectedStudents.length} selected
+                        </span>
+                        <button 
+                          onClick={() => setSelectedStudents([])}
+                          style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  
                   {selectedStudents.length > 0 && (
-                    <span style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                      {selectedStudents.length} selected
-                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {selectedStudents.map(regNo => (
+                        <div key={regNo} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', padding: '4px 10px', borderRadius: '16px', fontSize: '0.85rem', fontWeight: '500' }}>
+                          {regNo}
+                          <button 
+                            onClick={() => handleSelectStudent(regNo)}
+                            style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0' }}
+                          >
+                            <XCircle size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
                 
