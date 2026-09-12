@@ -693,7 +693,10 @@ export default function StudentDashboard() {
           <div><strong>Roll / Registration No:</strong> {data.regNo}</div>
           <div><strong>Department:</strong> {data.results[0]?.department || "N/A"}</div>
           <div><strong>Class Details:</strong> {data.results[0]?.programme || "N/A"} - {data.results[0]?.yearSemSec || "N/A"}</div>
-          {advisorName && <div style={{ gridColumn: "span 2" }}><strong>Class Advisor:</strong> {advisorName}</div>}
+          {advisorName && <div><strong>Class Advisor:</strong> {advisorName}</div>}
+          {data.attendancePercentage !== null && data.attendancePercentage !== undefined && (
+            <div><strong>Overall Attendance:</strong> {data.attendancePercentage}%</div>
+          )}
         </div>
       </div>
 
