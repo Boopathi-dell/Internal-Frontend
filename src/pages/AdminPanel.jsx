@@ -4735,37 +4735,37 @@ export default function AdminPanel() {
                             <td style={{ textAlign: "right", fontWeight: "600" }}>{sec.totalStrength}</td>
                             
                             {/* Morning Session */}
-                            {!sec.mrg.isMarked ? (
+                            {!(sec.mrg && sec.mrg.isMarked) ? (
                                 <td colSpan="4" style={{ textAlign: "center", color: "var(--text-muted)", fontStyle: "italic" }}>Not Marked</td>
                             ) : (
                                 <>
-                                  <td style={{ textAlign: "right", color: "var(--primary)", fontWeight: "600" }}>{sec.mrg.totalPresent}</td>
-                                  <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.mrg.totalAbsent}</td>
-                                  <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.mrg.totalOD}</td>
+                                  <td style={{ textAlign: "right", color: "var(--primary)", fontWeight: "600" }}>{sec.mrg?.totalPresent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.mrg?.totalAbsent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.mrg?.totalOD}</td>
                                   <td style={{ textAlign: "right", fontWeight: "bold" }}>
                                     <span style={{ 
                                       padding: "2px 6px", borderRadius: "4px", fontSize: "0.8rem",
-                                      background: parseFloat(sec.mrg.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
-                                      color: parseFloat(sec.mrg.percentage) < 75 ? "var(--danger)" : "#10b981"
-                                    }}>{sec.mrg.percentage}%</span>
+                                      background: parseFloat(sec.mrg?.percentage || 0) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                                      color: parseFloat(sec.mrg?.percentage || 0) < 75 ? "var(--danger)" : "#10b981"
+                                    }}>{sec.mrg?.percentage || "0.00"}%</span>
                                   </td>
                                 </>
                             )}
 
                             {/* Afternoon Session */}
-                            {!sec.aft.isMarked ? (
+                            {!(sec.aft && sec.aft.isMarked) ? (
                                 <td colSpan="4" style={{ textAlign: "center", color: "var(--text-muted)", fontStyle: "italic", borderLeft: "1px solid rgba(255,255,255,0.05)" }}>Not Marked</td>
                             ) : (
                                 <>
-                                  <td style={{ textAlign: "right", color: "var(--primary)", fontWeight: "600", borderLeft: "1px solid rgba(255,255,255,0.05)" }}>{sec.aft.totalPresent}</td>
-                                  <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.aft.totalAbsent}</td>
-                                  <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.aft.totalOD}</td>
+                                  <td style={{ textAlign: "right", color: "var(--primary)", fontWeight: "600", borderLeft: "1px solid rgba(255,255,255,0.05)" }}>{sec.aft?.totalPresent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.aft?.totalAbsent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.aft?.totalOD}</td>
                                   <td style={{ textAlign: "right", fontWeight: "bold" }}>
                                     <span style={{ 
                                       padding: "2px 6px", borderRadius: "4px", fontSize: "0.8rem",
-                                      background: parseFloat(sec.aft.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
-                                      color: parseFloat(sec.aft.percentage) < 75 ? "var(--danger)" : "#10b981"
-                                    }}>{sec.aft.percentage}%</span>
+                                      background: parseFloat(sec.aft?.percentage || 0) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                                      color: parseFloat(sec.aft?.percentage || 0) < 75 ? "var(--danger)" : "#10b981"
+                                    }}>{sec.aft?.percentage || "0.00"}%</span>
                                   </td>
                                 </>
                             )}
