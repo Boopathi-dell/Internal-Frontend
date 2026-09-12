@@ -4706,13 +4706,20 @@ export default function AdminPanel() {
                 <table className="admin-table">
                   <thead>
                     <tr>
-                      <th>Section</th>
-                      <th style={{ textAlign: "right" }}>Strength</th>
-                      <th style={{ textAlign: "right" }}>Total Sessions</th>
-                      <th style={{ textAlign: "right", color: "var(--primary)" }}>Present</th>
-                      <th style={{ textAlign: "right", color: "var(--danger)" }}>Absent</th>
-                      <th style={{ textAlign: "right", color: "var(--warning)" }}>OD</th>
-                      <th style={{ textAlign: "right" }}>Percentage</th>
+                      <th rowSpan="2">Section</th>
+                      <th rowSpan="2" style={{ textAlign: "right" }}>Strength</th>
+                      <th colSpan="4" style={{ textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>Morning Session</th>
+                      <th colSpan="4" style={{ textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.1)", borderLeft: "1px solid rgba(255,255,255,0.1)" }}>Afternoon Session</th>
+                    </tr>
+                    <tr>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem", color: "var(--primary)" }}>Pre</th>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem", color: "var(--danger)" }}>Abs</th>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem", color: "var(--warning)" }}>OD</th>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem" }}>%</th>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem", color: "var(--primary)", borderLeft: "1px solid rgba(255,255,255,0.1)" }}>Pre</th>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem", color: "var(--danger)" }}>Abs</th>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem", color: "var(--warning)" }}>OD</th>
+                      <th style={{ textAlign: "right", fontSize: "0.8rem" }}>%</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4720,26 +4727,48 @@ export default function AdminPanel() {
                       <tr key={sec.section}>
                         <td style={{ fontWeight: "600", fontSize: "1.1rem" }}>{sec.section}</td>
                         {!sec.isMarked ? (
-                          <td colSpan="6" style={{ textAlign: "center", color: "var(--danger)", fontWeight: "600", background: "rgba(239, 68, 68, 0.05)" }}>
+                          <td colSpan="9" style={{ textAlign: "center", color: "var(--danger)", fontWeight: "600", background: "rgba(239, 68, 68, 0.05)" }}>
                             Attendance Not Marked
                           </td>
                         ) : (
                           <>
-                            <td style={{ textAlign: "right" }}>{sec.totalStrength}</td>
-                            <td style={{ textAlign: "right" }}>{sec.totalPossible}</td>
-                            <td style={{ textAlign: "right", fontWeight: "600", color: "var(--primary)" }}>{sec.totalPresent}</td>
-                            <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.totalAbsent}</td>
-                            <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.totalOD}</td>
-                            <td style={{ textAlign: "right", fontWeight: "bold" }}>
-                              <span style={{ 
-                                padding: "4px 8px", 
-                                borderRadius: "4px", 
-                                background: parseFloat(sec.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
-                                color: parseFloat(sec.percentage) < 75 ? "var(--danger)" : "#10b981"
-                              }}>
-                                {sec.percentage}%
-                              </span>
-                            </td>
+                            <td style={{ textAlign: "right", fontWeight: "600" }}>{sec.totalStrength}</td>
+                            
+                            {/* Morning Session */}
+                            {!sec.mrg.isMarked ? (
+                                <td colSpan="4" style={{ textAlign: "center", color: "var(--text-muted)", fontStyle: "italic" }}>Not Marked</td>
+                            ) : (
+                                <>
+                                  <td style={{ textAlign: "right", color: "var(--primary)", fontWeight: "600" }}>{sec.mrg.totalPresent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.mrg.totalAbsent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.mrg.totalOD}</td>
+                                  <td style={{ textAlign: "right", fontWeight: "bold" }}>
+                                    <span style={{ 
+                                      padding: "2px 6px", borderRadius: "4px", fontSize: "0.8rem",
+                                      background: parseFloat(sec.mrg.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                                      color: parseFloat(sec.mrg.percentage) < 75 ? "var(--danger)" : "#10b981"
+                                    }}>{sec.mrg.percentage}%</span>
+                                  </td>
+                                </>
+                            )}
+
+                            {/* Afternoon Session */}
+                            {!sec.aft.isMarked ? (
+                                <td colSpan="4" style={{ textAlign: "center", color: "var(--text-muted)", fontStyle: "italic", borderLeft: "1px solid rgba(255,255,255,0.05)" }}>Not Marked</td>
+                            ) : (
+                                <>
+                                  <td style={{ textAlign: "right", color: "var(--primary)", fontWeight: "600", borderLeft: "1px solid rgba(255,255,255,0.05)" }}>{sec.aft.totalPresent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.aft.totalAbsent}</td>
+                                  <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.aft.totalOD}</td>
+                                  <td style={{ textAlign: "right", fontWeight: "bold" }}>
+                                    <span style={{ 
+                                      padding: "2px 6px", borderRadius: "4px", fontSize: "0.8rem",
+                                      background: parseFloat(sec.aft.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                                      color: parseFloat(sec.aft.percentage) < 75 ? "var(--danger)" : "#10b981"
+                                    }}>{sec.aft.percentage}%</span>
+                                  </td>
+                                </>
+                            )}
                           </>
                         )}
                       </tr>

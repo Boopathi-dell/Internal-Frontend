@@ -38,12 +38,17 @@ export default function DailyAttendance() {
     } else {
       setFilters(prev => ({ ...prev, [name]: value }));
     }
-    setAttendanceData(null); // Clear data when filters change
+    // Auto-load is handled by useEffect
   };
 
   const getCohortName = () => {
     return `${filters.programme}-${filters.department} - ${filters.year}/${filters.semester}/${filters.section}`;
   };
+
+  useEffect(() => {
+    fetchAttendance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.programme, filters.department, filters.year, filters.semester, filters.section, filters.date]);
 
   const fetchAttendance = async () => {
     setLoading(true);
@@ -177,13 +182,24 @@ export default function DailyAttendance() {
   return (
     <div className="page-layout">
       {/* Header */}
-      <div className="header-flex">
+      <div className="header-flex" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1>
             <Calendar size={32} style={{ color: 'var(--primary)', marginRight: '10px' }} /> Daily Smart Attendance
           </h1>
           <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>Mark daily attendance and manage session holidays.</p>
         </div>
+        {attendanceData && (
+          <button 
+            onClick={saveAttendance}
+            disabled={saving}
+            className="btn btn-primary"
+            style={{ padding: '0.75rem 1.5rem', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.3)' }}
+          >
+            {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
+            {saving ? "Saving..." : "Save Attendance"}
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -234,13 +250,6 @@ export default function DailyAttendance() {
         <div className="input-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
           <label className="input-label">Date</label>
           <input type="date" name="date" value={filters.date} onChange={handleFilterChange} className="text-input" />
-        </div>
-        
-        <div style={{ display: 'flex', alignItems: 'flex-end', flex: '1 1 200px' }}>
-          <button onClick={fetchAttendance} disabled={loading} className="btn btn-primary" style={{ width: '100%', height: '44px' }}>
-            {loading ? <RefreshCw className="animate-spin" size={20} /> : <CheckCircle size={20} />}
-            Load Attendance
-          </button>
         </div>
       </div>
 
@@ -422,18 +431,6 @@ export default function DailyAttendance() {
               </p>
             </div>
           )}
-
-          {/* Action Bar */}
-          <div style={{ padding: '1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', background: 'var(--bg-main)' }}>
-            <button 
-              onClick={saveAttendance}
-              disabled={saving}
-              className="btn btn-primary"
-            >
-              {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-              {saving ? "Saving..." : "Save Attendance"}
-            </button>
-          </div>
         </div>
       )}
 
