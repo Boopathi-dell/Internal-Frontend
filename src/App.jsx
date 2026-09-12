@@ -11,13 +11,14 @@ import UserLogin from "./pages/UserLogin";
 import UserRegister from "./pages/UserRegister";
 import StudentLogin from "./pages/StudentLogin";
 import StudentDashboard from "./pages/StudentDashboard";
+import DailyAttendance from "./pages/DailyAttendance";
 import StudentRequests from "./pages/StudentRequests";
 import CorrectionRequests from "./pages/CorrectionRequests";
 import StudentNotices from "./pages/StudentNotices";
 import ParentLetter from "./pages/ParentLetter";
 import AttendanceEntry from "./pages/AttendanceEntry";
 import API from "./api";
-import { LayoutDashboard, Settings, FileEdit, BarChart, Trophy, LogOut, MessageSquareWarning, Menu, X, Bell } from "lucide-react";
+import { LayoutDashboard, Settings, FileEdit, BarChart, Trophy, LogOut, MessageSquareWarning, Menu, X, Bell, Calendar } from "lucide-react";
 import './App.css';
 import ErrorBoundary from "./ErrorBoundary";
 
@@ -265,6 +266,7 @@ function App() {
   const adminNavItems = [
     { name: "Dashboard", path: "/", icon: <LayoutDashboard size={20} /> },
     { name: "Admin Panel", path: "/admin", icon: <Settings size={20} /> },
+    { name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
     { name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
     { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
     { name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
@@ -280,6 +282,7 @@ function App() {
   ];
 
   const printAdminNavItems = [
+    { name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
     { name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
     { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
     { name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
@@ -295,6 +298,7 @@ function App() {
   ];
 
   const userNavItems = [
+    { name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
     { name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
     { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
   ];
@@ -399,7 +403,8 @@ function App() {
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={isAdmin ? <Dashboard /> : (isPrintAdmin ? <MarkEntry /> : (isStudent ? <StudentDashboard /> : <MarkEntry />))} />
-              {isAdmin && <Route path="/admin" element={<AdminPanel />} />}
+              <Route path="/admin" element={<AdminPanel />} />
+              <Route path="/daily-attendance" element={isStudent ? <StudentDashboard /> : <DailyAttendance />} />
               <Route path="/attendance" element={isStudent ? <StudentDashboard /> : <AttendanceEntry />} />
               <Route path="/entry" element={isStudent ? <StudentDashboard /> : <MarkEntry />} />
               {(isAdmin || isPrintAdmin) && <Route path="/analysis" element={<ResultAnalysis />} />}

@@ -65,6 +65,9 @@ export default function AttendanceEntry() {
   ])).filter(Boolean);
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStartDate, setSyncStartDate] = useState(new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 10));
+  const [syncEndDate, setSyncEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [toast, setToast] = useState({ show: false, message: "", type: "loading" });
   const [printEditAccess, setPrintEditAccess] = useState(true);
   const fileInputRef = useRef(null);
@@ -144,7 +147,47 @@ export default function AttendanceEntry() {
       setClassData({ ...res.data, students: updatedStudents });
     } catch (err) {
       console.error(err);
+      alert("Failed to load class data");
     }
+  };
+
+  const handleSyncDailyAttendance = async () => {
+    if (!classData || !syncStartDate || !syncEndDate) return;
+    setIsSyncing(true);
+    setToast({ show: true, message: "Syncing daily attendance...", type: "loading" });
+    try {
+      const cohortName = `${classData.programme}-${classData.department} - ${classData.year}/${classData.semester}/${classData.section}`;
+      const res = await API.get("/api/attendance/summary", {
+        params: { cohortName, startDate: syncStartDate, endDate: syncEndDate }
+      });
+      
+      const { summary } = res.data;
+      if (!summary || summary.length === 0) {
+        setToast({ show: true, message: "No attendance records found for this date range.", type: "error" });
+        setIsSyncing(false);
+        setTimeout(() => setToast({ show: false, message: "", type: "loading" }), 3000);
+        return;
+      }
+
+      const newStudents = [...classData.students];
+      let updateCount = 0;
+      
+      summary.forEach(record => {
+        const studentIndex = newStudents.findIndex(s => s.regNo === record.regNo);
+        if (studentIndex !== -1) {
+          newStudents[studentIndex].attendance = record.percentage.toString();
+          updateCount++;
+        }
+      });
+      
+      setClassData({ ...classData, students: newStudents });
+      setToast({ show: true, message: `Successfully synced attendance for ${updateCount} students! Click Save to apply.`, type: "success" });
+    } catch (err) {
+      console.error(err);
+      setToast({ show: true, message: "Failed to sync daily attendance.", type: "error" });
+    }
+    setIsSyncing(false);
+    setTimeout(() => setToast({ show: false, message: "", type: "loading" }), 3000);
   };
 
   const handleAttendanceChange = (studentIndex, value) => {
@@ -311,7 +354,15 @@ export default function AttendanceEntry() {
             <button onClick={() => fileInputRef.current?.click()} disabled={!isAdmin && (classData.allowEditing === false || !printEditAccess)} style={{ padding: "10px 20px", background: (!isAdmin && (classData.allowEditing === false || !printEditAccess)) ? "#9ca3af" : "#8b5cf6", color: "white", cursor: (!isAdmin && (classData.allowEditing === false || !printEditAccess)) ? "not-allowed" : "pointer", border: "none", borderRadius: "8px", fontWeight: "bold" }}>
               📤 Upload Excel Data
             </button>
-            <div style={{ flex: 1 }}></div>
+            <div style={{ flex: 1, display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center', padding: '0 10px', borderLeft: '1px solid rgba(255,255,255,0.1)', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Sync Range:</span>
+              <input type="date" value={syncStartDate} onChange={e => setSyncStartDate(e.target.value)} style={{ padding: "8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)", background: "rgba(0,0,0,0.3)", color: "white", outline: "none", fontSize: "0.85rem" }} />
+              <span style={{ color: '#94a3b8' }}>to</span>
+              <input type="date" value={syncEndDate} onChange={e => setSyncEndDate(e.target.value)} style={{ padding: "8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.2)", background: "rgba(0,0,0,0.3)", color: "white", outline: "none", fontSize: "0.85rem" }} />
+              <button onClick={handleSyncDailyAttendance} disabled={isSyncing || (!isAdmin && (classData.allowEditing === false || !printEditAccess))} style={{ padding: "8px 15px", background: "#0ea5e9", color: "white", border: "none", borderRadius: "6px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                {isSyncing ? "Syncing..." : "🔄 Auto-Sync"}
+              </button>
+            </div>
             <button onClick={handleSave} disabled={(!isAdmin && (classData.allowEditing === false || !printEditAccess)) || isSaving} style={{ padding: "10px 30px", background: (((!isAdmin && (classData.allowEditing === false || !printEditAccess)) || isSaving)) ? "#9ca3af" : "#10b981", color: "white", cursor: (((!isAdmin && (classData.allowEditing === false || !printEditAccess)) || isSaving)) ? "not-allowed" : "pointer", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "1.1rem" }}>
               {isSaving ? "Saving..." : (!isAdmin && classData.allowEditing === false) ? "🔒 Locked" : (!isAdmin && !printEditAccess) ? "🔒 Read-only" : "💾 Save Attendance"}
             </button>
