@@ -471,6 +471,12 @@ function App() {
               {(isAdmin || isPrintAdmin) && <Route path="/rank" element={<RankList />} />}
               {(isAdmin || isPrintAdmin) && <Route path="/parent-letters" element={<ParentLetter />} />}
               {(isAdmin || isPrintAdmin) && <Route path="/requests" element={<CorrectionRequests />} />}
+              {/* Faculty (user) routes for allocated dashboard pages */}
+              {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/analysis" element={<ResultAnalysis />} />}
+              {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/department-analysis" element={<DepartmentAnalysis />} />}
+              {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/rank" element={<RankList />} />}
+              {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/parent-letters" element={<ParentLetter />} />}
+              {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/requests" element={<CorrectionRequests />} />}
               {isStudent && <Route path="/student-requests" element={<StudentRequests />} />}
               {isStudent && <Route path="/notices" element={<StudentNotices />} />}
             </Routes>

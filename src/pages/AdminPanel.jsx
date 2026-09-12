@@ -1974,6 +1974,78 @@ export default function AdminPanel() {
           grid-template-columns: 1fr;
           gap: 1rem;
         }
+        /* Mobile Admin Panel Layout */
+        .admin-panel-container {
+          padding: 0 !important;
+        }
+        .admin-panel-container h1 {
+          font-size: 1.3rem !important;
+        }
+        .admin-panel-container p {
+          font-size: 0.8rem !important;
+        }
+        .admin-tabs {
+          gap: 0.35rem !important;
+          padding: 0.5rem 0.5rem 0 !important;
+          margin-bottom: 1rem !important;
+        }
+        .admin-tabs .btn {
+          padding: 0.5rem 0.8rem !important;
+          font-size: 0.72rem !important;
+          white-space: nowrap;
+          border-radius: 8px 8px 0 0 !important;
+          flex-shrink: 0;
+        }
+        .glass-card {
+          padding: 1rem !important;
+          border-radius: 10px !important;
+        }
+        .admin-table {
+          font-size: 0.75rem !important;
+        }
+        .admin-table th, .admin-table td {
+          padding: 0.5rem 0.4rem !important;
+        }
+        .header-flex {
+          flex-direction: column;
+          gap: 0.75rem;
+          align-items: flex-start !important;
+        }
+        .header-flex button {
+          width: 100%;
+          justify-content: center;
+        }
+        .input-label {
+          font-size: 0.8rem !important;
+        }
+        .text-input, select {
+          font-size: 0.85rem !important;
+        }
+        .btn {
+          font-size: 0.8rem !important;
+        }
+        .status-badge {
+          font-size: 0.68rem !important;
+          padding: 3px 6px !important;
+        }
+        /* Module allocation popup mobile fix */
+        div[style*="position: absolute"] {
+          position: fixed !important;
+          right: 1rem !important;
+          left: 1rem !important;
+          min-width: unset !important;
+          max-height: 80vh;
+          overflow-y: auto;
+        }
+        .table-container {
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+        }
+      }
+      @media (max-width: 480px) {
+        .admin-grid-4col {
+          grid-template-columns: 1fr;
+        }
       }
     `}</style>
 
