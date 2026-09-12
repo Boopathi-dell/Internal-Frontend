@@ -141,6 +141,23 @@ function App() {
     }
   }, [authState]);
 
+  // Block mobile swipe-back / browser back button when logged in
+  useEffect(() => {
+    const loggedInStates = ["admin", "printAdmin", "user", "student"];
+    if (!loggedInStates.includes(authState)) return;
+
+    // Push a sentinel state so there's always something to pop back to
+    window.history.pushState({ blocked: true }, "");
+
+    const handlePopState = (e) => {
+      // Push forward again to trap the user in the app
+      window.history.pushState({ blocked: true }, "");
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [authState]);
+
   const urlBase64ToUint8Array = (base64String) => {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
