@@ -155,6 +155,13 @@ export default function AdminPanel() {
   
   const [missingAttendance, setMissingAttendance] = useState([]);
   const [missingLoading, setMissingLoading] = useState(false);
+  const [missingSearchQuery, setMissingSearchQuery] = useState("");
+
+  const [reportYear, setReportYear] = useState("II");
+  const [reportSem, setReportSem] = useState("III");
+  const [reportAsOfDate, setReportAsOfDate] = useState(new Date().toISOString().slice(0, 10));
+  const [attendanceReportData, setAttendanceReportData] = useState(null);
+  const [attendanceReportLoading, setAttendanceReportLoading] = useState(false);
 
   const handleReportCheckboxChange = (option, selectedList, setter) => {
     if (option === "All") {
@@ -261,6 +268,8 @@ export default function AdminPanel() {
     } else if (activeTab === "attendance-tracker") {
       loadWorkingDays();
       loadMissingAttendance();
+    } else if (activeTab === "attendance-report") {
+      loadAttendanceReport();
     }
   }, [activeTab]);
 
@@ -291,6 +300,18 @@ export default function AdminPanel() {
     } catch (err) {
       alert("Failed to save working days: " + err.message);
     }
+  };
+
+  const loadAttendanceReport = async () => {
+    setAttendanceReportLoading(true);
+    try {
+      const res = await API.get("/api/attendance-report", { 
+        params: { year: reportYear, semester: reportSem, asOfDate: reportAsOfDate },
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } 
+      });
+      setAttendanceReportData(res.data);
+    } catch (err) { console.error(err); }
+    setAttendanceReportLoading(false);
   };
 
   useEffect(() => {
@@ -1998,6 +2019,13 @@ export default function AdminPanel() {
           onClick={() => setActiveTab("attendance-tracker")}
         >
           📅 Attendance Tracker
+        </button>
+        <button 
+          className={`btn ${activeTab === "attendance-report" ? "btn-primary" : "btn-secondary"}`} 
+          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
+          onClick={() => setActiveTab("attendance-report")}
+        >
+          📊 Attendance Report
         </button>
       </div>
 
@@ -4451,9 +4479,19 @@ export default function AdminPanel() {
               </button>
             </div>
             
-            <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem" }}>
-              This report shows dates where attendance was NOT marked for configured working days (excluding Sundays).
-            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+              <p style={{ color: "var(--text-muted)", margin: 0, flex: 1, minWidth: "250px" }}>
+                This report shows dates where attendance was NOT marked for configured working days (excluding Sundays).
+              </p>
+              <input 
+                type="text" 
+                placeholder="Filter by Date or Class..." 
+                className="text-input" 
+                value={missingSearchQuery}
+                onChange={(e) => setMissingSearchQuery(e.target.value)}
+                style={{ width: "250px", padding: "8px 12px" }}
+              />
+            </div>
 
             {missingLoading ? (
               <div className="loading-spinner"></div>
@@ -4475,7 +4513,12 @@ export default function AdminPanel() {
                     </tr>
                   </thead>
                   <tbody>
-                    {missingAttendance.map((item, idx) => (
+                    {missingAttendance
+                      .filter(item => 
+                        item.date.includes(missingSearchQuery) || 
+                        item.cohortName.toLowerCase().includes(missingSearchQuery.toLowerCase())
+                      )
+                      .map((item, idx) => (
                       <tr key={idx}>
                         <td style={{ fontWeight: "600", color: "var(--danger)" }}>{item.date}</td>
                         <td>{item.cohortName}</td>
@@ -4495,6 +4538,173 @@ export default function AdminPanel() {
             )}
           </div>
 
+        </div>
+      )}
+
+      {/* ATTENDANCE REPORT TAB */}
+      {activeTab === "attendance-report" && (
+        <div className="glass-card" style={{ padding: "2rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+            <h2 className="section-title" style={{ margin: 0 }}>Attendance Report</h2>
+            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label className="input-label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Year</label>
+                <select 
+                  className="select-input" 
+                  value={reportYear}
+                  onChange={(e) => {
+                    const newYear = e.target.value;
+                    setReportYear(newYear);
+                    setReportSem(getSemOptionsForYear(newYear)[0]);
+                  }}
+                  style={{ minWidth: "100px", padding: "6px 12px" }}
+                >
+                  <option value="I">I Year</option>
+                  <option value="II">II Year</option>
+                  <option value="III">III Year</option>
+                  <option value="IV">IV Year</option>
+                </select>
+              </div>
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label className="input-label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>Semester</label>
+                <select 
+                  className="select-input" 
+                  value={reportSem}
+                  onChange={(e) => setReportSem(e.target.value)}
+                  style={{ minWidth: "100px", padding: "6px 12px" }}
+                >
+                  {getSemOptionsForYear(reportYear).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label className="input-label" style={{ fontSize: "0.8rem", marginBottom: "4px" }}>As of Date</label>
+                <input 
+                  type="date" 
+                  className="text-input"
+                  value={reportAsOfDate}
+                  onChange={(e) => setReportAsOfDate(e.target.value)}
+                  style={{ padding: "6px 12px" }}
+                />
+              </div>
+              <button 
+                className="btn btn-primary" 
+                onClick={loadAttendanceReport}
+                disabled={attendanceReportLoading}
+                style={{ height: "40px" }}
+              >
+                {attendanceReportLoading ? "Generating..." : "Generate Report"}
+              </button>
+            </div>
+          </div>
+
+          {!attendanceReportData && !attendanceReportLoading && (
+            <div className="empty-state">
+              <p>Select Year, Semester, and Date to generate the report.</p>
+            </div>
+          )}
+
+          {attendanceReportLoading && <div className="loading-spinner"></div>}
+
+          {attendanceReportData && attendanceReportData.sections.length === 0 && (
+            <div className="empty-state">
+              <p>No data found for this selection.</p>
+            </div>
+          )}
+
+          {attendanceReportData && attendanceReportData.sections.length > 0 && (
+            <>
+              <div className="table-container" style={{ marginBottom: "2rem" }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Section</th>
+                      <th style={{ textAlign: "right" }}>Strength</th>
+                      <th style={{ textAlign: "right" }}>Total Sessions</th>
+                      <th style={{ textAlign: "right", color: "var(--primary)" }}>Present</th>
+                      <th style={{ textAlign: "right", color: "var(--danger)" }}>Absent</th>
+                      <th style={{ textAlign: "right", color: "var(--warning)" }}>OD</th>
+                      <th style={{ textAlign: "right" }}>Percentage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceReportData.sections.map(sec => (
+                      <tr key={sec.section}>
+                        <td style={{ fontWeight: "600", fontSize: "1.1rem" }}>{sec.section}</td>
+                        <td style={{ textAlign: "right" }}>{sec.totalStrength}</td>
+                        <td style={{ textAlign: "right" }}>{sec.totalPossible}</td>
+                        <td style={{ textAlign: "right", fontWeight: "600", color: "var(--primary)" }}>{sec.totalPresent}</td>
+                        <td style={{ textAlign: "right", color: "var(--danger)" }}>{sec.totalAbsent}</td>
+                        <td style={{ textAlign: "right", color: "var(--warning)" }}>{sec.totalOD}</td>
+                        <td style={{ textAlign: "right", fontWeight: "bold" }}>
+                          <span style={{ 
+                            padding: "4px 8px", 
+                            borderRadius: "4px", 
+                            background: parseFloat(sec.percentage) < 75 ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                            color: parseFloat(sec.percentage) < 75 ? "var(--danger)" : "#10b981"
+                          }}>
+                            {sec.percentage}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Grand Total Summary Card */}
+              <div style={{ 
+                background: "linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.1) 100%)", 
+                border: "1px solid rgba(99,102,241,0.2)",
+                borderRadius: "var(--radius-lg)",
+                padding: "2rem",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "2rem",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <div>
+                  <h3 style={{ margin: "0 0 0.5rem 0", color: "var(--text-main)", fontSize: "1.5rem" }}>
+                    Year Overall Summary
+                  </h3>
+                  <p style={{ margin: 0, color: "var(--text-muted)" }}>
+                    Cumulative statistics for Year {reportYear}, Semester {reportSem}
+                  </p>
+                </div>
+                
+                <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px" }}>Total Strength</div>
+                    <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>{attendanceReportData.total.totalStrength}</div>
+                  </div>
+                  <div style={{ width: "1px", background: "var(--border-color)", height: "40px", alignSelf: "center" }}></div>
+                  
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px" }}>Total Present</div>
+                    <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "var(--primary)" }}>{attendanceReportData.total.totalPresent}</div>
+                  </div>
+                  <div style={{ width: "1px", background: "var(--border-color)", height: "40px", alignSelf: "center" }}></div>
+                  
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px" }}>Total Absent</div>
+                    <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "var(--danger)" }}>{attendanceReportData.total.totalAbsent}</div>
+                  </div>
+                  <div style={{ width: "1px", background: "var(--border-color)", height: "40px", alignSelf: "center" }}></div>
+                  
+                  <div style={{ textAlign: "center", background: "var(--bg-card)", padding: "10px 20px", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "1px" }}>Overall Percentage</div>
+                    <div style={{ 
+                      fontSize: "2rem", 
+                      fontWeight: "bold", 
+                      color: parseFloat(attendanceReportData.total.percentage) < 75 ? "var(--danger)" : "#10b981" 
+                    }}>
+                      {attendanceReportData.total.percentage}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
