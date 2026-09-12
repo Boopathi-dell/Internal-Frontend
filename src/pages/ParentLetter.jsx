@@ -63,10 +63,17 @@ export default function ParentLetter() {
   const [primaryClassData, setPrimaryClassData] = useState(null); // Used for students list & courses
 
   const examNameOptions = [
-    "Model Exam", "Model Practical Exam",
+    "Model Exam",
+    "Model Practical Exam",
     "Unit Test - I", "Unit Test - II", "Unit Test - III", "Unit Test - IV", "Unit Test - V",
-    "CIA - I", "CIA - II", "CIA - III", "MKC", "ESE"
+    "CIA - I", "CIA - II", "CIA - III",
+    "MKC", "ESE"
   ];
+  
+  const dynamicExamNameOptions = Array.from(new Set([
+    ...examNameOptions,
+    ...classes.map(c => c.examName)
+  ])).filter(Boolean);
 
   const getSemOptionsForYear = (y) => {
     switch (y) {
@@ -338,7 +345,7 @@ export default function ParentLetter() {
             { label: "Year", field: "year", opts: ["I","II","III","IV"] },
             { label: "Semester", field: "semester", opts: getSemOptionsForYear(filters.year) },
             { label: "Section", field: "section", opts: ["A","B","C","D","E"] },
-            { label: "Exam (For Dynamic Columns)", field: "exam", opts: examNameOptions }
+            { label: "Exam (For Dynamic Columns)", field: "exam", opts: dynamicExamNameOptions }
           ].map(({ label, field, opts }) => (
             <div key={field}>
               <div className="pl-lbl">{label}</div>

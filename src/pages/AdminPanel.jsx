@@ -175,6 +175,11 @@ export default function AdminPanel() {
     "MKC", "ESE"
   ];
 
+  const dynamicExamNameOptions = Array.from(new Set([
+    ...examNameOptions,
+    ...(classes ? classes.map(c => c.examName) : [])
+  ])).filter(Boolean);
+
   const getDefaultMarks = (examName) => {
     if (examName.toLowerCase().includes("unit test")) {
       return { passMark: "15", markPerSubject: "30" };
@@ -2023,11 +2028,18 @@ export default function AdminPanel() {
             <h3 style={{ margin: "2rem 0 1.5rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-color)" }}>Exam Parameters</h3>
             <div className="input-group">
               <label className="input-label">Evaluation Type / Exam Name</label>
-              <select value={formData.examName} onChange={e => checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, e.target.value, classes)} className="select-input">
-                {examNameOptions.map(opt => (
+              <input
+                list="examNameList"
+                value={formData.examName}
+                onChange={e => checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, e.target.value, classes)}
+                className="select-input"
+                placeholder="Select or type exam name"
+              />
+              <datalist id="examNameList">
+                {dynamicExamNameOptions.map(opt => (
                   <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>
                 ))}
-              </select>
+              </datalist>
             </div>
             
             {formData.examName === "ESE" && (
@@ -3803,7 +3815,7 @@ export default function AdminPanel() {
                   onChange={e => setLetterTemplate(t => ({ ...t, attendanceSourceExam: e.target.value }))}
                   style={{ cursor: "pointer" }}>
                   <option value="[Selected Exam]">[Selected Exam] (Dynamic based on Parent Letter filter)</option>
-                  {examNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
+                  {dynamicExamNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
                 </select>
                 <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>💡 Choose which exam's attendance should be printed on the letter.</p>
               </div>
@@ -4108,7 +4120,7 @@ export default function AdminPanel() {
               <div className="form-group">
                 <label className="input-label">Exam Name</label>
                 <select className="select-input" value={reportSettingsFilter.examName} onChange={e => setReportSettingsFilter({...reportSettingsFilter, examName: e.target.value})}>
-                  {examNameOptions.map(ex => <option key={ex} value={ex}>{ex === "ESE" ? "End Semester Examination" : ex}</option>)}
+                  {dynamicExamNameOptions.map(ex => <option key={ex} value={ex}>{ex === "ESE" ? "End Semester Examination" : ex}</option>)}
                 </select>
               </div>
             </div>

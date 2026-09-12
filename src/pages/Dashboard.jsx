@@ -9,10 +9,17 @@ export default function Dashboard() {
   const [loadingStats, setLoadingStats] = useState(false);
 
   const examNameOptions = [
-    "Model Exam", "Model Practical Exam", "Unit Test - I", "Unit Test - II", 
-    "Unit Test - III", "Unit Test - IV", "Unit Test - V", "CIA - I", "CIA - II", 
-    "CIA - III", "MKC", "ESE"
+    "Model Exam",
+    "Model Practical Exam",
+    "Unit Test - I", "Unit Test - II", "Unit Test - III", "Unit Test - IV", "Unit Test - V",
+    "CIA - I", "CIA - II", "CIA - III",
+    "MKC", "ESE"
   ];
+  
+  const dynamicExamNameOptions = Array.from(new Set([
+    ...examNameOptions,
+    ...classes.map(c => c.examName)
+  ])).filter(Boolean);
 
   const cards = [
     { name: "Admin Setup", path: "/admin", icon: <Settings size={28} />, desc: "Configure classes, manage student rosters, and upload excel data.", color: "#4f46e5" },
@@ -219,7 +226,7 @@ export default function Dashboard() {
               onChange={(e) => setExamName(e.target.value)}
             >
               <option value="">Latest Exam</option>
-              {examNameOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              {dynamicExamNameOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
         </div>

@@ -18,10 +18,17 @@ export default function DepartmentAnalysis() {
   };
 
   const examNameOptions = [
-    "Model Exam", "Model Practical Exam", "Unit Test - I", "Unit Test - II", 
-    "Unit Test - III", "Unit Test - IV", "Unit Test - V", "CIA - I", "CIA - II", 
-    "CIA - III", "MKC", "ESE"
+    "Model Exam",
+    "Model Practical Exam",
+    "Unit Test - I", "Unit Test - II", "Unit Test - III", "Unit Test - IV", "Unit Test - V",
+    "CIA - I", "CIA - II", "CIA - III",
+    "MKC", "ESE"
   ];
+  
+  const dynamicExamNameOptions = Array.from(new Set([
+    ...examNameOptions,
+    ...classes.map(c => c.examName)
+  ])).filter(Boolean);
 
   const getSemOptionsForYear = (year) => {
     switch (year) {
@@ -186,7 +193,7 @@ export default function DepartmentAnalysis() {
           <div className="input-group" style={{ flex: 1, minWidth: "150px" }}>
             <label className="input-label">Evaluation Module</label>
             <select className="text-input" name="exam" value={filters.exam} onChange={handleFilterChange}>
-              {examNameOptions.map(opt => (
+              {dynamicExamNameOptions.map(opt => (
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>

@@ -94,6 +94,11 @@ export default function MarkEntry() {
     "CIA - I", "CIA - II", "CIA - III",
     "MKC", "ESE"
   ];
+  
+  const dynamicExamNameOptions = Array.from(new Set([
+    ...examNameOptions,
+    ...classes.map(c => c.examName)
+  ])).filter(Boolean);
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "loading" });
@@ -1022,7 +1027,7 @@ export default function MarkEntry() {
             onChange={e => handleFilterChange('exam', e.target.value)} 
             className="select-input"
           >
-            {examNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
+            {dynamicExamNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
           </select>
         </div>
       </div>

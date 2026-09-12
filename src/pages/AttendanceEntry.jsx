@@ -52,11 +52,17 @@ export default function AttendanceEntry() {
   const [classData, setClassData] = useState(null);
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
   const examNameOptions = [
-    "Model Exam", "Model Practical Exam",
+    "Model Exam",
+    "Model Practical Exam",
     "Unit Test - I", "Unit Test - II", "Unit Test - III", "Unit Test - IV", "Unit Test - V",
     "CIA - I", "CIA - II", "CIA - III",
     "MKC", "ESE"
   ];
+  
+  const dynamicExamNameOptions = Array.from(new Set([
+    ...examNameOptions,
+    ...classes.map(c => c.examName)
+  ])).filter(Boolean);
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "loading" });
@@ -255,7 +261,7 @@ export default function AttendanceEntry() {
           { label: "Year", field: "year", opts: ["I", "II", "III", "IV"] },
           { label: "Semester", field: "semester", opts: getSemOptionsForYear(filters.year) },
           { label: "Section", field: "section", opts: ["A", "B", "C", "D", "E"] },
-          { label: "Exam Module", field: "exam", opts: examNameOptions }
+          { label: "Exam Module", field: "exam", opts: dynamicExamNameOptions }
         ].map(({ label, field, opts }) => (
           <div key={field}>
             <label style={{ display: "block", fontSize: "11px", fontWeight: "bold", color: "#38bdf8", marginBottom: "6px", textTransform: "uppercase" }}>{label}</label>

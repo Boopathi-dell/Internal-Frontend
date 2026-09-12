@@ -29,6 +29,11 @@ export default function RankList() {
     "CIA - I", "CIA - II", "CIA - III",
     "MKC", "ESE"
   ];
+  
+  const dynamicExamNameOptions = Array.from(new Set([
+    ...examNameOptions,
+    ...classes.map(c => c.examName)
+  ])).filter(Boolean);
 
   const getSemOptionsForYear = (year) => {
     switch (year) {
@@ -191,7 +196,7 @@ export default function RankList() {
       <div>
         <label style={{ display: "block", fontSize: "12px", fontWeight: "bold" }}>Evaluation Module</label>
         <select value={filters.exam} onChange={e => handleFilterChange('exam', e.target.value)} style={{ padding: "8px" }}>
-          {examNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
+          {dynamicExamNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
         </select>
       </div>
     </div>
