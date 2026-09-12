@@ -1520,7 +1520,9 @@ export default function AdminPanel() {
     try {
       const payload = { approved };
       if (adminTabs !== undefined) payload.adminTabs = adminTabs;
-      await API.post(`/api/auth/users/${userId}/approve`, payload);
+      await API.post(`/api/auth/users/${userId}/approve`, payload, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      });
       loadUsers();
       if (editingTabsUserId === userId) setEditingTabsUserId(null);
     } catch (err) { alert("Failed to update user"); }
@@ -1529,7 +1531,9 @@ export default function AdminPanel() {
   const handleDeleteUser = async (userId) => {
     if (!window.confirm("Delete this user?")) return;
     try {
-      await API.delete(`/api/auth/users/${userId}`);
+      await API.delete(`/api/auth/users/${userId}`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      });
       loadUsers();
     } catch (err) { alert("Failed to delete user"); }
   };
