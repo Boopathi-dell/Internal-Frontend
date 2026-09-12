@@ -178,6 +178,7 @@ export default function DailyAttendance() {
           <label className="input-label">Section</label>
           <select name="section" value={filters.section} onChange={handleFilterChange} className="select-input">
             <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+            <option value="D">D</option><option value="E">E</option><option value="F">F</option>
           </select>
         </div>
         <div className="input-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
@@ -269,10 +270,10 @@ export default function DailyAttendance() {
                       <td>{record.name}</td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                          {renderStatusButton(record, idx, "Present", "P", { backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#047857', border: '1px solid rgba(16, 185, 129, 0.3)' })}
-                          {renderStatusButton(record, idx, "Absent", "A", { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#b91c1c', border: '1px solid rgba(239, 68, 68, 0.3)' })}
-                          {renderStatusButton(record, idx, "OD", "OD", { backgroundColor: 'rgba(14, 165, 233, 0.15)', color: '#0369a1', border: '1px solid rgba(14, 165, 233, 0.3)' })}
-                          {renderStatusButton(record, idx, "Leave", "L", { backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#b45309', border: '1px solid rgba(245, 158, 11, 0.3)' })}
+                          {renderStatusButton(record, idx, "Present", "P", { backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #10b981' })}
+                          {renderStatusButton(record, idx, "Absent", "A", { backgroundColor: '#ef4444', color: '#ffffff', border: '1px solid #ef4444' })}
+                          {renderStatusButton(record, idx, "OD", "OD", { backgroundColor: '#0ea5e9', color: '#ffffff', border: '1px solid #0ea5e9' })}
+                          {renderStatusButton(record, idx, "Leave", "L", { backgroundColor: '#f59e0b', color: '#ffffff', border: '1px solid #f59e0b' })}
                         </div>
                       </td>
                     </tr>
