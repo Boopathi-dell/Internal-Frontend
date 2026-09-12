@@ -4784,41 +4784,20 @@ export default function AdminPanel() {
                 borderRadius: "var(--radius-lg)",
                 padding: "2rem",
                 display: "flex",
-                flexWrap: "wrap",
-                gap: "2rem",
-                justifyContent: "space-between",
-                alignItems: "center"
+                flexDirection: "column",
+                gap: "1.5rem"
               }}>
-                <div>
-                  <h3 style={{ margin: "0 0 0.5rem 0", color: "var(--text-main)", fontSize: "1.5rem" }}>
-                    Year Overall Summary
-                  </h3>
-                  <p style={{ margin: 0, color: "var(--text-muted)" }}>
-                    Cumulative statistics for Year {reportYear}, Semester {reportSem}
-                  </p>
-                </div>
-                
-                <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px" }}>Total Strength</div>
-                    <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>{attendanceReportData.total.totalStrength}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <h3 style={{ margin: "0 0 0.5rem 0", color: "var(--text-main)", fontSize: "1.5rem" }}>
+                      Year Overall Summary
+                    </h3>
+                    <p style={{ margin: 0, color: "var(--text-muted)" }}>
+                      Cumulative statistics for Year {reportYear}, Semester {reportSem}
+                    </p>
                   </div>
-                  <div style={{ width: "1px", background: "var(--border-color)", height: "40px", alignSelf: "center" }}></div>
-                  
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px" }}>Total Present</div>
-                    <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "var(--primary)" }}>{attendanceReportData.total.totalPresent}</div>
-                  </div>
-                  <div style={{ width: "1px", background: "var(--border-color)", height: "40px", alignSelf: "center" }}></div>
-                  
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px" }}>Total Absent</div>
-                    <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "var(--danger)" }}>{attendanceReportData.total.totalAbsent}</div>
-                  </div>
-                  <div style={{ width: "1px", background: "var(--border-color)", height: "40px", alignSelf: "center" }}></div>
-                  
-                  <div style={{ textAlign: "center", background: "var(--bg-card)", padding: "10px 20px", borderRadius: "8px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)" }}>
-                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "1px" }}>Overall Percentage</div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "1px" }}>Overall Combined Percentage</div>
                     <div style={{ 
                       fontSize: "2rem", 
                       fontWeight: "bold", 
@@ -4827,6 +4806,54 @@ export default function AdminPanel() {
                       {attendanceReportData.total.percentage}%
                     </div>
                   </div>
+                </div>
+                
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+                  
+                  {/* Total Strength Box */}
+                  <div style={{ background: "var(--bg-card)", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "1px" }}>Total Strength</div>
+                    <div style={{ fontSize: "2.5rem", fontWeight: "bold" }}>{attendanceReportData.total.totalStrength}</div>
+                  </div>
+
+                  {/* Morning Session Box */}
+                  <div style={{ background: "var(--bg-card)", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "1rem", textTransform: "uppercase", letterSpacing: "1px", textAlign: "center", fontWeight: "600" }}>Morning Session</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Present</div>
+                        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "var(--primary)" }}>{attendanceReportData.total.mrg?.totalPresent || 0}</div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Absent</div>
+                        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "var(--danger)" }}>{attendanceReportData.total.mrg?.totalAbsent || 0}</div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Percentage</div>
+                        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: parseFloat(attendanceReportData.total.mrg?.percentage || 0) < 75 ? "var(--danger)" : "#10b981" }}>{attendanceReportData.total.mrg?.percentage || "0.00"}%</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Afternoon Session Box */}
+                  <div style={{ background: "var(--bg-card)", padding: "1.5rem", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginBottom: "1rem", textTransform: "uppercase", letterSpacing: "1px", textAlign: "center", fontWeight: "600" }}>Afternoon Session</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Present</div>
+                        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "var(--primary)" }}>{attendanceReportData.total.aft?.totalPresent || 0}</div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Absent</div>
+                        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: "var(--danger)" }}>{attendanceReportData.total.aft?.totalAbsent || 0}</div>
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Percentage</div>
+                        <div style={{ fontSize: "1.2rem", fontWeight: "bold", color: parseFloat(attendanceReportData.total.aft?.percentage || 0) < 75 ? "var(--danger)" : "#10b981" }}>{attendanceReportData.total.aft?.percentage || "0.00"}%</div>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             </>
