@@ -335,13 +335,27 @@ function App() {
     },
   ];
 
+  // Default pages always visible to all faculty
   const userNavItems = [
     { name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
     { name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
     { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
   ];
 
+  // Extra pages the admin can allocate
+  const ALLOCATABLE_DASHBOARD_PAGES = [
+    { id: "analysis", name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
+    { id: "department-analysis", name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
+    { id: "rank", name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
+    { id: "parent-letters", name: "Parent Letters", path: "/parent-letters", icon: <span style={{fontSize:"18px"}}>📬</span> },
+    { id: "requests", name: "Mark Requests", path: "/requests", icon: <MessageSquareWarning size={20} />, badge: pendingRequestsCount > 0 ? pendingRequestsCount : null },
+  ];
+
   try {
+    const dashboardTabs = JSON.parse(sessionStorage.getItem("dashboardTabs") || "[]");
+    ALLOCATABLE_DASHBOARD_PAGES.forEach(page => {
+      if (dashboardTabs.includes(page.id)) userNavItems.push(page);
+    });
     const adminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
     if (adminTabs.length > 0) {
       userNavItems.push({ name: "Admin Setup", path: "/admin", icon: <Settings size={20} /> });

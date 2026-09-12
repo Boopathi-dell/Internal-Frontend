@@ -24,6 +24,7 @@ export default function AdminPanel() {
 
   const [editingTabsUserId, setEditingTabsUserId] = useState(null);
   const [selectedAdminTabs, setSelectedAdminTabs] = useState([]);
+  const [selectedDashboardTabs, setSelectedDashboardTabs] = useState([]);
 
   const AVAILABLE_ADMIN_TABS = [
     { id: "classes", label: "Class Setup" },
@@ -43,6 +44,14 @@ export default function AdminPanel() {
     { id: "reportsettings", label: "Report Settings" },
     { id: "seating", label: "Seating" },
     { id: "attendance-tracker", label: "Attendance Tracker" }
+  ];
+
+  const AVAILABLE_DASHBOARD_PAGES = [
+    { id: "analysis", label: "Class Analysis" },
+    { id: "department-analysis", label: "Dept. Analysis" },
+    { id: "rank", label: "Rank List" },
+    { id: "parent-letters", label: "Parent Letters" },
+    { id: "requests", label: "Mark Requests" },
   ];
 
   const [classes, setClasses] = useState([]);
@@ -1516,10 +1525,11 @@ export default function AdminPanel() {
     }
   };
 
-  const handleApproveUser = async (userId, approved, adminTabs = undefined) => {
+  const handleApproveUser = async (userId, approved, adminTabs = undefined, dashboardTabs = undefined) => {
     try {
       const payload = { approved };
       if (adminTabs !== undefined) payload.adminTabs = adminTabs;
+      if (dashboardTabs !== undefined) payload.dashboardTabs = dashboardTabs;
       await API.post(`/api/auth/users/${userId}/approve`, payload, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
       });
@@ -3211,16 +3221,20 @@ export default function AdminPanel() {
                         ) : (
                           <button onClick={() => handleApproveUser(u._id, false)} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>Restrict Access</button>
                         )}
-                        <button onClick={() => { setEditingTabsUserId(u._id); setSelectedAdminTabs(u.adminTabs || []); }} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>⚙️ Modules</button>
+                        <button onClick={() => { setEditingTabsUserId(u._id); setSelectedAdminTabs(u.adminTabs || []); setSelectedDashboardTabs(u.dashboardTabs || []); }} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>⚙️ Modules</button>
                         <button onClick={() => handleDeleteUser(u._id)} className="btn btn-danger btn-icon" style={{ padding: "0.4rem", width: "auto", height: "auto" }}>🗑</button>
                       </div>
 
                       {editingTabsUserId === u._id && (
-                        <div style={{ background: "rgba(15, 23, 42, 0.9)", border: "1px solid var(--border-color)", padding: "1rem", borderRadius: "8px", marginTop: "0.5rem", position: "absolute", right: "2rem", zIndex: 10, minWidth: "250px", boxShadow: "0 10px 25px rgba(0,0,0,0.5)" }}>
-                          <div style={{ marginBottom: "0.5rem", fontWeight: "bold", fontSize: "0.85rem", color: "var(--primary)" }}>Allocate Admin Modules</div>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.5rem", maxHeight: "250px", overflowY: "auto", marginBottom: "1rem", paddingRight: "0.5rem" }}>
+                        <div style={{ background: "rgba(15, 23, 42, 0.95)", border: "1px solid var(--border-color)", padding: "1.2rem", borderRadius: "10px", marginTop: "0.5rem", position: "absolute", right: "2rem", zIndex: 10, minWidth: "300px", boxShadow: "0 10px 25px rgba(0,0,0,0.6)" }}>
+                          
+                          {/* Section 1: Admin Panel Tabs */}
+                          <div style={{ marginBottom: "0.75rem", fontWeight: "bold", fontSize: "0.85rem", color: "var(--primary)", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "0.5rem" }}>
+                            🔧 Admin Panel Modules
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", maxHeight: "180px", overflowY: "auto", marginBottom: "1rem", paddingRight: "0.25rem" }}>
                             {AVAILABLE_ADMIN_TABS.map(tab => (
-                              <label key={tab.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", cursor: "pointer", color: "var(--text-main)" }}>
+                              <label key={tab.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", cursor: "pointer", color: "var(--text-main)" }}>
                                 <input 
                                   type="checkbox" 
                                   checked={selectedAdminTabs.includes(tab.id)}
@@ -3233,9 +3247,31 @@ export default function AdminPanel() {
                               </label>
                             ))}
                           </div>
+
+                          {/* Section 2: Dashboard Pages */}
+                          <div style={{ marginBottom: "0.75rem", fontWeight: "bold", fontSize: "0.85rem", color: "#10b981", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "0.5rem" }}>
+                            📊 Result Hub Pages
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: "0.5rem" }}>Default: Daily Attendance, Attendance Entry, Mark Statement (always visible)</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem", marginBottom: "1rem" }}>
+                            {AVAILABLE_DASHBOARD_PAGES.map(page => (
+                              <label key={page.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.78rem", cursor: "pointer", color: "var(--text-main)" }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedDashboardTabs.includes(page.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setSelectedDashboardTabs([...selectedDashboardTabs, page.id]);
+                                    else setSelectedDashboardTabs(selectedDashboardTabs.filter(id => id !== page.id));
+                                  }}
+                                />
+                                {page.label}
+                              </label>
+                            ))}
+                          </div>
+
                           <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                             <button onClick={() => setEditingTabsUserId(null)} className="btn btn-secondary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>Cancel</button>
-                            <button onClick={() => handleApproveUser(u._id, u.approved, selectedAdminTabs)} className="btn btn-primary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>Save</button>
+                            <button onClick={() => handleApproveUser(u._id, u.approved, selectedAdminTabs, selectedDashboardTabs)} className="btn btn-primary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>Save</button>
                           </div>
                         </div>
                       )}
