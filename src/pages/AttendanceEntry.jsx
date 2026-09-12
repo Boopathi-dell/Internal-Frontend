@@ -156,7 +156,7 @@ export default function AttendanceEntry() {
     setIsSyncing(true);
     setToast({ show: true, message: "Syncing daily attendance...", type: "loading" });
     try {
-      const cohortName = `${classData.programme}-${classData.department} - ${classData.year}/${classData.semester}/${classData.section}`;
+      const cohortName = `${classData.programme}-${classData.department} - ${classData.yearSemSec}`;
       const res = await API.get("/api/attendance/summary", {
         params: { cohortName, startDate: syncStartDate, endDate: syncEndDate }
       });
