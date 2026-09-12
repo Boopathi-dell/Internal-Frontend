@@ -9,8 +9,7 @@ export default function DailyAttendance() {
     year: "I",
     semester: "I",
     section: "A",
-    date: new Date().toISOString().slice(0, 10),
-    session: "Morning"
+    date: new Date().toISOString().slice(0, 10)
   });
   
   const [attendanceData, setAttendanceData] = useState(null);
@@ -48,7 +47,7 @@ export default function DailyAttendance() {
     try {
       const cohortName = getCohortName();
       const res = await API.get("/api/attendance", {
-        params: { cohortName, date: filters.date, session: filters.session }
+        params: { cohortName, date: filters.date }
       });
       setAttendanceData(res.data);
     } catch (err) {
@@ -62,10 +61,10 @@ export default function DailyAttendance() {
     setLoading(false);
   };
 
-  const handleStatusChange = (index, newStatus) => {
+  const handleStatusChange = (index, newStatus, sessionType) => {
     if (!attendanceData || attendanceData.isHoliday) return;
     const newRecords = [...attendanceData.records];
-    newRecords[index].status = newStatus;
+    newRecords[index][sessionType] = newStatus;
     setAttendanceData({ ...attendanceData, records: newRecords });
   };
 
@@ -91,7 +90,6 @@ export default function DailyAttendance() {
       await API.post("/api/attendance", {
         cohortName,
         date: filters.date,
-        session: filters.session,
         isHoliday: attendanceData.isHoliday,
         holidayReason: attendanceData.holidayReason,
         records: attendanceData.records
@@ -112,11 +110,11 @@ export default function DailyAttendance() {
     setTimeout(() => setToast({ show: false, message: "", type: "success" }), 3000);
   };
 
-  const renderStatusButton = (record, index, type, label, activeClass) => {
-    const isSelected = record.status === type;
+  const renderStatusButton = (record, index, type, label, sessionType, activeClass) => {
+    const isSelected = record[sessionType] === type;
     return (
       <button
-        onClick={() => handleStatusChange(index, type)}
+        onClick={() => handleStatusChange(index, type, sessionType)}
         className="btn"
         style={{
           padding: '4px 12px',
@@ -194,13 +192,6 @@ export default function DailyAttendance() {
           <label className="input-label">Date</label>
           <input type="date" name="date" value={filters.date} onChange={handleFilterChange} className="text-input" />
         </div>
-        <div className="input-group" style={{ flex: '1 1 150px', marginBottom: 0 }}>
-          <label className="input-label">Session</label>
-          <select name="session" value={filters.session} onChange={handleFilterChange} className="select-input">
-            <option value="Morning">Morning</option>
-            <option value="Afternoon">Afternoon</option>
-          </select>
-        </div>
         
         <div style={{ display: 'flex', alignItems: 'flex-end', flex: '1 1 200px' }}>
           <button onClick={fetchAttendance} disabled={loading} className="btn btn-primary" style={{ width: '100%', height: '44px' }}>
@@ -218,7 +209,7 @@ export default function DailyAttendance() {
           <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', background: 'var(--bg-main)' }}>
             <div>
               <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: 0 }}>
-                {filters.date} - {filters.session} Session
+                {filters.date}
                 {attendanceData.isNew && <span className="status-badge pending" style={{ marginLeft: '10px' }}>Unsaved</span>}
               </h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '5px' }}>{getCohortName()} • {attendanceData.records.length} Students</p>
@@ -259,7 +250,8 @@ export default function DailyAttendance() {
                     <th style={{ width: '60px' }}>#</th>
                     <th style={{ width: '150px' }}>Reg No</th>
                     <th>Student Name</th>
-                    <th style={{ textAlign: 'right', paddingRight: '2.5rem' }}>Attendance Status</th>
+                    <th style={{ textAlign: 'center' }}>Morning Session</th>
+                    <th style={{ textAlign: 'center' }}>Afternoon Session</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -268,12 +260,20 @@ export default function DailyAttendance() {
                       <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
                       <td style={{ fontWeight: '600' }}>{record.regNo}</td>
                       <td>{record.name}</td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                          {renderStatusButton(record, idx, "Present", "P", { backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #10b981' })}
-                          {renderStatusButton(record, idx, "Absent", "A", { backgroundColor: '#ef4444', color: '#ffffff', border: '1px solid #ef4444' })}
-                          {renderStatusButton(record, idx, "OD", "OD", { backgroundColor: '#0ea5e9', color: '#ffffff', border: '1px solid #0ea5e9' })}
-                          {renderStatusButton(record, idx, "Leave", "L", { backgroundColor: '#f59e0b', color: '#ffffff', border: '1px solid #f59e0b' })}
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
+                          {renderStatusButton(record, idx, "Present", "P", "morningStatus", { backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #10b981' })}
+                          {renderStatusButton(record, idx, "Absent", "A", "morningStatus", { backgroundColor: '#ef4444', color: '#ffffff', border: '1px solid #ef4444' })}
+                          {renderStatusButton(record, idx, "OD", "OD", "morningStatus", { backgroundColor: '#0ea5e9', color: '#ffffff', border: '1px solid #0ea5e9' })}
+                          {renderStatusButton(record, idx, "Leave", "L", "morningStatus", { backgroundColor: '#f59e0b', color: '#ffffff', border: '1px solid #f59e0b' })}
+                        </div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
+                          {renderStatusButton(record, idx, "Present", "P", "afternoonStatus", { backgroundColor: '#10b981', color: '#ffffff', border: '1px solid #10b981' })}
+                          {renderStatusButton(record, idx, "Absent", "A", "afternoonStatus", { backgroundColor: '#ef4444', color: '#ffffff', border: '1px solid #ef4444' })}
+                          {renderStatusButton(record, idx, "OD", "OD", "afternoonStatus", { backgroundColor: '#0ea5e9', color: '#ffffff', border: '1px solid #0ea5e9' })}
+                          {renderStatusButton(record, idx, "Leave", "L", "afternoonStatus", { backgroundColor: '#f59e0b', color: '#ffffff', border: '1px solid #f59e0b' })}
                         </div>
                       </td>
                     </tr>

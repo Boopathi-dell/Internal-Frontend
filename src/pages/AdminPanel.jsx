@@ -148,6 +148,14 @@ export default function AdminPanel() {
   const [selectedPendingStudents, setSelectedPendingStudents] = useState([]);
   const [pendingModalLoading, setPendingModalLoading] = useState(false);
 
+  // Attendance Setup & Missing Attendance States
+  const [workingDays, setWorkingDays] = useState([]);
+  const [workingDaysLoading, setWorkingDaysLoading] = useState(false);
+  const [wdFormData, setWdFormData] = useState({ year: "I", startDate: "", endDate: "" });
+  
+  const [missingAttendance, setMissingAttendance] = useState([]);
+  const [missingLoading, setMissingLoading] = useState(false);
+
   const handleReportCheckboxChange = (option, selectedList, setter) => {
     if (option === "All") {
       setter(selectedList.includes("All") ? [] : ["All"]);
@@ -250,8 +258,41 @@ export default function AdminPanel() {
       loadLetterTemplate();
     } else if (activeTab === "security") {
       loadSecuritySettings();
+    } else if (activeTab === "attendance-setup") {
+      loadWorkingDays();
+    } else if (activeTab === "missing-attendance") {
+      loadMissingAttendance();
     }
   }, [activeTab]);
+
+  const loadWorkingDays = async () => {
+    setWorkingDaysLoading(true);
+    try {
+      const res = await API.get("/api/working-days", { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } });
+      setWorkingDays(res.data);
+    } catch (err) { console.error(err); }
+    setWorkingDaysLoading(false);
+  };
+
+  const loadMissingAttendance = async () => {
+    setMissingLoading(true);
+    try {
+      const res = await API.get("/api/attendance/missing", { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } });
+      setMissingAttendance(res.data);
+    } catch (err) { console.error(err); }
+    setMissingLoading(false);
+  };
+
+  const handleSaveWorkingDays = async (e) => {
+    e.preventDefault();
+    try {
+      await API.post("/api/working-days", wdFormData, { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } });
+      alert("Working days saved successfully!");
+      loadWorkingDays();
+    } catch (err) {
+      alert("Failed to save working days: " + err.message);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === "reportsettings") {
@@ -1951,6 +1992,20 @@ export default function AdminPanel() {
           onClick={() => setActiveTab("seating")}
         >
           🪑 Seating
+        </button>
+        <button 
+          className={`btn ${activeTab === "attendance-setup" ? "btn-primary" : "btn-secondary"}`} 
+          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
+          onClick={() => setActiveTab("attendance-setup")}
+        >
+          📅 Attendance Setup
+        </button>
+        <button 
+          className={`btn ${activeTab === "missing-attendance" ? "btn-primary" : "btn-secondary"}`} 
+          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
+          onClick={() => setActiveTab("missing-attendance")}
+        >
+          🚨 Missing Attendance
         </button>
       </div>
 
@@ -4307,6 +4362,146 @@ export default function AdminPanel() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ATTENDANCE SETUP TAB */}
+      {activeTab === "attendance-setup" && (
+        <div className="admin-grid-2col" style={{ gridTemplateColumns: "1fr 2fr" }}>
+          <div className="glass-card" style={{ padding: "2rem", height: "fit-content" }}>
+            <h2 className="section-title">Configure Working Days</h2>
+            <form onSubmit={handleSaveWorkingDays}>
+              <div className="input-group">
+                <label className="input-label">Year</label>
+                <select 
+                  className="select-input" 
+                  value={wdFormData.year} 
+                  onChange={(e) => setWdFormData({...wdFormData, year: e.target.value})}
+                >
+                  <option value="I">I Year</option>
+                  <option value="II">II Year</option>
+                  <option value="III">III Year</option>
+                  <option value="IV">IV Year</option>
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="input-label">Start Date</label>
+                <input 
+                  type="date" 
+                  className="text-input"
+                  required 
+                  value={wdFormData.startDate} 
+                  onChange={(e) => setWdFormData({...wdFormData, startDate: e.target.value})}
+                />
+              </div>
+              <div className="input-group">
+                <label className="input-label">End Date</label>
+                <input 
+                  type="date" 
+                  className="text-input" 
+                  required
+                  value={wdFormData.endDate} 
+                  onChange={(e) => setWdFormData({...wdFormData, endDate: e.target.value})}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>Save Configuration</button>
+            </form>
+          </div>
+
+          <div className="glass-card" style={{ padding: "2rem" }}>
+            <h2 className="section-title">Current Configurations</h2>
+            {workingDaysLoading ? (
+              <p>Loading...</p>
+            ) : workingDays.length === 0 ? (
+              <p className="empty-state">No configurations found.</p>
+            ) : (
+              <div className="table-container">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Year</th>
+                      <th>Start Date</th>
+                      <th>End Date</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workingDays.map(wd => (
+                      <tr key={wd._id}>
+                        <td style={{ fontWeight: "600" }}>{wd.year} Year</td>
+                        <td>{wd.startDate}</td>
+                        <td>{wd.endDate}</td>
+                        <td>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: "4px 8px", fontSize: "0.85rem" }}
+                            onClick={() => setWdFormData({ year: wd.year, startDate: wd.startDate, endDate: wd.endDate })}
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MISSING ATTENDANCE TAB */}
+      {activeTab === "missing-attendance" && (
+        <div className="glass-card" style={{ padding: "2rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+            <h2 className="section-title" style={{ margin: 0 }}>Missing Attendance Report</h2>
+            <button className="btn btn-primary" onClick={loadMissingAttendance} disabled={missingLoading}>
+              {missingLoading ? "Refreshing..." : "Refresh Report"}
+            </button>
+          </div>
+          
+          <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem" }}>
+            This report shows dates where attendance was NOT marked for configured working days (excluding Sundays).
+          </p>
+
+          {missingLoading ? (
+            <div className="loading-spinner"></div>
+          ) : missingAttendance.length === 0 ? (
+            <div className="empty-state">
+              <EyeOff size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
+              <h3>All caught up!</h3>
+              <p>No missing attendance records found.</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Class (Cohort)</th>
+                    <th>Missing Session</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missingAttendance.map((item, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: "600", color: "var(--danger)" }}>{item.date}</td>
+                      <td>{item.cohortName}</td>
+                      <td>
+                        <span className="status-badge pending" style={{ background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)" }}>
+                          {item.missingSession}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ color: "var(--danger)", fontWeight: "600" }}>Not Submitted</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
