@@ -16,6 +16,9 @@ export default function DailyAttendance() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedStudents, setSelectedStudents] = useState([]);
 
   const getSemOptionsForYear = (year) => {
     switch (year) {
@@ -64,8 +67,48 @@ export default function DailyAttendance() {
   const handleStatusChange = (index, newStatus, sessionType) => {
     if (!attendanceData || attendanceData.isHoliday) return;
     const newRecords = [...attendanceData.records];
-    newRecords[index][sessionType] = newStatus;
+    
+    // index here is the index in the filtered list, we need to find the real index
+    const realIndex = attendanceData.records.findIndex(r => r.regNo === filteredRecords[index].regNo);
+    if (realIndex === -1) return;
+    
+    newRecords[realIndex][sessionType] = newStatus;
     setAttendanceData({ ...attendanceData, records: newRecords });
+  };
+
+  const filteredRecords = attendanceData?.records.filter(r => 
+    r.regNo.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    r.name.toLowerCase().includes(searchQuery.toLowerCase())
+  ) || [];
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedStudents(filteredRecords.map(r => r.regNo));
+    } else {
+      setSelectedStudents([]);
+    }
+  };
+
+  const handleSelectStudent = (regNo) => {
+    if (selectedStudents.includes(regNo)) {
+      setSelectedStudents(selectedStudents.filter(id => id !== regNo));
+    } else {
+      setSelectedStudents([...selectedStudents, regNo]);
+    }
+  };
+
+  const handleBulkMark = (sessionType, status) => {
+    if (!attendanceData || attendanceData.isHoliday) return;
+    const newRecords = [...attendanceData.records];
+    
+    newRecords.forEach((record, idx) => {
+      if (selectedStudents.includes(record.regNo)) {
+        newRecords[idx][sessionType] = status;
+      }
+    });
+    
+    setAttendanceData({ ...attendanceData, records: newRecords });
+    setSelectedStudents([]); // Clear selection after bulk mark
   };
 
   const handleHolidayToggle = (e) => {
@@ -244,9 +287,55 @@ export default function DailyAttendance() {
           {/* Student Grid (Only if not a holiday) */}
           {!attendanceData.isHoliday ? (
             <div className="table-container" style={{ margin: '0', borderRadius: '0' }}>
+              
+              <div style={{ padding: '1rem 1.5rem', background: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+                  <input 
+                    type="text" 
+                    placeholder="Search Roll No or Name..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="text-input"
+                    style={{ maxWidth: '300px' }}
+                  />
+                  {selectedStudents.length > 0 && (
+                    <span style={{ fontWeight: '600', color: 'var(--primary)' }}>
+                      {selectedStudents.length} selected
+                    </span>
+                  )}
+                </div>
+                
+                {selectedStudents.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-card)', padding: '5px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>Morning:</span>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#10b981', color: 'white' }} onClick={() => handleBulkMark('morningStatus', 'Present')}>P</button>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#ef4444', color: 'white' }} onClick={() => handleBulkMark('morningStatus', 'Absent')}>A</button>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#0ea5e9', color: 'white' }} onClick={() => handleBulkMark('morningStatus', 'OD')}>OD</button>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#f59e0b', color: 'white' }} onClick={() => handleBulkMark('morningStatus', 'Leave')}>L</button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-card)', padding: '5px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: '600' }}>Afternoon:</span>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#10b981', color: 'white' }} onClick={() => handleBulkMark('afternoonStatus', 'Present')}>P</button>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#ef4444', color: 'white' }} onClick={() => handleBulkMark('afternoonStatus', 'Absent')}>A</button>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#0ea5e9', color: 'white' }} onClick={() => handleBulkMark('afternoonStatus', 'OD')}>OD</button>
+                      <button className="btn" style={{ padding: '2px 8px', fontSize: '0.8rem', background: '#f59e0b', color: 'white' }} onClick={() => handleBulkMark('afternoonStatus', 'Leave')}>L</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <table className="admin-table" style={{ marginTop: '0', borderSpacing: '0' }}>
                 <thead style={{ background: 'var(--bg-main)', borderBottom: '1px solid var(--border-color)' }}>
                   <tr>
+                    <th style={{ width: '40px', textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        onChange={handleSelectAll} 
+                        checked={filteredRecords.length > 0 && selectedStudents.length === filteredRecords.length}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </th>
                     <th style={{ width: '60px' }}>#</th>
                     <th style={{ width: '150px' }}>Reg No</th>
                     <th>Student Name</th>
@@ -255,8 +344,16 @@ export default function DailyAttendance() {
                   </tr>
                 </thead>
                 <tbody>
-                  {attendanceData.records.map((record, idx) => (
-                    <tr key={record.regNo} style={{ borderBottom: '1px solid var(--border-color)', boxShadow: 'none', background: 'var(--bg-card)' }}>
+                  {filteredRecords.map((record, idx) => (
+                    <tr key={record.regNo} style={{ borderBottom: '1px solid var(--border-color)', boxShadow: 'none', background: selectedStudents.includes(record.regNo) ? 'rgba(99, 102, 241, 0.05)' : 'var(--bg-card)' }}>
+                      <td style={{ textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedStudents.includes(record.regNo)} 
+                          onChange={() => handleSelectStudent(record.regNo)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </td>
                       <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
                       <td style={{ fontWeight: '600' }}>{record.regNo}</td>
                       <td>{record.name}</td>
