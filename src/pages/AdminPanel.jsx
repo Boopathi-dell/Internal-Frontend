@@ -5,7 +5,46 @@ import { Eye, EyeOff } from "lucide-react";
 import SeatingManager from "../components/SeatingManager";
 
 export default function AdminPanel() {
-  const [activeTab, setActiveTab] = useState("classes");
+  const role = sessionStorage.getItem("role");
+  let myAdminTabs = [];
+  try {
+    myAdminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
+  } catch(e) {}
+  
+  const hasAccessTo = (tab) => {
+    if (role === "admin" || role === "printAdmin") return true;
+    return myAdminTabs.includes(tab);
+  };
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (role === "admin" || role === "printAdmin") return "classes";
+    if (myAdminTabs.length > 0) return myAdminTabs[0];
+    return "";
+  });
+
+  const [editingTabsUserId, setEditingTabsUserId] = useState(null);
+  const [selectedAdminTabs, setSelectedAdminTabs] = useState([]);
+
+  const AVAILABLE_ADMIN_TABS = [
+    { id: "classes", label: "Class Setup" },
+    { id: "roster", label: "Roster Upload" },
+    { id: "access", label: "Mark Entry Access" },
+    { id: "reports", label: "Mark Entry Reports" },
+    { id: "users", label: "User Access" },
+    { id: "activity", label: "Activity Logs" },
+    { id: "recycle", label: "Recycle Bin" },
+    { id: "eseList", label: "Uploaded Classes" },
+    { id: "approvals", label: "Result Approvals" },
+    { id: "extensions", label: "Extension Requests" },
+    { id: "advisors", label: "Class Advisors" },
+    { id: "announcements", label: "Notices" },
+    { id: "security", label: "Security" },
+    { id: "lettertemplate", label: "Letter Template" },
+    { id: "reportsettings", label: "Report Settings" },
+    { id: "seating", label: "Seating" },
+    { id: "attendance-tracker", label: "Attendance Tracker" }
+  ];
+
   const [classes, setClasses] = useState([]);
   const [rosters, setRosters] = useState([]);
   const [selectedRostersForDelete, setSelectedRostersForDelete] = useState([]);
@@ -1477,10 +1516,13 @@ export default function AdminPanel() {
     }
   };
 
-  const handleApproveUser = async (userId, approved) => {
+  const handleApproveUser = async (userId, approved, adminTabs = undefined) => {
     try {
-      await API.post(`/api/auth/users/${userId}/approve`, { approved });
+      const payload = { approved };
+      if (adminTabs !== undefined) payload.adminTabs = adminTabs;
+      await API.post(`/api/auth/users/${userId}/approve`, payload);
       loadUsers();
+      if (editingTabsUserId === userId) setEditingTabsUserId(null);
     } catch (err) { alert("Failed to update user"); }
   };
 
@@ -1926,6 +1968,7 @@ export default function AdminPanel() {
         onMouseMove={handleMouseMove}
         style={{ cursor: "grab" }}
       >
+        {hasAccessTo("classes") && (
         <button 
           className={`btn ${activeTab === "classes" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1933,6 +1976,8 @@ export default function AdminPanel() {
         >
           📚 Class Setup
         </button>
+        )}
+        {hasAccessTo("roster") && (
         <button 
           className={`btn ${activeTab === "roster" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1940,6 +1985,8 @@ export default function AdminPanel() {
         >
           👥 Roster Upload
         </button>
+        )}
+        {hasAccessTo("access") && (
         <button 
           className={`btn ${activeTab === "access" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1947,6 +1994,8 @@ export default function AdminPanel() {
         >
           🔑 Mark Entry Access
         </button>
+        )}
+        {hasAccessTo("reports") && (
         <button 
           className={`btn ${activeTab === "reports" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1954,6 +2003,8 @@ export default function AdminPanel() {
         >
           📊 Mark Entry Reports
         </button>
+        )}
+        {hasAccessTo("users") && (
         <button 
           className={`btn ${activeTab === "users" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1961,6 +2012,8 @@ export default function AdminPanel() {
         >
           👥 User Access
         </button>
+        )}
+        {hasAccessTo("activity") && (
         <button 
           className={`btn ${activeTab === "activity" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1968,6 +2021,8 @@ export default function AdminPanel() {
         >
           📊 Activity Logs
         </button>
+        )}
+        {hasAccessTo("recycle") && (
         <button 
           className={`btn ${activeTab === "recycle" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1975,7 +2030,9 @@ export default function AdminPanel() {
         >
           🗑️ Recycle Bin
         </button>
+        )}
 
+        {hasAccessTo("eseList") && (
         <button 
           className={`btn ${activeTab === "eseList" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1983,6 +2040,8 @@ export default function AdminPanel() {
         >
           📋 Uploaded Classes
         </button>
+        )}
+        {hasAccessTo("approvals") && (
         <button 
           className={`btn ${activeTab === "approvals" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1990,6 +2049,8 @@ export default function AdminPanel() {
         >
           ✅ Result Approvals
         </button>
+        )}
+        {hasAccessTo("extensions") && (
         <button 
           className={`btn ${activeTab === "extensions" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -1997,6 +2058,8 @@ export default function AdminPanel() {
         >
           ⏱️ Extension Requests
         </button>
+        )}
+        {hasAccessTo("advisors") && (
         <button 
           className={`btn ${activeTab === "advisors" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -2004,6 +2067,8 @@ export default function AdminPanel() {
         >
           🎓 Class Advisors
         </button>
+        )}
+        {hasAccessTo("announcements") && (
         <button 
           className={`btn ${activeTab === "announcements" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -2011,6 +2076,8 @@ export default function AdminPanel() {
         >
           📢 Announcements
         </button>
+        )}
+        {hasAccessTo("security") && (
         <button 
           className={`btn ${activeTab === "security" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -2018,6 +2085,8 @@ export default function AdminPanel() {
         >
           🔒 Security
         </button>
+        )}
+        {hasAccessTo("lettertemplate") && (
         <button 
           className={`btn ${activeTab === "lettertemplate" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -2025,6 +2094,8 @@ export default function AdminPanel() {
         >
           📝 Letter Template
         </button>
+        )}
+        {hasAccessTo("reportsettings") && (
         <button 
           className={`btn ${activeTab === "reportsettings" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -2032,6 +2103,8 @@ export default function AdminPanel() {
         >
           ⚙️ Report Settings
         </button>
+        )}
+        {hasAccessTo("seating") && (
         <button 
           className={`btn ${activeTab === "seating" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -2039,6 +2112,8 @@ export default function AdminPanel() {
         >
           🪑 Seating
         </button>
+        )}
+        {hasAccessTo("attendance-tracker") && (
         <button 
           className={`btn ${activeTab === "attendance-tracker" ? "btn-primary" : "btn-secondary"}`} 
           style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
@@ -2046,6 +2121,7 @@ export default function AdminPanel() {
         >
           📅 Attendance Tracker
         </button>
+        )}
       </div>
 
       {/* CLASS SETUP TAB */}
@@ -3111,13 +3187,41 @@ export default function AdminPanel() {
                         {u.approved ? "Verified" : "Pending Approval"}
                       </span>
                     </td>
-                    <td style={{ display: "flex", gap: "0.5rem" }}>
-                      {!u.approved ? (
-                        <button onClick={() => handleApproveUser(u._id, true)} className="btn btn-primary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>Grant Access</button>
-                      ) : (
-                        <button onClick={() => handleApproveUser(u._id, false)} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>Restrict Access</button>
+                    <td style={{ display: "flex", gap: "0.5rem", flexDirection: "column" }}>
+                      <div style={{ display: "flex", gap: "0.5rem" }}>
+                        {!u.approved ? (
+                          <button onClick={() => handleApproveUser(u._id, true)} className="btn btn-primary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>Grant Access</button>
+                        ) : (
+                          <button onClick={() => handleApproveUser(u._id, false)} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>Restrict Access</button>
+                        )}
+                        <button onClick={() => { setEditingTabsUserId(u._id); setSelectedAdminTabs(u.adminTabs || []); }} className="btn btn-secondary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.75rem" }}>⚙️ Modules</button>
+                        <button onClick={() => handleDeleteUser(u._id)} className="btn btn-danger btn-icon" style={{ padding: "0.4rem", width: "auto", height: "auto" }}>🗑</button>
+                      </div>
+
+                      {editingTabsUserId === u._id && (
+                        <div style={{ background: "rgba(15, 23, 42, 0.9)", border: "1px solid var(--border-color)", padding: "1rem", borderRadius: "8px", marginTop: "0.5rem", position: "absolute", right: "2rem", zIndex: 10, minWidth: "250px", boxShadow: "0 10px 25px rgba(0,0,0,0.5)" }}>
+                          <div style={{ marginBottom: "0.5rem", fontWeight: "bold", fontSize: "0.85rem", color: "var(--primary)" }}>Allocate Admin Modules</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "0.5rem", maxHeight: "250px", overflowY: "auto", marginBottom: "1rem", paddingRight: "0.5rem" }}>
+                            {AVAILABLE_ADMIN_TABS.map(tab => (
+                              <label key={tab.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", cursor: "pointer", color: "var(--text-main)" }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedAdminTabs.includes(tab.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setSelectedAdminTabs([...selectedAdminTabs, tab.id]);
+                                    else setSelectedAdminTabs(selectedAdminTabs.filter(id => id !== tab.id));
+                                  }}
+                                />
+                                {tab.label}
+                              </label>
+                            ))}
+                          </div>
+                          <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                            <button onClick={() => setEditingTabsUserId(null)} className="btn btn-secondary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>Cancel</button>
+                            <button onClick={() => handleApproveUser(u._id, u.approved, selectedAdminTabs)} className="btn btn-primary" style={{ padding: "0.3rem 0.6rem", fontSize: "0.75rem" }}>Save</button>
+                          </div>
+                        </div>
                       )}
-                      <button onClick={() => handleDeleteUser(u._id)} className="btn btn-danger btn-icon">🗑</button>
                     </td>
                   </tr>
                 ))}

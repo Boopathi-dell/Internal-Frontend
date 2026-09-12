@@ -19,6 +19,7 @@ export default function UserLogin({ onLogin, onSwitch }) {
       sessionStorage.setItem("role", "user");
       sessionStorage.setItem("userName", res.data.name);
       sessionStorage.setItem("userId", res.data.userId);
+      sessionStorage.setItem("adminTabs", JSON.stringify(res.data.adminTabs || []));
       onLogin("user");
     } catch (err) {
       setError(err.response?.data?.error || "Faculty credentials rejected");

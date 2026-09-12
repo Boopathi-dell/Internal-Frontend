@@ -341,6 +341,13 @@ function App() {
     { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
   ];
 
+  try {
+    const adminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
+    if (adminTabs.length > 0) {
+      userNavItems.push({ name: "Admin Setup", path: "/admin", icon: <Settings size={20} /> });
+    }
+  } catch(e) {}
+
   const studentNavItems = [
     { name: "My Results", path: "/", icon: <Trophy size={20} /> },
     { name: "Campus Notices", path: "/notices", icon: <Bell size={20} /> },
