@@ -1579,6 +1579,19 @@ export default function AdminPanel() {
     setSecurityLoading(false);
   };
 
+  const handleRevokeOthers = async () => {
+    if (!window.confirm("Are you sure you want to log out all other active sessions? They will be immediately disconnected.")) return;
+    try {
+      const res = await API.post("/api/auth/admin/revoke-others", {}, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+      });
+      sessionStorage.setItem("token", res.data.token);
+      alert(res.data.message);
+    } catch (err) {
+      alert("Failed to revoke other sessions: " + (err.response?.data?.error || err.message));
+    }
+  };
+
   const loadLetterTemplate = async () => {
     try {
       const res = await API.get("/api/letter-template");
@@ -4039,6 +4052,16 @@ export default function AdminPanel() {
               {securityLoading ? "Saving..." : "Save Security Settings"}
             </button>
           </form>
+
+          <div style={{ marginTop: "3rem", paddingTop: "2rem", borderTop: "1px dashed rgba(239, 68, 68, 0.3)" }}>
+            <h3 style={{ color: "var(--danger)", fontSize: "1.2rem", marginBottom: "0.5rem" }}>⚠️ Danger Zone</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "1rem" }}>
+              Clicking this button will instantly revoke all active administrative sessions across all other devices. Your current session will remain active.
+            </p>
+            <button onClick={handleRevokeOthers} className="btn" style={{ background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)", border: "1px solid var(--danger)", padding: "0.8rem 1.5rem", width: "100%", justifyContent: "center" }}>
+              🔒 Logout Every Other System
+            </button>
+          </div>
         </div>
       )}
       {/* LETTER TEMPLATE TAB */}
