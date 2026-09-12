@@ -11,6 +11,12 @@ export default function AdminPanel() {
   const [selectedRostersForDelete, setSelectedRostersForDelete] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [showAllClassesDropdown, setShowAllClassesDropdown] = useState(false);
+  
+  const [promoteSourceCohort, setPromoteSourceCohort] = useState("");
+  const [promoteTargetYear, setPromoteTargetYear] = useState("II");
+  const [promoteTargetSemester, setPromoteTargetSemester] = useState("III");
+  const [isPromoting, setIsPromoting] = useState(false);
+
   const [formData, setFormData] = useState({
     className: "",
     passMark: "25",
@@ -1433,9 +1439,28 @@ export default function AdminPanel() {
     }
   };
 
+  const handlePromoteRoster = async () => {
+    if (!promoteSourceCohort) return alert("Please select a source class to promote.");
+    if (!promoteTargetYear || !promoteTargetSemester) return alert("Please select target year and semester.");
+    
+    if (!window.confirm(`Are you sure you want to promote ${promoteSourceCohort} to ${promoteTargetYear} Year, ${promoteTargetSemester} Semester?`)) return;
 
-
-  const handleDeleteClass = async () => {
+    setIsPromoting(true);
+    try {
+      await API.post("/api/rosters/promote", {
+        sourceCohortName: promoteSourceCohort,
+        targetYear: promoteTargetYear,
+        targetSemester: promoteTargetSemester
+      });
+      alert("Class successfully promoted!");
+      loadRosters();
+      setPromoteSourceCohort("");
+    } catch (err) {
+      alert("Failed to promote class: " + (err.response?.data?.error || err.message));
+    } finally {
+      setIsPromoting(false);
+    }
+  };  const handleDeleteClass = async () => {
     if (!selectedClassId) return alert("Select a class to delete");
     if (!window.confirm("Are you sure?")) return;
     try {
@@ -2504,6 +2529,65 @@ export default function AdminPanel() {
                 </table>
               </div>
             )}
+          </div>
+
+          {/* ── BATCH PROMOTION TOOL ── */}
+          <div style={{ marginTop: "3rem", borderTop: "1px solid var(--border-color)", paddingTop: "2rem" }}>
+            <h3 style={{ marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              🎓 Promote Class (Batch Migration)
+            </h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
+              Easily migrate students from an older year/semester to a new one without re-uploading the Excel sheet.
+            </p>
+
+            <div className="input-row-3col" style={{ marginBottom: "1.5rem" }}>
+              <div className="input-group">
+                <label className="input-label" style={{ fontWeight: "600", color: "var(--primary)" }}>1. Select Class to Promote</label>
+                <select
+                  className="select-input"
+                  value={promoteSourceCohort}
+                  onChange={(e) => setPromoteSourceCohort(e.target.value)}
+                >
+                  <option value="">-- Select Existing Class --</option>
+                  {rosters.map(r => (
+                    <option key={r.cohortName} value={r.cohortName}>{r.cohortName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="input-label">2. Target Year</label>
+                <select 
+                  className="select-input"
+                  value={promoteTargetYear}
+                  onChange={(e) => {
+                    const newYear = e.target.value;
+                    setPromoteTargetYear(newYear);
+                    setPromoteTargetSemester(getSemOptionsForYear(newYear)[0]);
+                  }}
+                >
+                  {["I","II","III","IV"].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div className="input-group">
+                <label className="input-label">3. Target Semester</label>
+                <select 
+                  className="select-input"
+                  value={promoteTargetSemester}
+                  onChange={(e) => setPromoteTargetSemester(e.target.value)}
+                >
+                  {getSemOptionsForYear(promoteTargetYear).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button 
+              className="btn btn-primary" 
+              style={{ width: "100%", padding: "1rem", fontSize: "1.1rem" }}
+              onClick={handlePromoteRoster}
+              disabled={isPromoting}
+            >
+              {isPromoting ? "Promoting Class..." : "Migrate / Promote Students"}
+            </button>
           </div>
         </div>
       )}
