@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState([]);
   const [examName, setExamName] = useState("CIA - III");
   const [loadingStats, setLoadingStats] = useState(false);
+  const [classes, setClasses] = useState([]);
 
   const examNameOptions = [
     "Model Exam",
@@ -31,6 +32,18 @@ export default function Dashboard() {
   useEffect(() => {
     fetchQuickStats();
   }, [examName]);
+
+  useEffect(() => {
+    const loadClasses = async () => {
+      try {
+        const res = await API.get("/api/classes");
+        setClasses(res.data);
+      } catch (err) {
+        console.error("Error loading classes:", err);
+      }
+    };
+    loadClasses();
+  }, []);
 
   const fetchQuickStats = async () => {
     setLoadingStats(true);

@@ -624,7 +624,7 @@ export default function AdminPanel() {
         const ws = generateClassWorksheet(classObj);
 
         let sheetName = `${classObj.department}-${classObj.yearSemSec}-${classObj.examName}`
-          .replace(/[\/\s:]/g, "-")
+          .replace(/[/\s:]/g, "-")
           .replace(/-+/g, "-");
         
         if (sheetName.startsWith("-")) sheetName = sheetName.substring(1);
@@ -666,7 +666,7 @@ export default function AdminPanel() {
         const ws = generateClassWorksheet(classObj);
 
         let sheetName = `${classObj.department}-${classObj.yearSemSec}-${classObj.examName}`
-          .replace(/[\/\s:]/g, "-")
+          .replace(/[/\s:]/g, "-")
           .replace(/-+/g, "-");
         
         if (sheetName.startsWith("-")) sheetName = sheetName.substring(1);

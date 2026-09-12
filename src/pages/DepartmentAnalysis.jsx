@@ -9,6 +9,7 @@ export default function DepartmentAnalysis() {
   const [fetched, setFetched] = useState(false);
   const [focusedSubjectIndices, setFocusedSubjectIndices] = useState([]);
   const [focusDropdownOpen, setFocusDropdownOpen] = useState(false);
+  const [classes, setClasses] = useState([]);
 
   const toggleSubjectFocus = (idx) => {
     setFocusedSubjectIndices(prev => {
@@ -16,6 +17,18 @@ export default function DepartmentAnalysis() {
       return [...prev, idx];
     });
   };
+
+  useEffect(() => {
+    const loadClasses = async () => {
+      try {
+        const res = await API.get("/api/classes");
+        setClasses(res.data);
+      } catch (err) {
+        console.error("Error loading classes:", err);
+      }
+    };
+    loadClasses();
+  }, []);
 
   const examNameOptions = [
     "Model Exam",
