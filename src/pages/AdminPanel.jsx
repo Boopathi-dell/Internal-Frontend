@@ -29,6 +29,7 @@ export default function AdminPanel() {
     editingEndTime: "",
     eseGradingSystem: "System 2"
   });
+  const [showCustomExamInput, setShowCustomExamInput] = useState(false);
   const [courseDetails, setCourseDetails] = useState([]);
   const [targetPassPercentage, setTargetPassPercentage] = useState("85");
   const [students, setStudents] = useState([]);
@@ -2028,18 +2029,47 @@ export default function AdminPanel() {
             <h3 style={{ margin: "2rem 0 1.5rem", paddingBottom: "0.75rem", borderBottom: "1px solid var(--border-color)" }}>Exam Parameters</h3>
             <div className="input-group">
               <label className="input-label">Evaluation Type / Exam Name</label>
-              <input
-                list="examNameList"
-                value={formData.examName}
-                onChange={e => checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, e.target.value, classes)}
-                className="select-input"
-                placeholder="Select or type exam name"
-              />
-              <datalist id="examNameList">
-                {dynamicExamNameOptions.map(opt => (
-                  <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>
-                ))}
-              </datalist>
+              {!showCustomExamInput ? (
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <select 
+                    value={formData.examName} 
+                    onChange={e => {
+                      if (e.target.value === "CREATE_CUSTOM") {
+                        setShowCustomExamInput(true);
+                        setFormData({ ...formData, examName: "" });
+                      } else {
+                        checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, e.target.value, classes);
+                      }
+                    }} 
+                    className="select-input"
+                    style={{ flex: 1 }}
+                  >
+                    {dynamicExamNameOptions.map(opt => (
+                      <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>
+                    ))}
+                    <option value="CREATE_CUSTOM" style={{ fontWeight: "bold", background: "#f0fdf4", color: "#166534" }}>+ Create Custom Exam...</option>
+                  </select>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <input
+                    type="text"
+                    value={formData.examName}
+                    onChange={e => setFormData({ ...formData, examName: e.target.value })}
+                    className="text-input"
+                    placeholder="Enter Custom Exam Name (e.g. Seminar 1)"
+                    style={{ flex: 1 }}
+                    autoFocus
+                  />
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setShowCustomExamInput(false)}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    Back to List
+                  </button>
+                </div>
+              )}
             </div>
             
             {formData.examName === "ESE" && (
