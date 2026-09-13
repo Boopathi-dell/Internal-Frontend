@@ -1,15 +1,14 @@
 import { useState } from "react";
 import API from "../api";
-import * as XLSX from "xlsx";
 
-export default function ConsolidatedAttendanceReport() {
+export default function RegularGridReport() {
   const [filters, setFilters] = useState({
     programme: "B.E",
     department: "CSE",
     year: "II",
     semester: "III",
     section: "C",
-    batch: "2025-29",
+    batch: "2025-2029",
     fromDate: new Date().toISOString().slice(0, 10),
     toDate: new Date().toISOString().slice(0, 10),
   });
@@ -50,7 +49,7 @@ export default function ConsolidatedAttendanceReport() {
 
     try {
       const cohortName = getCohortName();
-      const res = await API.get("/api/attendance/summary", {
+      const res = await API.get("/api/attendance/grid", {
         params: {
           cohortName,
           startDate: filters.fromDate,
@@ -58,7 +57,7 @@ export default function ConsolidatedAttendanceReport() {
         }
       });
 
-      if (res.data.summary && res.data.summary.length > 0) {
+      if (res.data.grid && res.data.grid.length > 0) {
         setReportData(res.data);
       } else {
         setError("No attendance records found for the selected period.");
@@ -74,64 +73,27 @@ export default function ConsolidatedAttendanceReport() {
     window.print();
   };
 
-  const handleExportExcel = () => {
-    if (!reportData) return;
-    
-    const wsData = [];
-    
-    wsData.push(["MUTHAYAMMAL ENGINEERING COLLEGE (Autonomous)"]);
-    wsData.push(["Rasipuram - 637 408, Namakkal Dist., Tamil Nadu, India."]);
-    wsData.push([]);
-    wsData.push([`DEPARTMENT OF ${filters.department === "CSE" ? "COMPUTER SCIENCE AND ENGINEERING" : filters.department}`]);
-    wsData.push([`Consolidated Attendance details for UG ${semesterTypeStr}`]);
-    wsData.push([`(Period - ${formatDate(filters.fromDate)} - ${formatDate(filters.toDate)})`]);
-    wsData.push([]);
-    
-    wsData.push([`Branch: ${filters.programme}-${filters.department}`]);
-    wsData.push([`${filters.year} / ${filters.semester} / ${filters.department} - ${filters.section}`]);
-    wsData.push([`Total No. of Working Days: ${totalWorkingDays}`, "", `Batch : ${filters.batch}`]);
-    wsData.push([]);
-    
-    wsData.push(["S.No", "Roll.no", "Name of the Student", "No of Days Present", "% of Attendance"]);
-    
-    reportData.summary.forEach((student, index) => {
-      const daysPresent = (student.present + student.od) / 2;
-      wsData.push([
-        index + 1,
-        student.regNo,
-        student.name,
-        daysPresent,
-        student.percentage
-      ]);
-    });
-    
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    
-    ws['!cols'] = [
-      { wch: 5 },
-      { wch: 15 },
-      { wch: 40 },
-      { wch: 20 },
-      { wch: 15 }
-    ];
-    
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Attendance Report");
-    
-    XLSX.writeFile(wb, `Attendance_Report_${filters.year}_${filters.section}.xlsx`);
-  };
-
   const isOddSemester = ["I", "III", "V", "VII"].includes(filters.semester);
-  const semesterTypeStr = isOddSemester ? "odd semester" : "even semester";
+  const semesterTypeStr = isOddSemester ? "ODD SEM" : "EVEN SEM";
   
-  // Format date to DD.MM.YYYY
-  const formatDate = (dateStr) => {
+  // Format YYYY-MM-DD to D/M
+  const formatShortDate = (dateStr) => {
     if (!dateStr) return "";
     const [y, m, d] = dateStr.split("-");
-    return `${d}.${m}.${y}`;
+    return `${parseInt(d)}/${parseInt(m)}`;
   };
-
-  const totalWorkingDays = reportData ? reportData.totalWorkingSessions / 2 : 0;
+  
+  // 2026-27 style academic year based on fromDate
+  const getAcademicYear = () => {
+    if (!filters.fromDate) return "";
+    const year = parseInt(filters.fromDate.split("-")[0]);
+    const month = parseInt(filters.fromDate.split("-")[1]);
+    if (month >= 6) { // Assuming June onwards is new academic year
+      return `${year}-${(year+1).toString().slice(2)}`;
+    } else {
+      return `${year-1}-${year.toString().slice(2)}`;
+    }
+  };
 
   return (
     <div className="consolidated-report-container">
@@ -193,36 +155,30 @@ export default function ConsolidatedAttendanceReport() {
             justify-content: space-between;
             margin-bottom: 5px;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 12px;
           }
           
-          .center-info {
-            text-align: center;
-            font-weight: bold;
-            font-size: 16px;
-            margin-bottom: 15px;
-          }
-          
-          table.report-table {
+          table.grid-report-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 14px;
+            font-size: 11px; /* Smaller font to fit grid */
           }
           
-          table.report-table th, table.report-table td {
+          table.grid-report-table th, table.grid-report-table td {
             border: 1px solid black;
-            padding: 8px 4px;
+            padding: 4px 2px;
             text-align: center;
           }
           
-          table.report-table th {
+          table.grid-report-table th {
             font-weight: bold;
             vertical-align: middle;
           }
           
-          table.report-table td:nth-child(3) {
+          table.grid-report-table td:nth-child(3) {
             text-align: left;
-            padding-left: 8px;
+            padding-left: 4px;
+            white-space: nowrap;
           }
         }
         
@@ -238,7 +194,7 @@ export default function ConsolidatedAttendanceReport() {
       `}</style>
 
       <div className="glass-card no-print" style={{ padding: "2rem" }}>
-        <h2 className="section-title">Consolidated Attendance Report</h2>
+        <h2 className="section-title">Regular Grid Report</h2>
         <form onSubmit={handleGenerateReport} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1.5rem" }}>
           
           <div className="input-group">
@@ -299,7 +255,7 @@ export default function ConsolidatedAttendanceReport() {
               name="batch" 
               value={filters.batch} 
               onChange={handleFilterChange} 
-              placeholder="e.g. 2025-29"
+              placeholder="e.g. 2025-2029"
               required
             />
           </div>
@@ -319,14 +275,9 @@ export default function ConsolidatedAttendanceReport() {
               {loading ? "Generating..." : "Generate Report"}
             </button>
             {reportData && (
-              <>
-                <button type="button" className="btn btn-secondary" onClick={handlePrint} style={{ marginLeft: "1rem" }}>
-                  Print Report
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={handleExportExcel} style={{ marginLeft: "1rem", background: "var(--success)", borderColor: "var(--success)", color: "white" }}>
-                  Export Excel
-                </button>
-              </>
+              <button type="button" className="btn btn-secondary" onClick={handlePrint} style={{ marginLeft: "1rem" }}>
+                Print Report
+              </button>
             )}
           </div>
         </form>
@@ -336,7 +287,7 @@ export default function ConsolidatedAttendanceReport() {
 
       {/* Render the printable report if data exists */}
       {reportData && (
-        <div className="report-preview no-print" style={{ display: 'none' /* We only want to show this when printing actually, wait, users probably want to preview it! Let's show it in standard view too */ }}>
+        <div className="report-preview no-print" style={{ display: 'none' }}>
           <p style={{ textAlign: "center", color: "var(--text-muted)", marginBottom: "10px" }}>
             Click "Print Report" to save as PDF or print this report.
           </p>
@@ -344,59 +295,45 @@ export default function ConsolidatedAttendanceReport() {
       )}
       
       {reportData && (
-        <div className="print-area" style={{ display: 'block' }}> {/* Will be hidden by default using external css, but print media unhides */}
+        <div className="print-area" style={{ display: 'block' }}>
           {/* Header matching the college format */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "10px", borderBottom: "1px solid black", paddingBottom: "10px" }}>
-            <div style={{ textAlign: "center" }}>
-              <h1 style={{ fontSize: "22px", margin: "0", fontWeight: "bold", fontFamily: "Arial, sans-serif" }}>MUTHAYAMMAL ENGINEERING COLLEGE</h1>
-              <h4 style={{ fontSize: "14px", margin: "2px 0", fontWeight: "normal" }}>(Autonomous)</h4>
-              <h4 style={{ fontSize: "12px", margin: "0", fontWeight: "normal" }}>Rasipuram - 637 408, Namakkal Dist., Tamil Nadu, India.</h4>
-            </div>
-          </div>
-          
           <div className="report-header">
+            <h2 style={{ fontSize: "18px" }}>MUTHAYAMMAL ENGINEERING COLLEGE, RASIPURAM - 637 408</h2>
             <h3 style={{ textTransform: "uppercase" }}>DEPARTMENT OF {filters.department === "CSE" ? "COMPUTER SCIENCE AND ENGINEERING" : filters.department}</h3>
-            <h4>Consolidated Attendance details for UG {semesterTypeStr}</h4>
-            <h4>(Period – {formatDate(filters.fromDate)} - {formatDate(filters.toDate)})</h4>
+            <h4>Academic Year - {getAcademicYear()} ({semesterTypeStr})</h4>
           </div>
           
           <div className="meta-info">
-            <span>Branch:{filters.programme}-{filters.department}</span>
-          </div>
-          
-          <div className="center-info">
-            {filters.year} / {filters.semester} / {filters.department} - {filters.section}
-          </div>
-          
-          <div className="meta-info">
-            <span>Total No. of Working Days: {totalWorkingDays}</span>
+            <span>Branch: {filters.programme}-{filters.year}-{filters.department}-{filters.section}</span>
             <span>Batch : {filters.batch}</span>
           </div>
           
-          <table className="report-table">
+          <table className="grid-report-table">
             <thead>
               <tr>
-                <th style={{ width: "5%" }}>*</th>
-                <th style={{ width: "15%" }}>Roll.no</th>
-                <th style={{ width: "50%" }}>Name of the Student</th>
-                <th style={{ width: "15%" }}>No of<br/>Days<br/>Present</th>
-                <th style={{ width: "15%" }}>% of<br/>Attendance</th>
+                <th style={{ width: "3%" }}>S.No</th>
+                <th style={{ width: "10%" }}>Reg.No</th>
+                <th style={{ width: "25%" }}>Name of the Student</th>
+                {reportData.dates.map(date => (
+                  <th key={date} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", padding: "10px 2px", height: "80px" }}>
+                    {formatShortDate(date)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {reportData.summary.map((student, index) => {
-                const daysPresent = (student.present + student.od) / 2;
-                
-                return (
-                  <tr key={student.regNo}>
-                    <td>{index + 1}</td>
-                    <td>{student.regNo}</td>
-                    <td>{student.name}</td>
-                    <td>{daysPresent}</td>
-                    <td>{student.percentage}</td>
-                  </tr>
-                );
-              })}
+              {reportData.grid.map((student, index) => (
+                <tr key={student.regNo}>
+                  <td>{index + 1}</td>
+                  <td>{student.regNo}</td>
+                  <td>{student.name}</td>
+                  {reportData.dates.map(date => (
+                    <td key={date} style={{ fontWeight: student.attendance[date] === 'X' ? 'bold' : 'normal', color: student.attendance[date] === 'X' ? 'black' : '#d32f2f' }}>
+                      {student.attendance[date]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
