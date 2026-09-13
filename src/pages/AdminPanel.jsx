@@ -4705,176 +4705,8 @@ export default function AdminPanel() {
 
       {/* ATTENDANCE TRACKER TAB */}
       {activeTab === "attendance-tracker" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-          
-          <AttendanceReportsContainer />
-
-          <div className="admin-grid-2col" style={{ gridTemplateColumns: "1fr 2fr" }}>
-            <div className="glass-card" style={{ padding: "2rem", height: "fit-content" }}>
-              <h2 className="section-title">Configure Working Days</h2>
-              <form onSubmit={handleSaveWorkingDays}>
-                <div className="input-group">
-                  <label className="input-label">Year</label>
-                  <select 
-                    className="select-input" 
-                    value={wdFormData.year} 
-                    onChange={(e) => setWdFormData({...wdFormData, year: e.target.value})}
-                  >
-                    <option value="I">I Year</option>
-                    <option value="II">II Year</option>
-                    <option value="III">III Year</option>
-                    <option value="IV">IV Year</option>
-                  </select>
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Start Date</label>
-                  <input 
-                    type="date" 
-                    className="text-input"
-                    required 
-                    value={wdFormData.startDate} 
-                    onChange={(e) => setWdFormData({...wdFormData, startDate: e.target.value})}
-                  />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">End Date</label>
-                  <input 
-                    type="date" 
-                    className="text-input" 
-                    required
-                    value={wdFormData.endDate} 
-                    onChange={(e) => setWdFormData({...wdFormData, endDate: e.target.value})}
-                  />
-                </div>
-                <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>Save Configuration</button>
-              </form>
-            </div>
-
-            <div className="glass-card" style={{ padding: "2rem" }}>
-              <h2 className="section-title">Current Configurations</h2>
-              {workingDaysLoading ? (
-                <p>Loading...</p>
-              ) : workingDays.length === 0 ? (
-                <p className="empty-state">No configurations found.</p>
-              ) : (
-                <div className="table-container">
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th>Year</th>
-                        <th>Start Date</th>
-                        <th>End Date</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workingDays.map(wd => (
-                        <tr key={wd._id}>
-                          <td style={{ fontWeight: "600" }}>{wd.year} Year</td>
-                          <td>{wd.startDate}</td>
-                          <td>{wd.endDate}</td>
-                          <td>
-                            <button 
-                              className="btn btn-secondary" 
-                              style={{ padding: "4px 8px", fontSize: "0.85rem" }}
-                              onClick={() => setWdFormData({ year: wd.year, startDate: wd.startDate, endDate: wd.endDate })}
-                            >
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="glass-card" style={{ padding: "2rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-              <h2 className="section-title" style={{ margin: 0 }}>Missing Attendance Report</h2>
-              <button className="btn btn-primary" onClick={loadMissingAttendance} disabled={missingLoading}>
-                {missingLoading ? "Refreshing..." : "Refresh Report"}
-              </button>
-            </div>
-            
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                <select 
-                  className="select-input" 
-                  value={missingReportYear}
-                  onChange={(e) => setMissingReportYear(e.target.value)}
-                  style={{ minWidth: "150px", padding: "8px 12px" }}
-                >
-                  <option value="">-- Select Year --</option>
-                  <option value="I">I Year</option>
-                  <option value="II">II Year</option>
-                  <option value="III">III Year</option>
-                  <option value="IV">IV Year</option>
-                </select>
-                <input 
-                  type="text" 
-                  placeholder="Filter by Date or Class..." 
-                  className="text-input" 
-                  value={missingSearchQuery}
-                  onChange={(e) => setMissingSearchQuery(e.target.value)}
-                  style={{ width: "250px", padding: "8px 12px" }}
-                />
-              </div>
-            </div>
-
-            {missingLoading ? (
-              <div className="loading-spinner"></div>
-            ) : !missingReportYear ? (
-              <div className="empty-state">
-                <p>Please select a Year to view missing attendance.</p>
-              </div>
-            ) : missingAttendance.length === 0 ? (
-              <div className="empty-state">
-                <EyeOff size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
-                <h3>All caught up!</h3>
-                <p>No missing attendance records found.</p>
-              </div>
-            ) : (
-              <div className="table-container">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Class (Cohort)</th>
-                      <th>Missing Session</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {missingAttendance
-                      .filter(item => item.cohortName.includes(`- ${missingReportYear}/`))
-                      .filter(item => 
-                        item.date.includes(missingSearchQuery) || 
-                        item.cohortName.toLowerCase().includes(missingSearchQuery.toLowerCase())
-                      )
-                      .map((item, idx) => (
-                      <tr key={idx}>
-                        <td style={{ fontWeight: "600", color: "var(--danger)" }}>{item.date}</td>
-                        <td>{item.cohortName}</td>
-                        <td>
-                          <span className="status-badge pending" style={{ background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)" }}>
-                            {item.missingSession}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{ color: "var(--danger)", fontWeight: "600" }}>Not Submitted</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="glass-card" style={{ padding: "2rem", marginTop: "2rem" }}>
+        <>
+          <div className="glass-card" style={{ padding: "2rem", marginTop: "2rem", marginBottom: "2rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
             <h2 className="section-title" style={{ margin: 0 }}>Attendance Report</h2>
             <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -5101,7 +4933,177 @@ export default function AdminPanel() {
             </>
           )}
         </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+          
+          <AttendanceReportsContainer />
+
+          <div className="admin-grid-2col" style={{ gridTemplateColumns: "1fr 2fr" }}>
+            <div className="glass-card" style={{ padding: "2rem", height: "fit-content" }}>
+              <h2 className="section-title">Configure Working Days</h2>
+              <form onSubmit={handleSaveWorkingDays}>
+                <div className="input-group">
+                  <label className="input-label">Year</label>
+                  <select 
+                    className="select-input" 
+                    value={wdFormData.year} 
+                    onChange={(e) => setWdFormData({...wdFormData, year: e.target.value})}
+                  >
+                    <option value="I">I Year</option>
+                    <option value="II">II Year</option>
+                    <option value="III">III Year</option>
+                    <option value="IV">IV Year</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Start Date</label>
+                  <input 
+                    type="date" 
+                    className="text-input"
+                    required 
+                    value={wdFormData.startDate} 
+                    onChange={(e) => setWdFormData({...wdFormData, startDate: e.target.value})}
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">End Date</label>
+                  <input 
+                    type="date" 
+                    className="text-input" 
+                    required
+                    value={wdFormData.endDate} 
+                    onChange={(e) => setWdFormData({...wdFormData, endDate: e.target.value})}
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary" style={{ width: "100%" }}>Save Configuration</button>
+              </form>
+            </div>
+
+            <div className="glass-card" style={{ padding: "2rem" }}>
+              <h2 className="section-title">Current Configurations</h2>
+              {workingDaysLoading ? (
+                <p>Loading...</p>
+              ) : workingDays.length === 0 ? (
+                <p className="empty-state">No configurations found.</p>
+              ) : (
+                <div className="table-container">
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Year</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workingDays.map(wd => (
+                        <tr key={wd._id}>
+                          <td style={{ fontWeight: "600" }}>{wd.year} Year</td>
+                          <td>{wd.startDate}</td>
+                          <td>{wd.endDate}</td>
+                          <td>
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: "4px 8px", fontSize: "0.85rem" }}
+                              onClick={() => setWdFormData({ year: wd.year, startDate: wd.startDate, endDate: wd.endDate })}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="glass-card" style={{ padding: "2rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <h2 className="section-title" style={{ margin: 0 }}>Missing Attendance Report</h2>
+              <button className="btn btn-primary" onClick={loadMissingAttendance} disabled={missingLoading}>
+                {missingLoading ? "Refreshing..." : "Refresh Report"}
+              </button>
+            </div>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                <select 
+                  className="select-input" 
+                  value={missingReportYear}
+                  onChange={(e) => setMissingReportYear(e.target.value)}
+                  style={{ minWidth: "150px", padding: "8px 12px" }}
+                >
+                  <option value="">-- Select Year --</option>
+                  <option value="I">I Year</option>
+                  <option value="II">II Year</option>
+                  <option value="III">III Year</option>
+                  <option value="IV">IV Year</option>
+                </select>
+                <input 
+                  type="text" 
+                  placeholder="Filter by Date or Class..." 
+                  className="text-input" 
+                  value={missingSearchQuery}
+                  onChange={(e) => setMissingSearchQuery(e.target.value)}
+                  style={{ width: "250px", padding: "8px 12px" }}
+                />
+              </div>
+            </div>
+
+            {missingLoading ? (
+              <div className="loading-spinner"></div>
+            ) : !missingReportYear ? (
+              <div className="empty-state">
+                <p>Please select a Year to view missing attendance.</p>
+              </div>
+            ) : missingAttendance.length === 0 ? (
+              <div className="empty-state">
+                <EyeOff size={48} style={{ opacity: 0.5, marginBottom: '1rem' }} />
+                <h3>All caught up!</h3>
+                <p>No missing attendance records found.</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Class (Cohort)</th>
+                      <th>Missing Session</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {missingAttendance
+                      .filter(item => item.cohortName.includes(`- ${missingReportYear}/`))
+                      .filter(item => 
+                        item.date.includes(missingSearchQuery) || 
+                        item.cohortName.toLowerCase().includes(missingSearchQuery.toLowerCase())
+                      )
+                      .map((item, idx) => (
+                      <tr key={idx}>
+                        <td style={{ fontWeight: "600", color: "var(--danger)" }}>{item.date}</td>
+                        <td>{item.cohortName}</td>
+                        <td>
+                          <span className="status-badge pending" style={{ background: "rgba(239, 68, 68, 0.1)", color: "var(--danger)" }}>
+                            {item.missingSession}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ color: "var(--danger)", fontWeight: "600" }}>Not Submitted</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
         </div>
+        </>
       )}
 
     </div>
