@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import API from "../api";
 import { Eye, EyeOff } from "lucide-react";
 import SeatingManager from "../components/SeatingManager";
+import ConsolidatedAttendanceReport from "../components/ConsolidatedAttendanceReport";
 
 export default function AdminPanel() {
   const role = sessionStorage.getItem("role");
@@ -4706,6 +4707,8 @@ export default function AdminPanel() {
       {activeTab === "attendance-tracker" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
           
+          <ConsolidatedAttendanceReport />
+
           <div className="admin-grid-2col" style={{ gridTemplateColumns: "1fr 2fr" }}>
             <div className="glass-card" style={{ padding: "2rem", height: "fit-content" }}>
               <h2 className="section-title">Configure Working Days</h2>
