@@ -362,14 +362,13 @@ function App() {
   ];
 
   // Default pages always visible to all faculty
-  const userNavItems = [
-    { name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
-    { name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
-    { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
-  ];
+  const userNavItems = [];
 
   // Extra pages the admin can allocate
   const ALLOCATABLE_DASHBOARD_PAGES = [
+    { id: "daily-attendance", name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
+    { id: "attendance", name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
+    { id: "entry", name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
     { id: "analysis", name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
     { id: "department-analysis", name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
     { id: "rank", name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },

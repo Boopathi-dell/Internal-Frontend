@@ -48,6 +48,9 @@ export default function AdminPanel() {
   ];
 
   const AVAILABLE_DASHBOARD_PAGES = [
+    { id: "daily-attendance", label: "Daily Attendance" },
+    { id: "attendance", label: "Attendance Entry" },
+    { id: "entry", label: "Mark Statement" },
     { id: "analysis", label: "Class Analysis" },
     { id: "department-analysis", label: "Dept. Analysis" },
     { id: "rank", label: "Rank List" },
@@ -3325,7 +3328,6 @@ export default function AdminPanel() {
                           <div style={{ marginBottom: "0.75rem", fontWeight: "bold", fontSize: "0.9rem", color: "#333", borderBottom: "1px solid #e2e8f0", paddingBottom: "0.5rem" }}>
                             📊 Result Hub Pages
                           </div>
-                          <div style={{ fontSize: "0.75rem", color: "#666", marginBottom: "0.75rem" }}>Default: Daily Attendance, Attendance Entry, Mark Statement</div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1.5rem" }}>
                             {AVAILABLE_DASHBOARD_PAGES.map(page => (
                               <label key={page.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", cursor: "pointer", color: "#000" }}>
