@@ -362,7 +362,9 @@ function App() {
   ];
 
   // Default pages always visible to all faculty
-  const userNavItems = [];
+  const userNavItems = [
+    { name: "Dashboard", path: "/", icon: <LayoutDashboard size={20} /> },
+  ];
 
   // Extra pages the admin can allocate
   const ALLOCATABLE_DASHBOARD_PAGES = [
@@ -486,7 +488,7 @@ function App() {
         <div className="page-layout">
           <ErrorBoundary>
             <Routes>
-              <Route path="/" element={isAdmin ? <Dashboard /> : (isPrintAdmin ? <MarkEntry /> : (isStudent ? <StudentDashboard /> : <MarkEntry />))} />
+              <Route path="/" element={isPrintAdmin ? <MarkEntry /> : (isStudent ? <StudentDashboard /> : <Dashboard />)} />
               <Route path="/admin" element={<AdminPanel />} />
               <Route path="/daily-attendance" element={isStudent ? <StudentDashboard /> : <DailyAttendance />} />
               <Route path="/attendance" element={isStudent ? <StudentDashboard /> : <AttendanceEntry />} />
