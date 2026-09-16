@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Settings, FileEdit, BarChart, Trophy, ArrowRight } from "lucide-react";
+import { Settings, FileEdit, BarChart, Trophy, ArrowRight, Calendar, Users, MessageSquareWarning } from "lucide-react";
 import API from "../api";
 
 export default function Dashboard() {
@@ -22,12 +22,33 @@ export default function Dashboard() {
     ...(Array.isArray(classes) ? classes.map(c => c.examName) : [])
   ])).filter(Boolean);
 
-  const cards = [
-    { name: "Admin Setup", path: "/admin", icon: <Settings size={28} />, desc: "Configure classes, manage student rosters, and upload excel data.", color: "#4f46e5" },
-    { name: "Mark Entry", path: "/entry", icon: <FileEdit size={28} />, desc: "Securely input student marks with real-time validation and autosave.", color: "#10b981" },
-    { name: "Class Analysis", path: "/analysis", icon: <BarChart size={28} />, desc: "Generate statistical reports, overall pass rates, and performance trends.", color: "#0ea5e9" },
-    { name: "Rank List", path: "/rank", icon: <Trophy size={28} />, desc: "View automatically calculated student rankings based on weighted scores.", color: "#f59e0b" },
+  const role = sessionStorage.getItem("role");
+  const isAdmin = role === "admin" || role === "printAdmin";
+  
+  let dashboardTabs = [];
+  let adminTabs = [];
+  try {
+    dashboardTabs = JSON.parse(sessionStorage.getItem("dashboardTabs") || "[]");
+    adminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
+  } catch(e) {}
+
+  const allCards = [
+    { id: "admin", name: "Admin Setup", path: "/admin", icon: <Settings size={28} />, desc: "Configure classes, manage student rosters, and upload excel data.", color: "#4f46e5" },
+    { id: "daily-attendance", name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={28} />, desc: "View and manage daily attendance records.", color: "#0ea5e9" },
+    { id: "attendance", name: "Attendance Entry", path: "/attendance", icon: <Users size={28} />, desc: "Enter student attendance for classes.", color: "#8b5cf6" },
+    { id: "entry", name: "Mark Entry", path: "/entry", icon: <FileEdit size={28} />, desc: "Securely input student marks with real-time validation and autosave.", color: "#10b981" },
+    { id: "analysis", name: "Class Analysis", path: "/analysis", icon: <BarChart size={28} />, desc: "Generate statistical reports, overall pass rates, and performance trends.", color: "#0ea5e9" },
+    { id: "department-analysis", name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={28} />, desc: "Analyze performance across the entire department.", color: "#6366f1" },
+    { id: "rank", name: "Rank List", path: "/rank", icon: <Trophy size={28} />, desc: "View automatically calculated student rankings based on weighted scores.", color: "#f59e0b" },
+    { id: "parent-letters", name: "Parent Letters", path: "/parent-letters", icon: <span style={{fontSize:"28px"}}>📬</span>, desc: "Generate and manage letters to parents.", color: "#ef4444" },
+    { id: "requests", name: "Mark Requests", path: "/requests", icon: <MessageSquareWarning size={28} />, desc: "View and approve student mark correction requests.", color: "#f43f5e" }
   ];
+
+  const cards = allCards.filter(card => {
+    if (isAdmin) return true;
+    if (card.id === "admin") return adminTabs.length > 0;
+    return dashboardTabs.includes(card.id);
+  });
 
   useEffect(() => {
     fetchQuickStats();
