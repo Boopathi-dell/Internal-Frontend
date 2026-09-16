@@ -204,8 +204,8 @@ export default function Dashboard() {
     <div className="admin-dash-bg fade-in">
       <div className="admin-header-card">
         <div>
-          <h1 className="admin-header-title">Welcome, Administrator</h1>
-          <p className="admin-header-subtext">Monitor academic performance and manage institutional data.</p>
+          <h1 className="admin-header-title">Welcome, {isAdmin ? 'Administrator' : sessionStorage.getItem('userName') || 'Faculty'}</h1>
+          <p className="admin-header-subtext">{isAdmin ? 'Monitor academic performance and manage institutional data.' : 'Access your assigned modules and manage student data.'}</p>
         </div>
       </div>
 
@@ -249,7 +249,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="admin-glass-card" style={{ marginTop: "2.5rem", padding: "2rem" }}>
+      {isAdmin && (
+        <div className="admin-glass-card" style={{ marginTop: "2.5rem", padding: "2rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "15px" }}>
           <h3 style={{ margin: 0, fontWeight: "800", fontSize: "1.25rem", color: "var(--text-main)" }}>Quick Statistics</h3>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -296,6 +297,7 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+      )}
     </div>
     </>
   );
