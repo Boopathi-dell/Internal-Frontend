@@ -8,11 +8,63 @@ export default function InternalMarkTemplateSetup() {
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [availableExams, setAvailableExams] = useState([]);
+  const [headerImage, setHeaderImage] = useState(() => localStorage.getItem("internalMarkHeaderImage") || "");
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
     fetchAvailableExams();
+    fetchHeaderImage();
   }, []);
+
+  const fetchHeaderImage = async () => {
+    try {
+      const res = await API.get("/api/internal-marks/header-image");
+      if (res.data && res.data.headerImage) {
+        setHeaderImage(res.data.headerImage);
+        localStorage.setItem("internalMarkHeaderImage", res.data.headerImage);
+      } else {
+        // Fallback to letter template headerLogo if available
+        const letterRes = await API.get("/api/letter-template");
+        if (letterRes.data && letterRes.data.headerLogo) {
+          setHeaderImage(letterRes.data.headerLogo);
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching internal marks header image:", e);
+    }
+  };
+
+  const handleHeaderImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setUploadingImage(true);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result;
+        setHeaderImage(base64);
+        localStorage.setItem("internalMarkHeaderImage", base64);
+        try {
+          await API.post("/api/internal-marks/header-image", { headerImage: base64 });
+          alert("College Header Image saved successfully! It will now appear on all printed internal mark sheets.");
+        } catch (err) {
+          console.error("Failed to save header image:", err);
+          alert("Header image saved locally.");
+        }
+        setUploadingImage(false);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveHeaderImage = async () => {
+    if (!window.confirm("Remove this header image?")) return;
+    setHeaderImage("");
+    localStorage.removeItem("internalMarkHeaderImage");
+    try {
+      await API.post("/api/internal-marks/header-image", { headerImage: "" });
+    } catch (e) {}
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -166,9 +218,44 @@ export default function InternalMarkTemplateSetup() {
       
       {!editingTemplate ? (
         <div>
-          <button onClick={handleAddNewTemplate} className="btn btn-primary" style={{ marginBottom: "1.5rem" }}>
-            <Plus size={16} /> Create New Template
-          </button>
+          {/* HEADER IMAGE BANNER UPLOAD CARD (EXACTLY LIKE LETTER TEMPLATE) */}
+          <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-color)", borderRadius: "12px", padding: "1.25rem", marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "10px" }}>
+              <div>
+                <h4 style={{ margin: 0, fontWeight: "bold", color: "var(--text-color)" }}>College Header Image / Banner</h4>
+                <p style={{ margin: "2px 0 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                  Upload a college header banner image. This image will automatically reflect at the top of the printed internal mark sheets.
+                </p>
+              </div>
+              <label className="btn btn-secondary" style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.85rem" }}>
+                <span>{uploadingImage ? "Uploading..." : "Upload Header Banner"}</span>
+                <input type="file" accept="image/*" onChange={handleHeaderImageUpload} style={{ display: "none" }} />
+              </label>
+            </div>
+
+            {headerImage ? (
+              <div style={{ background: "white", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-color)", textAlign: "center", position: "relative" }}>
+                <img src={headerImage} alt="Header Preview" style={{ maxHeight: "80px", maxWidth: "100%", objectFit: "contain" }} />
+                <button 
+                  onClick={handleRemoveHeaderImage} 
+                  className="btn btn-danger btn-sm" 
+                  style={{ position: "absolute", top: "10px", right: "10px", padding: "3px 8px", fontSize: "0.75rem" }}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div style={{ padding: "0.75rem", background: "rgba(99, 102, 241, 0.05)", borderRadius: "8px", border: "1px dashed rgba(99, 102, 241, 0.3)", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                No custom header banner uploaded yet. The default Muthayammal College logo + institution text header will be printed.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+            <button onClick={handleAddNewTemplate} className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+              <Plus size={16} /> Create New Template
+            </button>
+          </div>
           
           <table className="table">
             <thead>

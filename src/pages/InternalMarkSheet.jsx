@@ -13,12 +13,23 @@ import {
   ChevronDown, 
   ChevronUp, 
   Info,
-  Type
+  Type,
+  BookOpen,
+  Calendar,
+  Layers,
+  GraduationCap,
+  Sliders,
+  CheckCircle2,
+  AlertCircle
 } from "lucide-react";
 
 export default function InternalMarkSheet() {
+  const [allTemplates, setAllTemplates] = useState([]);
+  const [availableRegulations, setAvailableRegulations] = useState([]);
+  const [activeTemplate, setActiveTemplate] = useState(null);
+
   const [formData, setFormData] = useState({
-    regulation: "2021",
+    regulation: "2023",
     academicYear: "2026-27",
     department: "CSE",
     year: "II",
@@ -30,35 +41,79 @@ export default function InternalMarkSheet() {
     iqacRef: "MEC/IQAC/2026-27/COE/022",
     date: new Date().toLocaleDateString("en-GB").replace(/\//g, "."),
     semesterSession: "EVEN SEM APRIL - 2027",
-    courseFaculty: "",
-    yearCoordinator: "",
-    hod: ""
+    rowsPerPage: 30
   });
 
-  const [activeFormat, setActiveFormat] = useState("official"); // "official" | "custom"
-  const [customTemplate, setCustomTemplate] = useState(null);
+  const [headerImage, setHeaderImage] = useState(() => localStorage.getItem("internalMarkHeaderImage") || "");
   const [studentsData, setStudentsData] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [availableExams, setAvailableExams] = useState([]);
   const [loading, setLoading] = useState(false);
   const [rosters, setRosters] = useState([]);
   const [allFetchedClasses, setAllFetchedClasses] = useState([]);
-  const [showExamMapping, setShowExamMapping] = useState(false);
   const [isEditingMarks, setIsEditingMarks] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
-  // Manual Exam Mapping (overrides auto-detection if chosen)
-  const [examMapping, setExamMapping] = useState({
-    ut1: "AUTO",
-    ut2: "AUTO",
-    cia1: "AUTO",
-    ut3: "AUTO",
-    ut4: "AUTO",
-    cia2: "AUTO",
-    ut5: "AUTO",
-    cia3: "AUTO",
-    sm: "AUTO",
-    mkc: "AUTO"
-  });
+  // 1. Fetch All Admin Templates & Extract Regulations
+  useEffect(() => {
+    fetchTemplatesAndRegulations();
+    fetchAllRosters();
+    fetchHeaderImage();
+  }, []);
+
+  const fetchHeaderImage = async () => {
+    try {
+      const res = await API.get("/api/internal-marks/header-image");
+      if (res.data && res.data.headerImage) {
+        setHeaderImage(res.data.headerImage);
+        localStorage.setItem("internalMarkHeaderImage", res.data.headerImage);
+        return;
+      }
+      const letterRes = await API.get("/api/letter-template");
+      if (letterRes.data && letterRes.data.headerLogo) {
+        setHeaderImage(letterRes.data.headerLogo);
+        localStorage.setItem("internalMarkHeaderImage", letterRes.data.headerLogo);
+      }
+    } catch (e) {
+      console.error("Could not fetch header image:", e);
+    }
+  };
+
+  const fetchTemplatesAndRegulations = async () => {
+    try {
+      const res = await API.get("/api/internal-marks");
+      const templates = res.data || [];
+      setAllTemplates(templates);
+
+      const regs = [...new Set(templates.map(t => t.regulation).filter(Boolean))];
+      setAvailableRegulations(regs);
+
+      // If regulations exist in DB, default to first available regulation or match 2023 / 2025
+      if (regs.length > 0) {
+        const defaultReg = regs.includes("2023") ? "2023" : (regs.includes("2025") ? "2025" : regs[0]);
+        setFormData(prev => ({ ...prev, regulation: defaultReg }));
+        const matched = templates.find(t => t.regulation === defaultReg && t.isActive) || templates.find(t => t.regulation === defaultReg);
+        setActiveTemplate(matched || null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch templates:", err);
+    }
+  };
+
+  const fetchAllRosters = async () => {
+    try {
+      const res = await API.get("/api/rosters");
+      setRosters(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch rosters:", err);
+    }
+  };
+
+  // When selected regulation changes, automatically activate matching template
+  const handleRegulationChange = (reg) => {
+    setFormData(prev => ({ ...prev, regulation: reg }));
+    const matched = allTemplates.find(t => t.regulation === reg && t.isActive) || allTemplates.find(t => t.regulation === reg);
+    setActiveTemplate(matched || null);
+  };
 
   // Calculate default semester session based on Semester & Academic Year
   useEffect(() => {
@@ -76,38 +131,6 @@ export default function InternalMarkSheet() {
     }));
   }, [formData.semester, formData.academicYear]);
 
-  // Fetch initial data
-  useEffect(() => {
-    fetchAllRosters();
-    fetchActiveTemplate(formData.regulation);
-  }, []);
-
-  useEffect(() => {
-    if (formData.regulation) {
-      fetchActiveTemplate(formData.regulation);
-    }
-  }, [formData.regulation]);
-
-  const fetchActiveTemplate = async (reg) => {
-    try {
-      const res = await API.get(`/api/internal-marks/active?regulation=${reg}`);
-      if (res.data) setCustomTemplate(res.data);
-      else setCustomTemplate(null);
-    } catch (err) {
-      console.error("Failed to fetch template:", err);
-      setCustomTemplate(null);
-    }
-  };
-
-  const fetchAllRosters = async () => {
-    try {
-      const res = await API.get("/api/rosters");
-      setRosters(res.data || []);
-    } catch (err) {
-      console.error("Failed to fetch rosters:", err);
-    }
-  };
-
   // Fetch subjects for currently selected Dept & Class
   const fetchSubjectsForSelection = async () => {
     try {
@@ -121,13 +144,8 @@ export default function InternalMarkSheet() {
         c.yearSemSec === yearSemSec
       );
 
-      // Collect available exams in this class
-      const distinctExams = [...new Set(filteredClasses.map(c => c.examName).filter(Boolean))];
-      setAvailableExams(distinctExams);
-
       const courseMap = {};
       const allCourseCodes = new Set();
-      let detectedFaculty = "";
 
       filteredClasses.forEach(c => {
         if (c.courseDetails && Array.isArray(c.courseDetails)) {
@@ -136,9 +154,6 @@ export default function InternalMarkSheet() {
               const code = cd.courseCode.trim();
               courseMap[code] = cd.courseName ? cd.courseName.trim() : code;
               allCourseCodes.add(code);
-              if (cd.facultyName && !detectedFaculty) {
-                detectedFaculty = cd.facultyName.trim();
-              }
             }
           });
         }
@@ -160,9 +175,10 @@ export default function InternalMarkSheet() {
       if (subjectsWithNames.length > 0) {
         setFormData(prev => ({ 
           ...prev, 
-          selectedSubject: prev.selectedSubject && subjectsWithNames.some(s => s.code === prev.selectedSubject) ? prev.selectedSubject : subjectsWithNames[0].code, 
-          isCustomSubject: false,
-          courseFaculty: detectedFaculty || prev.courseFaculty
+          selectedSubject: prev.selectedSubject && subjectsWithNames.some(s => s.code === prev.selectedSubject) 
+            ? prev.selectedSubject 
+            : subjectsWithNames[0].code, 
+          isCustomSubject: false
         }));
       } else {
         setFormData(prev => ({ ...prev, selectedSubject: "CUSTOM", isCustomSubject: true }));
@@ -176,37 +192,6 @@ export default function InternalMarkSheet() {
     fetchSubjectsForSelection();
   }, [formData.department, formData.year, formData.semester, formData.section]);
 
-  // Match exam string flexibly
-  const matchesExamName = (examName, targetType) => {
-    if (!examName) return false;
-    const clean = examName.toLowerCase().replace(/[\s\-_]/g, "");
-    
-    switch (targetType) {
-      case "ut1":
-        return clean === "ut1" || clean === "unittest1" || clean === "uniti" || clean === "unit1" || clean === "u1";
-      case "ut2":
-        return clean === "ut2" || clean === "unittest2" || clean === "unitii" || clean === "unit2" || clean === "u2";
-      case "cia1":
-        return clean === "cia1" || clean === "ciai" || clean === "internal1" || clean === "internali";
-      case "ut3":
-        return clean === "ut3" || clean === "unittest3" || clean === "unitiii" || clean === "unit3" || clean === "u3";
-      case "ut4":
-        return clean === "ut4" || clean === "unittest4" || clean === "unitiv" || clean === "unit4" || clean === "u4";
-      case "cia2":
-        return clean === "cia2" || clean === "ciaii" || clean === "internal2" || clean === "internalii";
-      case "ut5":
-        return clean === "ut5" || clean === "unittest5" || clean === "unitv" || clean === "unit5" || clean === "u5";
-      case "cia3":
-        return clean === "cia3" || clean === "ciaiii" || clean === "internal3" || clean === "internaliii";
-      case "sm":
-        return clean === "sm" || clean.includes("seminar") || clean.includes("skill");
-      case "mkc":
-        return clean === "mkc" || clean.includes("model") || clean.includes("modelexam");
-      default:
-        return false;
-    }
-  };
-
   // Helper to parse numbers safely
   const parseNum = (val) => {
     if (val === undefined || val === null || val === "" || String(val).toUpperCase() === "AB") return 0;
@@ -214,7 +199,42 @@ export default function InternalMarkSheet() {
     return isNaN(n) ? 0 : n;
   };
 
-  // Main student and mark calculation processor
+  // Normalize string for fuzzy match
+  const normStr = (str) => (str || "").toLowerCase().replace(/[\s\-_]/g, "");
+
+  // Flexible exam mark finder
+  const findExamMarkForStudent = (student, examName, targetSubj, allClassesForSection) => {
+    if (!examName) return 0;
+    const cleanTarget = normStr(targetSubj);
+    const cleanExam = normStr(examName);
+
+    // Look for classes matching this exam
+    for (const cls of allClassesForSection) {
+      if (normStr(cls.examName) === cleanExam || (cleanExam.includes("cia") && normStr(cls.examName).includes("cia"))) {
+        // Find subject index
+        let subjIdx = -1;
+        if (cls.subjects && Array.isArray(cls.subjects)) {
+          subjIdx = cls.subjects.findIndex(s => normStr(s) === cleanTarget);
+        }
+        if (subjIdx === -1 && cls.courseDetails && Array.isArray(cls.courseDetails)) {
+          subjIdx = cls.courseDetails.findIndex(cd => 
+            normStr(cd.courseCode) === cleanTarget || normStr(cd.courseName) === cleanTarget
+          );
+        }
+
+        if (subjIdx !== -1 && cls.students) {
+          const stObj = cls.students.find(s => s.regNo === student.regNo);
+          if (stObj && stObj.marks && stObj.marks.length > subjIdx) {
+            const val = stObj.marks[subjIdx];
+            return val !== "" && val !== undefined ? val : 0;
+          }
+        }
+      }
+    }
+    return 0;
+  };
+
+  // Process and calculate student marks based on the current template
   const processSubjectData = async () => {
     setLoading(true);
     try {
@@ -237,7 +257,7 @@ export default function InternalMarkSheet() {
 
       const studentMap = {};
 
-      // 1. First populate studentMap from Roster if available
+      // 1. Gather all students from Roster
       const matchingRoster = rosters.find(r => 
         r.department === formData.department && 
         r.year === formData.year && 
@@ -250,189 +270,71 @@ export default function InternalMarkSheet() {
           if (student.regNo) {
             studentMap[student.regNo] = {
               regNo: student.regNo,
-              name: student.name || "",
-              rawExams: {},
-              ut1: "",
-              ut2: "",
-              cia1: "",
-              im1: 0,
-              ut3: "",
-              ut4: "",
-              cia2: "",
-              im2: 0,
-              ut5: "",
-              cia3: "",
-              im3: 0,
-              sm: "",
-              mkc: "",
-              total: 0
+              name: student.name || ""
             };
           }
         });
       }
 
-      // 2. Also ensure all students from ANY uploaded class for this department & section are included!
+      // 2. Also gather students from ANY uploaded class for this department & section
       allClassesForSection.forEach(c => {
         if (c.students && Array.isArray(c.students)) {
           c.students.forEach(st => {
             if (st.regNo && !studentMap[st.regNo]) {
               studentMap[st.regNo] = {
                 regNo: st.regNo,
-                name: st.name || "",
-                rawExams: {},
-                ut1: "",
-                ut2: "",
-                cia1: "",
-                im1: 0,
-                ut3: "",
-                ut4: "",
-                cia2: "",
-                im2: 0,
-                ut5: "",
-                cia3: "",
-                im3: 0,
-                sm: "",
-                mkc: "",
-                total: 0
+                name: st.name || ""
               };
             }
           });
         }
       });
 
-      // 3. Populate raw marks for each exam
-      allClassesForSection.forEach(examObj => {
-        const examName = (examObj.examName || "").trim();
-        let subjectIndex = -1;
+      // 3. Fallback Columns if no template exists: Default MEC 17-column structure
+      const defaultMecColumns = [
+        { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I" },
+        { heading: "UT-2 (30)", type: "exam", examName: "Unit Test - II" },
+        { heading: "CIA1 (50)", type: "exam", examName: "CIA - I" },
+        { heading: "IM (10)", type: "formula", formula: "(#[UT-1 (30)] + #[UT-2 (30)] + #[CIA1 (50)]) / 110 * 10" },
+        { heading: "UT-3 (30)", type: "exam", examName: "Unit Test - III" },
+        { heading: "UT-4 (30)", type: "exam", examName: "Unit Test - IV" },
+        { heading: "CIA2 (50)", type: "exam", examName: "CIA - II" },
+        { heading: "IM (10)", type: "formula", formula: "(#[UT-3 (30)] + #[UT-4 (30)] + #[CIA2 (50)]) / 110 * 10" },
+        { heading: "UT-5 (30)", type: "exam", examName: "Unit Test - V" },
+        { heading: "CIA3 (100)", type: "exam", examName: "Model Exam" },
+        { heading: "IM (10)", type: "formula", formula: "(#[UT-5 (30)] + #[CIA3 (100)]) / 130 * 10" },
+        { heading: "SM (5)", type: "exam", examName: "Seminar" },
+        { heading: "MKC (5)", type: "exam", examName: "MKC" },
+        { heading: "TOTAL (40)", type: "formula", formula: "#[IM (10)] + #[IM (10)] + #[IM (10)] + #[SM (5)] + #[MKC (5)]" }
+      ];
 
-        if (examObj.subjects && Array.isArray(examObj.subjects)) {
-          subjectIndex = examObj.subjects.findIndex(s => s && s.trim().toLowerCase() === targetSubject.trim().toLowerCase());
-        }
+      // Use strictly active template's columns if available
+      const columnsToUse = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
+        ? activeTemplate.columns
+        : defaultMecColumns;
 
-        if (subjectIndex === -1 && examObj.courseDetails && Array.isArray(examObj.courseDetails)) {
-          subjectIndex = examObj.courseDetails.findIndex(cd => 
-            (cd.courseCode && cd.courseCode.trim().toLowerCase() === targetSubject.trim().toLowerCase()) ||
-            (cd.courseName && cd.courseName.trim().toLowerCase() === targetSubject.trim().toLowerCase())
-          );
-        }
-
-        if (subjectIndex !== -1 && examObj.students) {
-          examObj.students.forEach(student => {
-            if (!studentMap[student.regNo]) {
-              studentMap[student.regNo] = {
-                regNo: student.regNo,
-                name: student.name || "",
-                rawExams: {},
-                ut1: "",
-                ut2: "",
-                cia1: "",
-                im1: 0,
-                ut3: "",
-                ut4: "",
-                cia2: "",
-                im2: 0,
-                ut5: "",
-                cia3: "",
-                im3: 0,
-                sm: "",
-                mkc: "",
-                total: 0
-              };
-            }
-            const markVal = student.marks && student.marks.length > subjectIndex ? student.marks[subjectIndex] : "";
-            studentMap[student.regNo].rawExams[examName] = markVal === "" ? "" : markVal;
-          });
-        }
-      });
-
-      // 4. Map raw marks to Official Columns and calculate IM & TOTAL
+      // 4. Calculate marks for every student against columnsToUse
       const evaluatedStudents = Object.values(studentMap).map(student => {
         const row = { ...student };
 
-        // Helper to pick mark for a column based on auto-detect or manual mapping
-        const getMarkForCol = (colKey) => {
-          const manualExam = examMapping[colKey];
-          if (manualExam && manualExam !== "AUTO") {
-            return row.rawExams[manualExam] !== undefined ? row.rawExams[manualExam] : "";
-          }
-          // Auto detection across rawExams
-          for (const [examName, mark] of Object.entries(row.rawExams)) {
-            if (matchesExamName(examName, colKey)) {
-              return mark;
+        columnsToUse.forEach(col => {
+          if (col.type === "exam") {
+            const mark = findExamMarkForStudent(student, col.examName, targetSubject, allClassesForSection);
+            row[col.heading] = mark;
+          } else if (col.type === "formula" || col.type === "calculation") {
+            try {
+              let f = col.formula || "0";
+              columnsToUse.forEach(inner => {
+                const val = parseNum(row[inner.heading]);
+                f = f.split(`#[${inner.heading}]`).join(val);
+              });
+              const res = new Function(`return ${f}`)();
+              row[col.heading] = isNaN(res) ? 0 : Math.round(res);
+            } catch (e) {
+              row[col.heading] = 0;
             }
           }
-          return "";
-        };
-
-        row.ut1 = getMarkForCol("ut1");
-        row.ut2 = getMarkForCol("ut2");
-        row.cia1 = getMarkForCol("cia1");
-        row.ut3 = getMarkForCol("ut3");
-        row.ut4 = getMarkForCol("ut4");
-        row.cia2 = getMarkForCol("cia2");
-        row.ut5 = getMarkForCol("ut5");
-        row.cia3 = getMarkForCol("cia3");
-        row.sm = getMarkForCol("sm");
-        row.mkc = getMarkForCol("mkc");
-
-        // Calculate IM1: (UT1 + UT2 + CIA1) / 110 * 10
-        const hasExam1 = row.ut1 !== "" || row.ut2 !== "" || row.cia1 !== "";
-        if (hasExam1) {
-          const sum1 = parseNum(row.ut1) + parseNum(row.ut2) + parseNum(row.cia1);
-          row.im1 = Math.round((sum1 / 110) * 10);
-        } else {
-          row.im1 = 0;
-        }
-
-        // Calculate IM2: (UT3 + UT4 + CIA2) / 110 * 10
-        const hasExam2 = row.ut3 !== "" || row.ut4 !== "" || row.cia2 !== "";
-        if (hasExam2) {
-          const sum2 = parseNum(row.ut3) + parseNum(row.ut4) + parseNum(row.cia2);
-          row.im2 = Math.round((sum2 / 110) * 10);
-        } else {
-          row.im2 = 0;
-        }
-
-        // Calculate IM3: (UT5 + CIA3) / 130 * 10
-        const hasExam3 = row.ut5 !== "" || row.cia3 !== "";
-        if (hasExam3) {
-          const sum3 = parseNum(row.ut5) + parseNum(row.cia3);
-          row.im3 = Math.round((sum3 / 130) * 10);
-        } else {
-          row.im3 = 0;
-        }
-
-        // MKC Scaling: If entered out of 100, scale down to 5
-        let mkcVal = parseNum(row.mkc);
-        if (mkcVal > 5) {
-          mkcVal = Math.round(mkcVal / 20);
-        }
-
-        const smVal = parseNum(row.sm);
-
-        // TOTAL: IM1 + IM2 + IM3 + SM + MKC (Max 40)
-        row.total = row.im1 + row.im2 + row.im3 + smVal + mkcVal;
-
-        // Custom template columns evaluation if custom mode is chosen
-        if (customTemplate && customTemplate.columns) {
-          customTemplate.columns.forEach(col => {
-            if (col.type === "exam") {
-              row[col.heading] = row.rawExams[col.examName] !== undefined ? row.rawExams[col.examName] : 0;
-            } else if (col.type === "formula" || col.type === "calculation") {
-              try {
-                let f = col.formula || "0";
-                customTemplate.columns.forEach(inner => {
-                  const num = parseNum(row[inner.heading]);
-                  f = f.split(`#[${inner.heading}]`).join(num);
-                });
-                const res = new Function(`return ${f}`)();
-                row[col.heading] = isNaN(res) ? 0 : Math.round(res);
-              } catch (e) {
-                row[col.heading] = 0;
-              }
-            }
-          });
-        }
+        });
 
         return row;
       });
@@ -440,7 +342,7 @@ export default function InternalMarkSheet() {
       evaluatedStudents.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
       setStudentsData(evaluatedStudents);
     } catch (err) {
-      console.error("Error processing internal marks:", err);
+      console.error("Error evaluating marks:", err);
     }
     setLoading(false);
   };
@@ -461,75 +363,95 @@ export default function InternalMarkSheet() {
     formData.section, 
     formData.regulation, 
     formData.academicYear, 
-    examMapping,
-    customTemplate,
+    activeTemplate,
     rosters
   ]);
 
   // Handle cell edit on screen
-  const handleCellEdit = (studentIndex, field, value) => {
+  const handleCellEdit = (studentIndex, colHeading, value) => {
     setStudentsData(prev => {
       const updated = [...prev];
-      const row = { ...updated[studentIndex], [field]: value };
+      const row = { ...updated[studentIndex], [colHeading]: value };
 
-      // Recalculate IM1
-      const sum1 = parseNum(row.ut1) + parseNum(row.ut2) + parseNum(row.cia1);
-      row.im1 = (row.ut1 !== "" || row.ut2 !== "" || row.cia1 !== "") ? Math.round((sum1 / 110) * 10) : 0;
+      const columnsToUse = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
+        ? activeTemplate.columns
+        : [];
 
-      // Recalculate IM2
-      const sum2 = parseNum(row.ut3) + parseNum(row.ut4) + parseNum(row.cia2);
-      row.im2 = (row.ut3 !== "" || row.ut4 !== "" || row.cia2 !== "") ? Math.round((sum2 / 110) * 10) : 0;
+      // Re-evaluate formulas for this row
+      columnsToUse.forEach(col => {
+        if (col.type === "formula" || col.type === "calculation") {
+          try {
+            let f = col.formula || "0";
+            columnsToUse.forEach(inner => {
+              const val = parseNum(row[inner.heading]);
+              f = f.split(`#[${inner.heading}]`).join(val);
+            });
+            const res = new Function(`return ${f}`)();
+            row[col.heading] = isNaN(res) ? 0 : Math.round(res);
+          } catch (e) {
+            row[col.heading] = 0;
+          }
+        }
+      });
 
-      // Recalculate IM3
-      const sum3 = parseNum(row.ut5) + parseNum(row.cia3);
-      row.im3 = (row.ut5 !== "" || row.cia3 !== "") ? Math.round((sum3 / 130) * 10) : 0;
-
-      let mkcVal = parseNum(row.mkc);
-      if (mkcVal > 5) mkcVal = Math.round(mkcVal / 20);
-      const smVal = parseNum(row.sm);
-
-      row.total = row.im1 + row.im2 + row.im3 + smVal + mkcVal;
       updated[studentIndex] = row;
       return updated;
     });
   };
 
-  // Quick action: Fill all SM with 5
-  const quickFillSM = (val = 5) => {
-    setStudentsData(prev => prev.map(student => {
-      const row = { ...student, sm: val };
-      let mkcVal = parseNum(row.mkc);
-      if (mkcVal > 5) mkcVal = Math.round(mkcVal / 20);
-      row.total = (row.im1 || 0) + (row.im2 || 0) + (row.im3 || 0) + val + mkcVal;
-      return row;
-    }));
-  };
-
+  // Get Clean Formatted Course Code and Name automatically
   const getDisplaySubject = () => {
-    if (formData.isCustomSubject) return formData.customSubject;
+    if (formData.isCustomSubject) return formData.customSubject || "Course";
     const found = subjects.find(s => s.code === formData.selectedSubject);
-    return found ? `${found.code} - ${found.name}` : (formData.selectedSubject || "Theory Course");
+    return found ? `${found.code} - ${found.name}` : (formData.selectedSubject || "Course");
   };
 
-  const handlePrint = () => {
-    window.print();
+  // Columns definition helper
+  const currentColumns = useMemo(() => {
+    if (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0) {
+      return activeTemplate.columns;
+    }
+    return [
+      { heading: "UT-1 (30)", type: "exam" },
+      { heading: "UT-2 (30)", type: "exam" },
+      { heading: "CIA1 (50)", type: "exam" },
+      { heading: "IM (10)", type: "formula" },
+      { heading: "UT-3 (30)", type: "exam" },
+      { heading: "UT-4 (30)", type: "exam" },
+      { heading: "CIA2 (50)", type: "exam" },
+      { heading: "IM (10)", type: "formula" },
+      { heading: "UT-5 (30)", type: "exam" },
+      { heading: "CIA3 (100)", type: "exam" },
+      { heading: "IM (10)", type: "formula" },
+      { heading: "SM (5)", type: "exam" },
+      { heading: "MKC (5)", type: "exam" },
+      { heading: "TOTAL (40)", type: "formula" }
+    ];
+  }, [activeTemplate]);
+
+  // Check if columns have subheaders (like "(50)")
+  const hasSubHeaders = useMemo(() => {
+    return currentColumns.some(c => c.heading && c.heading.includes("(") && c.heading.includes(")"));
+  }, [currentColumns]);
+
+  // Clean title & max mark extractor
+  const parseHeading = (headingStr) => {
+    const match = headingStr.match(/\((.*?)\)/);
+    if (match) {
+      const title = headingStr.replace(/\(.*?\)/, "").trim();
+      const maxMark = match[1].trim();
+      return { title, maxMark };
+    }
+    return { title: headingStr, maxMark: "" };
   };
 
-  // Chunk students into pages of 30 for perfect Landscape A4 printing
+  // Multi-page chunking: Consistent pages whether 1, 2, or 3 pages!
   const studentPages = useMemo(() => {
     const pages = [];
-    const chunkSize = 30;
+    const chunkSize = formData.rowsPerPage || 30;
+
     if (studentsData.length === 0) {
-      // Create empty 30 rows if no students loaded yet
-      const dummy = Array.from({ length: 30 }, (_, i) => ({
-        regNo: "",
-        name: "",
-        ut1: "", ut2: "", cia1: "", im1: 0,
-        ut3: "", ut4: "", cia2: "", im2: 0,
-        ut5: "", cia3: "", im3: 0,
-        sm: "", mkc: "", total: 0
-      }));
-      pages.push(dummy);
+      pages.push([]);
       return pages;
     }
 
@@ -537,9 +459,13 @@ export default function InternalMarkSheet() {
       pages.push(studentsData.slice(i, i + chunkSize));
     }
     return pages;
-  }, [studentsData]);
+  }, [studentsData, formData.rowsPerPage]);
 
-  // Export to Excel (.xlsx) matching the official format
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // Export to Excel (.xlsx) matching exact template columns
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
     const rows = [];
@@ -555,13 +481,7 @@ export default function InternalMarkSheet() {
       `Year/Sem/Sec: ${formData.year} / ${formData.semester} / ${formData.section}`, 
       "", 
       "", 
-      "", 
       formData.semesterSession, 
-      "", 
-      "", 
-      "", 
-      "", 
-      "", 
       "", 
       "", 
       "", 
@@ -572,81 +492,43 @@ export default function InternalMarkSheet() {
     rows.push([]);
 
     // Table Header 1
-    rows.push([
-      "S.No", "Reg.No.", "Name", 
-      "UT-1", "UT-2", "CIA1", "IM", 
-      "UT-3", "UT-4", "CIA2", "IM", 
-      "UT-5", "CIA3", "IM", 
-      "SM", "MKC", "TOTAL"
-    ]);
+    const row1 = ["S.No", "Reg.No.", "Name"];
+    const row2 = ["", "", ""];
 
-    // Table Header 2 (Max Marks)
-    rows.push([
-      "", "", "", 
-      30, 30, 50, 10, 
-      30, 30, 50, 10, 
-      30, 100, 10, 
-      5, 5, 40
-    ]);
+    currentColumns.forEach(c => {
+      const { title, maxMark } = parseHeading(c.heading);
+      row1.push(title);
+      row2.push(maxMark);
+    });
+
+    rows.push(row1);
+    if (hasSubHeaders) rows.push(row2);
 
     // Student Data Rows
     studentsData.forEach((st, idx) => {
-      rows.push([
+      const stRow = [
         idx + 1,
         st.regNo,
-        st.name,
-        st.ut1 || 0,
-        st.ut2 || 0,
-        st.cia1 || 0,
-        st.im1 || 0,
-        st.ut3 || 0,
-        st.ut4 || 0,
-        st.cia2 || 0,
-        st.im2 || 0,
-        st.ut5 || 0,
-        st.cia3 || 0,
-        st.im3 || 0,
-        st.sm || 0,
-        st.mkc || 0,
-        st.total || 0
-      ]);
+        st.name
+      ];
+      currentColumns.forEach(c => {
+        stRow.push(st[c.heading] !== undefined ? st[c.heading] : 0);
+      });
+      rows.push(stRow);
     });
 
     // Signature Block
     rows.push([]);
     rows.push([]);
     rows.push([
-      "Course Faculty", "", "", "", 
-      "", "", "Year Co-ordinator", "", 
-      "", "", "", "", "", "", 
-      "", "HoD", ""
+      "Course Faculty", "", "", 
+      "Year Co-ordinator", "", "", 
+      "HoD"
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
-
-    // Set Column Widths
-    ws["!cols"] = [
-      { wch: 6 },  // S.No
-      { wch: 15 }, // Reg.No
-      { wch: 28 }, // Name
-      { wch: 7 },  // UT-1
-      { wch: 7 },  // UT-2
-      { wch: 7 },  // CIA1
-      { wch: 7 },  // IM
-      { wch: 7 },  // UT-3
-      { wch: 7 },  // UT-4
-      { wch: 7 },  // CIA2
-      { wch: 7 },  // IM
-      { wch: 7 },  // UT-5
-      { wch: 7 },  // CIA3
-      { wch: 7 },  // IM
-      { wch: 6 },  // SM
-      { wch: 6 },  // MKC
-      { wch: 9 }   // TOTAL
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, "Internal Mark Sheet");
-    const filename = `Theory_Internal_Mark_Format_${formData.department}_${formData.year}_Sem${formData.semester}.xlsx`;
+    XLSX.utils.book_append_sheet(wb, ws, "Internal Marks");
+    const filename = `Internal_Mark_Sheet_Reg${formData.regulation}_${formData.department}_${formData.year}_Sem${formData.semester}.xlsx`;
     XLSX.writeFile(wb, filename);
   };
 
@@ -654,13 +536,14 @@ export default function InternalMarkSheet() {
     <div className="fade-in" style={{ padding: "1.2rem", maxWidth: "1600px", margin: "0 auto" }}>
       {/* SCREEN CONTROLS & HEADER (HIDDEN IN PRINT) */}
       <div className="no-print">
+        {/* Top Header Bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
           <div>
             <h1 style={{ fontSize: "1.8rem", fontWeight: "800", color: "var(--primary)", margin: 0, display: "flex", alignItems: "center", gap: "12px" }}>
-              <FileSpreadsheet size={30} /> Theory Internal Mark Sheet
+              <FileSpreadsheet size={30} /> Internal Mark Generator
             </h1>
             <p style={{ color: "var(--text-muted)", margin: "4px 0 0 0", fontSize: "0.95rem" }}>
-              Official Muthayammal Engineering College internal mark format with automatic scale calculations.
+              Template-driven marksheet generator with automated formulas and multi-page print layout.
             </p>
           </div>
 
@@ -698,108 +581,154 @@ export default function InternalMarkSheet() {
                 background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)"
               }}
             >
-              <Printer size={20} /> Print Report (Format)
+              <Printer size={20} /> Print Report
             </button>
           </div>
         </div>
 
-        {/* FORMAT SELECTOR PILLS */}
-        <div style={{ display: "flex", gap: "10px", marginBottom: "1.2rem" }}>
-          <button 
-            onClick={() => setActiveFormat("official")}
-            className={`btn ${activeFormat === "official" ? "btn-primary" : "btn-secondary"}`}
-            style={{ borderRadius: "20px", padding: "6px 16px", fontSize: "0.85rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}
-          >
-            <Sparkles size={14} /> Official MEC Format (Images 1 & 2)
-          </button>
-          <button 
-            onClick={() => setActiveFormat("custom")}
-            className={`btn ${activeFormat === "custom" ? "btn-primary" : "btn-secondary"}`}
-            style={{ borderRadius: "20px", padding: "6px 16px", fontSize: "0.85rem", fontWeight: "600" }}
-          >
-            Custom Admin Template {customTemplate ? `(${customTemplate.templateName})` : "(Not Configured)"}
-          </button>
-        </div>
+        {/* LUXURIOUS, MODERN PARAMETERS CARD */}
+        <div style={{
+          background: "linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95))",
+          border: "1px solid rgba(99, 102, 241, 0.25)",
+          borderRadius: "20px",
+          padding: "1.75rem",
+          boxShadow: "0 10px 30px -5px rgba(99, 102, 241, 0.08), 0 0 0 1px rgba(99, 102, 241, 0.05)",
+          marginBottom: "2rem",
+          position: "relative",
+          overflow: "hidden"
+        }}>
+          {/* Top Decorative Line */}
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "4px", background: "linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899)" }} />
 
-        {/* PARAMETERS SELECTION CARD */}
-        <div className="glass-card" style={{ padding: "1.5rem", borderRadius: "16px", marginBottom: "1.5rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.75rem", marginBottom: "1.25rem" }}>
-            <h3 style={{ margin: 0, color: "var(--text-color)", fontSize: "1.1rem", fontWeight: "700" }}>Class & Report Parameters</h3>
-            <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-              Loaded Students: <strong>{studentsData.length}</strong>
-            </span>
+          {/* Card Header & Active Template Status */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(226, 232, 240, 0.8)", paddingBottom: "1rem", marginBottom: "1.5rem", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ background: "rgba(99, 102, 241, 0.1)", color: "var(--primary)", padding: "8px", borderRadius: "10px" }}>
+                <Layers size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: "800", color: "#1e293b" }}>Class & Template Parameters</h3>
+                <span style={{ fontSize: "0.85rem", color: "#64748b" }}>Select your regulation and class to generate the official internal mark format</span>
+              </div>
+            </div>
+
+            {/* Template Badge */}
+            {activeTemplate ? (
+              <div style={{ 
+                background: "linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.15))", 
+                border: "1px solid rgba(34, 197, 94, 0.3)", 
+                padding: "6px 14px", 
+                borderRadius: "30px", 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px" 
+              }}>
+                <CheckCircle2 size={16} color="#16a34a" />
+                <span style={{ fontWeight: "700", color: "#15803d", fontSize: "0.85rem" }}>
+                  Active Template: {activeTemplate.templateName} ({currentColumns.length} columns)
+                </span>
+              </div>
+            ) : (
+              <div style={{ 
+                background: "rgba(234, 179, 8, 0.1)", 
+                border: "1px solid rgba(234, 179, 8, 0.3)", 
+                padding: "6px 14px", 
+                borderRadius: "30px", 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px" 
+              }}>
+                <AlertCircle size={16} color="#d97706" />
+                <span style={{ fontWeight: "600", color: "#b45309", fontSize: "0.85rem" }}>
+                  Standard MEC Format Active ({currentColumns.length} columns)
+                </span>
+              </div>
+            )}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "1rem" }}>
+          {/* Primary Parameter Selectors Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1.25rem" }}>
+            {/* 1. Regulation Selector (Only Regulations from Admin Panel) */}
             <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>Academic Year</label>
+              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                <BookOpen size={14} /> Regulation
+              </label>
+              <select 
+                className="input-field"
+                value={formData.regulation} 
+                onChange={e => handleRegulationChange(e.target.value)}
+                style={{ 
+                  fontWeight: "bold", 
+                  border: "2px solid rgba(99, 102, 241, 0.3)", 
+                  background: "#ffffff", 
+                  borderRadius: "10px",
+                  boxShadow: "0 2px 6px rgba(99, 102, 241, 0.05)"
+                }}
+              >
+                {availableRegulations.length > 0 ? (
+                  availableRegulations.map(reg => (
+                    <option key={reg} value={reg}>Regulation {reg}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="2023">Regulation 2023</option>
+                    <option value="2025">Regulation 2025</option>
+                    <option value="2021">Regulation 2021</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* 2. Academic Year */}
+            <div>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Academic Year</label>
               <input 
                 type="text" 
                 className="input-field" 
                 value={formData.academicYear} 
                 onChange={e => setFormData({ ...formData, academicYear: e.target.value })} 
                 placeholder="2026-27"
+                style={{ borderRadius: "10px", background: "#ffffff" }}
               />
             </div>
 
+            {/* 3. Department */}
             <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>Regulation</label>
-              <input 
-                type="text" 
-                list="reg-options-sheet"
-                className="input-field" 
-                value={formData.regulation} 
-                onChange={e => setFormData({ ...formData, regulation: e.target.value })} 
-                placeholder="2021"
-              />
-              <datalist id="reg-options-sheet">
-                {["2019", "2021", "2025"].map(r => <option key={r} value={r}>{r}</option>)}
-              </datalist>
-            </div>
-
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>Department</label>
-              <select className="input-field" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Department</label>
+              <select className="input-field" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })} style={{ borderRadius: "10px", background: "#ffffff" }}>
                 {["CSE", "AI&DS", "ECE", "EEE", "MECH", "CIVIL", "IT"].map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
 
+            {/* 4. Year */}
             <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>Year</label>
-              <select className="input-field" value={formData.year} onChange={e => setFormData({ ...formData, year: e.target.value })}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Year</label>
+              <select className="input-field" value={formData.year} onChange={e => setFormData({ ...formData, year: e.target.value })} style={{ borderRadius: "10px", background: "#ffffff" }}>
                 {["I", "II", "III", "IV"].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
 
+            {/* 5. Semester */}
             <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>Semester</label>
-              <select className="input-field" value={formData.semester} onChange={e => setFormData({ ...formData, semester: e.target.value })}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Semester</label>
+              <select className="input-field" value={formData.semester} onChange={e => setFormData({ ...formData, semester: e.target.value })} style={{ borderRadius: "10px", background: "#ffffff" }}>
                 {["I", "II", "III", "IV", "V", "VI", "VII", "VIII"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
+            {/* 6. Section */}
             <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>Section</label>
-              <select className="input-field" value={formData.section} onChange={e => setFormData({ ...formData, section: e.target.value })}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Section</label>
+              <select className="input-field" value={formData.section} onChange={e => setFormData({ ...formData, section: e.target.value })} style={{ borderRadius: "10px", background: "#ffffff" }}>
                 {["A", "B", "C", "D"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>Date</label>
-              <input 
-                type="text" 
-                className="input-field" 
-                value={formData.date} 
-                onChange={e => setFormData({ ...formData, date: e.target.value })} 
-                placeholder="29.10.2026"
-              />
-            </div>
-          </div>
-
-          <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px dashed var(--border-color)", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1rem" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--primary)" }}>Target Subject</label>
+            {/* 7. Target Subject (Auto Detect & Bound) */}
+            <div style={{ gridColumn: "span 2", minWidth: "260px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "var(--primary)", textTransform: "uppercase" }}>
+                <GraduationCap size={14} /> Target Subject (Auto Prints on Report)
+              </label>
               <select 
                 className="input-field" 
                 value={formData.isCustomSubject ? "CUSTOM" : formData.selectedSubject} 
@@ -811,17 +740,22 @@ export default function InternalMarkSheet() {
                     setFormData(prev => ({ ...prev, selectedSubject: val, isCustomSubject: false, customSubject: "" }));
                   }
                 }}
-                style={{ border: "1px solid var(--primary)", background: "rgba(99, 102, 241, 0.05)" }}
+                style={{ 
+                  border: "2px solid rgba(99, 102, 241, 0.3)", 
+                  background: "#ffffff", 
+                  fontWeight: "bold", 
+                  borderRadius: "10px" 
+                }}
               >
                 {subjects.map(s => <option key={s.code} value={s.code}>{s.code} - {s.name}</option>)}
-                <option value="CUSTOM">+ Type Custom Subject</option>
+                <option value="CUSTOM">+ Type Custom Subject Code & Name</option>
               </select>
             </div>
 
             {formData.isCustomSubject && (
-              <div>
-                <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--primary)" }}>
-                  <Type size={14} /> Enter Subject Code / Name
+              <div style={{ gridColumn: "span 2" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "var(--primary)" }}>
+                  <Type size={14} /> Enter Subject Code & Name
                 </label>
                 <input 
                   type="text" 
@@ -829,98 +763,91 @@ export default function InternalMarkSheet() {
                   placeholder="E.g. 21CS401 - Operating Systems"
                   value={formData.customSubject}
                   onChange={e => setFormData({ ...formData, customSubject: e.target.value })}
-                  style={{ border: "1px solid var(--primary)", background: "rgba(99, 102, 241, 0.05)" }}
+                  style={{ border: "2px solid var(--primary)", background: "#ffffff", borderRadius: "10px" }}
                   autoFocus
                 />
               </div>
             )}
-
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>
-                Reference / IQAC Code (Top-Right)
-              </label>
-              <input 
-                type="text" 
-                className="input-field" 
-                value={formData.iqacRef} 
-                onChange={e => setFormData({ ...formData, iqacRef: e.target.value })} 
-                placeholder="MEC/IQAC/2026-27/COE/022"
-              />
-            </div>
-
-            <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "bold", marginBottom: "0.4rem", color: "var(--text-muted)" }}>
-                Semester Session Text (Header)
-              </label>
-              <input 
-                type="text" 
-                className="input-field" 
-                value={formData.semesterSession} 
-                onChange={e => setFormData({ ...formData, semesterSession: e.target.value })} 
-                placeholder="ODD SEM NOVEMBER - 2026"
-              />
-            </div>
           </div>
 
-          {/* QUICK ACTIONS & EXAM SOURCE MAPPING DRAWER */}
-          <div style={{ marginTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <button
-                onClick={() => quickFillSM(5)}
-                className="btn btn-secondary"
-                style={{ fontSize: "0.8rem", padding: "4px 12px", borderRadius: "8px" }}
-              >
-                Fill All SM with 5
-              </button>
-              <button
-                onClick={processSubjectData}
-                className="btn btn-secondary"
-                style={{ fontSize: "0.8rem", padding: "4px 12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "4px" }}
-              >
-                <RefreshCw size={12} /> Recalculate
-              </button>
+          {/* Advanced Print & Header Settings Toggle */}
+          <div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px dashed rgba(226, 232, 240, 0.8)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.85rem", color: "#64748b" }}>
+              <span>Loaded Students: <strong style={{ color: "var(--primary)" }}>{studentsData.length}</strong></span>
+              <span>•</span>
+              <span>Print Format: <strong style={{ color: "#0f172a" }}>Course Code / Name : {getDisplaySubject()}</strong></span>
             </div>
 
             <button
-              onClick={() => setShowExamMapping(!showExamMapping)}
-              style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
+              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+              style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
             >
-              <Settings size={14} /> {showExamMapping ? "Hide Exam Mapping" : "Customize Exam Sources"} {showExamMapping ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              <Sliders size={14} /> {showAdvancedSettings ? "Hide Page & Header Settings" : "Page & Header Settings"} {showAdvancedSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
           </div>
 
-          {/* EXAM MAPPING COLLAPSIBLE */}
-          {showExamMapping && (
-            <div style={{ marginTop: "1rem", padding: "1rem", background: "var(--bg-main)", borderRadius: "10px", border: "1px solid var(--border-color)", animation: "fadeIn 0.2s ease" }}>
-              <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.85rem", color: "var(--text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <Info size={14} /> Map which uploaded exam in your database corresponds to each official column (Auto-detect matches standard names like Unit Test - I, CIA - I, etc.):
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.75rem" }}>
-                {[
-                  { key: "ut1", label: "UT-1 (30)" },
-                  { key: "ut2", label: "UT-2 (30)" },
-                  { key: "cia1", label: "CIA1 (50)" },
-                  { key: "ut3", label: "UT-3 (30)" },
-                  { key: "ut4", label: "UT-4 (30)" },
-                  { key: "cia2", label: "CIA2 (50)" },
-                  { key: "ut5", label: "UT-5 (30)" },
-                  { key: "cia3", label: "CIA3 (100)" },
-                  { key: "sm", label: "SM (5)" },
-                  { key: "mkc", label: "MKC (5)" }
-                ].map(col => (
-                  <div key={col.key}>
-                    <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "bold", marginBottom: "0.25rem", color: "var(--text-muted)" }}>{col.label}</label>
-                    <select
-                      className="input-field"
-                      style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                      value={examMapping[col.key]}
-                      onChange={e => setExamMapping({ ...examMapping, [col.key]: e.target.value })}
-                    >
-                      <option value="AUTO">Auto Detect</option>
-                      {availableExams.map(ex => <option key={ex} value={ex}>{ex}</option>)}
-                    </select>
-                  </div>
-                ))}
+          {/* Advanced Settings Drawer */}
+          {showAdvancedSettings && (
+            <div style={{ marginTop: "1rem", padding: "1.25rem", background: "rgba(241, 245, 249, 0.7)", borderRadius: "14px", border: "1px solid rgba(203, 213, 225, 0.6)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Rows Per Print Page
+                  </label>
+                  <select 
+                    className="input-field" 
+                    value={formData.rowsPerPage} 
+                    onChange={e => setFormData({ ...formData, rowsPerPage: parseInt(e.target.value) || 30 })}
+                    style={{ background: "#ffffff", padding: "6px 10px" }}
+                  >
+                    <option value={25}>25 Students per page</option>
+                    <option value={30}>30 Students per page (Recommended)</option>
+                    <option value={35}>35 Students per page</option>
+                    <option value={100}>All on 1 page (Single Continuous Table)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Reference / IQAC Code (Top-Right)
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    value={formData.iqacRef} 
+                    onChange={e => setFormData({ ...formData, iqacRef: e.target.value })} 
+                    placeholder="MEC/IQAC/2026-27/COE/022"
+                    style={{ background: "#ffffff", padding: "6px 10px" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Semester Session Text
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    value={formData.semesterSession} 
+                    onChange={e => setFormData({ ...formData, semesterSession: e.target.value })} 
+                    placeholder="EVEN SEM APRIL - 2027"
+                    style={{ background: "#ffffff", padding: "6px 10px" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Print Date
+                  </label>
+                  <input 
+                    type="text" 
+                    className="input-field" 
+                    value={formData.date} 
+                    onChange={e => setFormData({ ...formData, date: e.target.value })} 
+                    placeholder="29.10.2026"
+                    style={{ background: "#ffffff", padding: "6px 10px" }}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -930,27 +857,27 @@ export default function InternalMarkSheet() {
       {loading && (
         <div className="no-print" style={{ textAlign: "center", padding: "3rem", color: "var(--text-muted)" }}>
           <div style={{ width: "36px", height: "36px", border: "4px solid rgba(99,102,241,0.2)", borderTop: "4px solid var(--primary)", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 1rem auto" }}></div>
-          Loading student marks and calculating scale factors...
+          Loading student marks for Regulation {formData.regulation}...
         </div>
       )}
 
-      {/* PRINT STYLES - PRECISE A4 LANDSCAPE (MATCHES USER'S EXCEL PREVIEW) */}
+      {/* PRINT STYLES - ROBUST MULTI-PAGE LAYOUT */}
       <style>{`
         @media screen {
           .print-container {
             display: flex;
             flex-direction: column;
-            gap: 2rem;
+            gap: 2.5rem;
             align-items: center;
           }
           .print-sheet {
             background: #ffffff;
             color: #000000;
             width: 100%;
-            max-width: 1350px;
+            max-width: 1400px;
             padding: 25px 30px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-            border-radius: 6px;
+            box-shadow: 0 10px 35px rgba(0,0,0,0.15);
+            border-radius: 8px;
             font-family: "Times New Roman", Times, serif;
             box-sizing: border-box;
           }
@@ -1049,247 +976,136 @@ export default function InternalMarkSheet() {
         }
       `}</style>
 
-      {/* RENDER PAGES (EACH 30 STUDENTS CHUNK) */}
+      {/* RENDER PAGES (EACH CHUNK WITH FULL CONSISTENT HEADER & LAYOUT) */}
       {!loading && (
         <div className="print-container">
           {studentPages.map((pageStudents, pageIndex) => {
             const pageNum = pageIndex + 1;
             const totalPages = studentPages.length;
             const isLastPage = pageNum === totalPages;
-            const startSno = pageIndex * 30 + 1;
+            const startSno = pageIndex * (formData.rowsPerPage || 30) + 1;
 
             return (
               <div key={pageIndex} className="print-sheet">
                 <div>
-                  {/* PAGE 1 FULL INSTITUTION HEADER (EXACT MATCH TO IMAGE 2) */}
-                  {pageNum === 1 ? (
-                    <div>
-                      {/* Top Right Reference Code */}
-                      <div style={{ textAlign: "right", fontSize: "11px", fontWeight: "bold", fontFamily: "Arial, sans-serif", marginBottom: "4px" }}>
-                        {formData.iqacRef}
-                      </div>
+                  {/* TOP HEADER BLOCK - UNIFORM ACROSS ALL PAGES */}
+                  {/* Top Right Reference Code */}
+                  <div style={{ textAlign: "right", fontSize: "11px", fontWeight: "bold", fontFamily: "Arial, sans-serif", marginBottom: "4px" }}>
+                    {formData.iqacRef}
+                  </div>
 
-                      {/* College Logo + Name Block */}
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: "10px" }}>
-                        <div style={{ position: "absolute", left: "0", top: "0" }}>
-                          <img 
-                            src="/logo1.png" 
-                            alt="MEC Logo" 
-                            style={{ height: "65px", width: "auto", objectFit: "contain" }}
-                            onError={(e) => { e.target.style.display = "none"; }}
-                          />
-                        </div>
-
-                        <div style={{ textAlign: "center" }}>
-                          <h2 style={{ fontSize: "20px", fontWeight: "bold", margin: "0", letterSpacing: "0.5px", fontFamily: '"Times New Roman", Times, serif' }}>
-                            MUTHAYAMMAL ENGINEERING COLLEGE
-                          </h2>
-                          <div style={{ fontSize: "13px", fontWeight: "bold", margin: "2px 0 1px 0" }}>
-                            (Autonomous)
-                          </div>
-                          <div style={{ fontSize: "11px", margin: 0 }}>
-                            Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Sub-Header Metadata Row 1 */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", fontWeight: "bold", margin: "10px 0 6px 0", fontFamily: '"Times New Roman", Times, serif' }}>
-                        <div style={{ flex: "0 0 160px" }}>Dept: {formData.department}</div>
-                        <div style={{ flex: "0 0 200px" }}>Year/Sem/Sec: {formData.year} / {formData.semester} / {formData.section}</div>
-                        <div style={{ flex: "1", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
-                        <div style={{ flex: "0 0 140px", textAlign: "right" }}>Date: {formData.date}</div>
-                      </div>
-
-                      {/* Sub-Header Metadata Row 2 (Course Code / Name) */}
-                      <div style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "8px", fontFamily: '"Times New Roman", Times, serif' }}>
-                        Course Code / Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
-                      </div>
+                  {/* HEADER BANNER / LOGO BLOCK */}
+                  {headerImage ? (
+                    <div style={{ textAlign: "center", marginBottom: "8px" }}>
+                      <img 
+                        src={headerImage} 
+                        alt="College Header Banner" 
+                        style={{ maxHeight: "90px", width: "100%", objectFit: "contain" }} 
+                      />
                     </div>
                   ) : (
-                    /* PAGE 2+ CONTINUATION HEADER (EXACT MATCH TO IMAGE 1) */
-                    <div style={{ marginBottom: "8px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: "bold", fontFamily: '"Times New Roman", Times, serif', paddingBottom: "4px" }}>
-                        Course Code / Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: "8px" }}>
+                      <div style={{ position: "absolute", left: "0", top: "0" }}>
+                        <img 
+                          src="/logo1.png" 
+                          alt="MEC Logo" 
+                          style={{ height: "65px", width: "auto", objectFit: "contain" }}
+                          onError={(e) => { e.target.style.display = "none"; }}
+                        />
+                      </div>
+
+                      <div style={{ textAlign: "center" }}>
+                        <h2 style={{ fontSize: "20px", fontWeight: "bold", margin: "0", letterSpacing: "0.5px", fontFamily: '"Times New Roman", Times, serif' }}>
+                          MUTHAYAMMAL ENGINEERING COLLEGE
+                        </h2>
+                        <div style={{ fontSize: "13px", fontWeight: "bold", margin: "2px 0 1px 0" }}>
+                          (Autonomous)
+                        </div>
+                        <div style={{ fontSize: "11px", margin: 0 }}>
+                          Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* TABLE COMPONENT */}
+                  {/* Metadata Row 1 */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", fontWeight: "bold", margin: "6px 0 4px 0", fontFamily: '"Times New Roman", Times, serif' }}>
+                    <div style={{ flex: "0 0 160px" }}>Dept: {formData.department}</div>
+                    <div style={{ flex: "0 0 200px" }}>Year/Sem/Sec: {formData.year} / {formData.semester} / {formData.section}</div>
+                    <div style={{ flex: "1", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
+                    <div style={{ flex: "0 0 140px", textAlign: "right" }}>Date: {formData.date}</div>
+                  </div>
+
+                  {/* Metadata Row 2 (Course Code / Name - Automatically Populated & Printed) */}
+                  <div style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "6px", fontFamily: '"Times New Roman", Times, serif' }}>
+                    Course Code / Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
+                  </div>
+
+                  {/* DYNAMIC TEMPLATE TABLE */}
                   <table className="mec-official-table">
                     <thead>
                       {/* HEADER ROW 1 */}
                       <tr>
-                        <th rowSpan={2} style={{ width: "38px" }}>S.No</th>
-                        <th rowSpan={2} style={{ width: "105px" }}>Reg.No.</th>
-                        <th rowSpan={2} style={{ width: "200px" }}>Name</th>
-                        <th style={{ width: "42px" }}>UT-1</th>
-                        <th style={{ width: "42px" }}>UT-2</th>
-                        <th style={{ width: "42px" }}>CIA1</th>
-                        <th style={{ width: "42px" }}>IM</th>
-                        <th style={{ width: "42px" }}>UT-3</th>
-                        <th style={{ width: "42px" }}>UT-4</th>
-                        <th style={{ width: "42px" }}>CIA2</th>
-                        <th style={{ width: "42px" }}>IM</th>
-                        <th style={{ width: "42px" }}>UT-5</th>
-                        <th style={{ width: "45px" }}>CIA3</th>
-                        <th style={{ width: "42px" }}>IM</th>
-                        <th style={{ width: "38px" }}>SM</th>
-                        <th style={{ width: "40px" }}>MKC</th>
-                        <th style={{ width: "50px" }}>TOTAL</th>
+                        <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "38px" }}>S.No</th>
+                        <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "105px" }}>Reg.No.</th>
+                        <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "200px" }}>Name</th>
+                        {currentColumns.map((col, idx) => {
+                          const { title } = parseHeading(col.heading);
+                          return (
+                            <th key={idx}>
+                              {title}
+                            </th>
+                          );
+                        })}
                       </tr>
 
-                      {/* HEADER ROW 2 (MAX MARKS) */}
-                      <tr>
-                        <th>30</th>
-                        <th>30</th>
-                        <th>50</th>
-                        <th>10</th>
-                        <th>30</th>
-                        <th>30</th>
-                        <th>50</th>
-                        <th>10</th>
-                        <th>30</th>
-                        <th>100</th>
-                        <th>10</th>
-                        <th>5</th>
-                        <th>5</th>
-                        <th>40</th>
-                      </tr>
+                      {/* HEADER ROW 2 (MAX MARKS ROW IF APPLICABLE) */}
+                      {hasSubHeaders && (
+                        <tr>
+                          {currentColumns.map((col, idx) => {
+                            const { maxMark } = parseHeading(col.heading);
+                            return (
+                              <th key={idx}>
+                                {maxMark}
+                              </th>
+                            );
+                          })}
+                        </tr>
+                      )}
                     </thead>
 
                     <tbody>
                       {pageStudents.map((st, i) => {
-                        const globalIndex = pageIndex * 30 + i;
+                        const globalIndex = pageIndex * (formData.rowsPerPage || 30) + i;
                         const sNo = startSno + i;
 
                         return (
                           <tr key={st.regNo || i} style={{ height: "19px" }}>
-                            <td>{st.regNo ? sNo : ""}</td>
+                            <td>{sNo}</td>
                             <td>{st.regNo || ""}</td>
                             <td className="name-col" title={st.name}>{st.name || ""}</td>
 
-                            {/* UT-1 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.ut1} 
-                                  onChange={e => handleCellEdit(globalIndex, "ut1", e.target.value)} 
-                                />
-                              ) : (st.ut1 !== undefined && st.ut1 !== "" ? st.ut1 : "")}
-                            </td>
+                            {currentColumns.map((col, colIdx) => {
+                              const val = st[col.heading];
+                              const isFormula = col.type === "formula" || col.type === "calculation";
 
-                            {/* UT-2 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.ut2} 
-                                  onChange={e => handleCellEdit(globalIndex, "ut2", e.target.value)} 
-                                />
-                              ) : (st.ut2 !== undefined && st.ut2 !== "" ? st.ut2 : "")}
-                            </td>
-
-                            {/* CIA1 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.cia1} 
-                                  onChange={e => handleCellEdit(globalIndex, "cia1", e.target.value)} 
-                                />
-                              ) : (st.cia1 !== undefined && st.cia1 !== "" ? st.cia1 : "")}
-                            </td>
-
-                            {/* IM1 (Calculated) */}
-                            <td style={{ fontWeight: "600" }}>{st.regNo ? st.im1 : ""}</td>
-
-                            {/* UT-3 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.ut3} 
-                                  onChange={e => handleCellEdit(globalIndex, "ut3", e.target.value)} 
-                                />
-                              ) : (st.ut3 !== undefined && st.ut3 !== "" ? st.ut3 : "")}
-                            </td>
-
-                            {/* UT-4 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.ut4} 
-                                  onChange={e => handleCellEdit(globalIndex, "ut4", e.target.value)} 
-                                />
-                              ) : (st.ut4 !== undefined && st.ut4 !== "" ? st.ut4 : "")}
-                            </td>
-
-                            {/* CIA2 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.cia2} 
-                                  onChange={e => handleCellEdit(globalIndex, "cia2", e.target.value)} 
-                                />
-                              ) : (st.cia2 !== undefined && st.cia2 !== "" ? st.cia2 : "")}
-                            </td>
-
-                            {/* IM2 (Calculated) */}
-                            <td style={{ fontWeight: "600" }}>{st.regNo ? st.im2 : ""}</td>
-
-                            {/* UT-5 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.ut5} 
-                                  onChange={e => handleCellEdit(globalIndex, "ut5", e.target.value)} 
-                                />
-                              ) : (st.ut5 !== undefined && st.ut5 !== "" ? st.ut5 : "")}
-                            </td>
-
-                            {/* CIA3 */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.cia3} 
-                                  onChange={e => handleCellEdit(globalIndex, "cia3", e.target.value)} 
-                                />
-                              ) : (st.cia3 !== undefined && st.cia3 !== "" ? st.cia3 : "")}
-                            </td>
-
-                            {/* IM3 (Calculated) */}
-                            <td style={{ fontWeight: "600" }}>{st.regNo ? st.im3 : ""}</td>
-
-                            {/* SM (Seminar / Skill) */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.sm} 
-                                  onChange={e => handleCellEdit(globalIndex, "sm", e.target.value)} 
-                                />
-                              ) : (st.sm !== undefined && st.sm !== "" ? st.sm : "")}
-                            </td>
-
-                            {/* MKC (Model Exam) */}
-                            <td>
-                              {isEditingMarks && st.regNo ? (
-                                <input 
-                                  className="editable-cell-input" 
-                                  value={st.mkc} 
-                                  onChange={e => handleCellEdit(globalIndex, "mkc", e.target.value)} 
-                                />
-                              ) : (st.mkc !== undefined && st.mkc !== "" ? st.mkc : "")}
-                            </td>
-
-                            {/* TOTAL (Calculated) */}
-                            <td style={{ fontWeight: "bold" }}>{st.regNo ? st.total : ""}</td>
+                              return (
+                                <td 
+                                  key={colIdx} 
+                                  style={{ fontWeight: isFormula ? "bold" : "normal" }}
+                                >
+                                  {isEditingMarks && !isFormula ? (
+                                    <input 
+                                      className="editable-cell-input" 
+                                      value={val !== undefined ? val : ""} 
+                                      onChange={e => handleCellEdit(globalIndex, col.heading, e.target.value)} 
+                                    />
+                                  ) : (
+                                    val !== undefined ? val : ""
+                                  )}
+                                </td>
+                              );
+                            })}
                           </tr>
                         );
                       })}
@@ -1297,7 +1113,7 @@ export default function InternalMarkSheet() {
                   </table>
                 </div>
 
-                {/* BOTTOM SIGNATURE BLOCK (APPEARS ON FINAL PAGE AS IN IMAGE 1) */}
+                {/* BOTTOM SIGNATURE BLOCK (APPEARS ON FINAL PAGE) */}
                 <div style={{ marginTop: "24px" }}>
                   {isLastPage ? (
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "0 20px", fontWeight: "bold", fontSize: "12px", fontFamily: '"Times New Roman", Times, serif', marginBottom: "15px" }}>
@@ -1326,7 +1142,7 @@ export default function InternalMarkSheet() {
 
       {/* EMPTY STATE */}
       {!loading && studentsData.length === 0 && (
-        <div className="no-print" style={{ textAlign: "center", padding: "3rem", background: "var(--bg-secondary)", borderRadius: "12px", border: "1px dashed var(--border-color)", marginTop: "1rem" }}>
+        <div className="no-print" style={{ textAlign: "center", padding: "3rem", background: "var(--bg-secondary)", borderRadius: "16px", border: "1px dashed var(--border-color)", marginTop: "1rem" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "1.1rem", margin: "0 0 0.5rem 0" }}>
             No students found for {formData.department} {formData.year}/{formData.semester}/{formData.section}.
           </p>
