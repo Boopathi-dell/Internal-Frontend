@@ -43,7 +43,9 @@ export default function InternalMarkSheet() {
     iqacRef: "MEC/IQAC/2026-27/COE/022",
     date: new Date().toLocaleDateString("en-GB").replace(/\//g, "."),
     semesterSession: "EVEN SEM APRIL - 2027",
-    rowsPerPage: 30
+    pageSplitMode: "2pages", // "2pages" (default: Strict 2 Pages Balanced), "1page", "30", "25"
+    tableWidthMode: "autoFit", // "autoFit" (default: Auto-Fit Content Snug), "full" (100% Stretch)
+    nameColWidth: "auto" // "auto" (default: Auto-Fit to student names), "160px", "200px", "240px"
   });
 
   const [headerImage, setHeaderImage] = useState(() => localStorage.getItem("internalMarkHeaderImage") || "");
@@ -474,21 +476,41 @@ export default function InternalMarkSheet() {
     return { title: headingStr, maxMark: "" };
   };
 
-  // Multi-page chunking: Consistent pages whether 1, 2, or 3 pages!
+  // Multi-page chunking: Strict 2 Pages (Balanced) or user-selected mode
   const studentPages = useMemo(() => {
-    const pages = [];
-    const chunkSize = formData.rowsPerPage || 30;
-
     if (studentsData.length === 0) {
-      pages.push([]);
-      return pages;
+      return [[]];
     }
 
+    const mode = formData.pageSplitMode || "2pages";
+
+    // Strict 2 Pages (Balanced): Guarantees max 2 pages for any class size!
+    if (mode === "2pages") {
+      // If student count <= 22, it fits comfortably on 1 single sheet
+      if (studentsData.length <= 22) {
+        return [studentsData];
+      }
+      // Above 22 students: Divide into exactly 2 balanced pages
+      const half = Math.ceil(studentsData.length / 2);
+      return [
+        studentsData.slice(0, half),
+        studentsData.slice(half)
+      ];
+    }
+
+    // Single continuous sheet (All students on 1 page)
+    if (mode === "1page") {
+      return [studentsData];
+    }
+
+    // Fixed rows per page (e.g. 25, 30, 35)
+    const chunkSize = parseInt(mode) || 30;
+    const pages = [];
     for (let i = 0; i < studentsData.length; i += chunkSize) {
       pages.push(studentsData.slice(i, i + chunkSize));
     }
     return pages;
-  }, [studentsData, formData.rowsPerPage]);
+  }, [studentsData, formData.pageSplitMode]);
 
   const handlePrint = () => {
     window.print();
@@ -872,40 +894,79 @@ export default function InternalMarkSheet() {
             )}
           </div>
 
-          {/* Advanced Print & Header Settings Toggle */}
+          {/* Advanced Print & Layout Settings Toggle */}
           <div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px dashed rgba(226, 232, 240, 0.8)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.85rem", color: "#64748b" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.85rem", color: "#64748b", flexWrap: "wrap" }}>
               <span>Loaded Students: <strong style={{ color: "var(--primary)" }}>{studentsData.length}</strong></span>
               <span>•</span>
-              <span>Print Format: <strong style={{ color: "#0f172a" }}>Course Code / Name : {getDisplaySubject()}</strong></span>
+              <span>Print Pages: <strong style={{ color: "#16a34a" }}>{formData.pageSplitMode === "2pages" ? "Strict 2 Pages (Balanced)" : `${formData.pageSplitMode} Mode`}</strong></span>
+              <span>•</span>
+              <span>Table Layout: <strong style={{ color: "#6366f1" }}>{formData.tableWidthMode === "autoFit" ? "Auto-Fit Content (Snug)" : "Full Width (100%)"}</strong></span>
+              <span>•</span>
+              <span>Name Col: <strong style={{ color: "#0f172a" }}>{formData.nameColWidth === "auto" ? "Auto-Fit" : formData.nameColWidth}</strong></span>
             </div>
 
             <button
               onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
               style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
             >
-              <Sliders size={14} /> {showAdvancedSettings ? "Hide Page & Header Settings" : "Page & Header Settings"} {showAdvancedSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              <Sliders size={14} /> {showAdvancedSettings ? "Hide Page & Layout Settings" : "Page & Layout Settings"} {showAdvancedSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
           </div>
 
           {/* Advanced Settings Drawer */}
           {showAdvancedSettings && (
             <div style={{ marginTop: "1rem", padding: "1.25rem", background: "rgba(241, 245, 249, 0.7)", borderRadius: "14px", border: "1px solid rgba(203, 213, 225, 0.6)" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem" }}>
+                {/* Print Page Layout */}
                 <div>
                   <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
-                    Rows Per Print Page
+                    Print Page Layout (Max 2 Pages)
                   </label>
                   <select 
                     className="input-field" 
-                    value={formData.rowsPerPage} 
-                    onChange={e => setFormData({ ...formData, rowsPerPage: parseInt(e.target.value) || 30 })}
+                    value={formData.pageSplitMode} 
+                    onChange={e => setFormData({ ...formData, pageSplitMode: e.target.value })}
+                    style={{ background: "#ffffff", padding: "6px 10px", fontWeight: "600", borderColor: "#6366f1" }}
+                  >
+                    <option value="2pages">Strict 2 Pages (Balanced - Recommended)</option>
+                    <option value="1page">Single Page (All Students on 1 Sheet)</option>
+                    <option value="30">Fixed 30 Students per Page</option>
+                    <option value="25">Fixed 25 Students per Page</option>
+                  </select>
+                </div>
+
+                {/* Table Width Auto-Fit Mode */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Table Width Auto-Fit
+                  </label>
+                  <select 
+                    className="input-field" 
+                    value={formData.tableWidthMode} 
+                    onChange={e => setFormData({ ...formData, tableWidthMode: e.target.value })}
+                    style={{ background: "#ffffff", padding: "6px 10px", fontWeight: "600", borderColor: "#6366f1" }}
+                  >
+                    <option value="autoFit">Auto-Fit Content Width (Snug & Compact)</option>
+                    <option value="full">Full Width (100% Stretch across page)</option>
+                  </select>
+                </div>
+
+                {/* Student Name Column Width */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Name Column Width Auto-Fix
+                  </label>
+                  <select 
+                    className="input-field" 
+                    value={formData.nameColWidth} 
+                    onChange={e => setFormData({ ...formData, nameColWidth: e.target.value })}
                     style={{ background: "#ffffff", padding: "6px 10px" }}
                   >
-                    <option value={25}>25 Students per page</option>
-                    <option value={30}>30 Students per page (Recommended)</option>
-                    <option value={35}>35 Students per page</option>
-                    <option value={100}>All on 1 page (Single Continuous Table)</option>
+                    <option value="auto">Auto-Fit (Fit to Longest Name)</option>
+                    <option value="160px">Compact (160px)</option>
+                    <option value="200px">Standard (200px)</option>
+                    <option value="240px">Wide (240px)</option>
                   </select>
                 </div>
 
@@ -997,7 +1058,7 @@ export default function InternalMarkSheet() {
         @media print {
           @page {
             size: landscape;
-            margin: 6mm 8mm;
+            margin: 4mm 6mm;
           }
           html, body {
             background: #ffffff !important;
@@ -1053,38 +1114,66 @@ export default function InternalMarkSheet() {
             padding: 0 !important;
           }
           .print-sheet img.header-banner-img {
-            max-height: 52px !important;
+            max-height: 48px !important;
           }
           .print-sheet img.mec-crest-logo {
-            height: 48px !important;
+            height: 44px !important;
           }
           .print-bottom-block {
-            margin-top: 8px !important;
+            margin-top: 6px !important;
             margin-bottom: 0 !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .print-metadata-row {
+            margin: 3px 0 2px 0 !important;
+            font-size: 11px !important;
+          }
+          .print-signatures {
+            margin-bottom: 4px !important;
+            font-size: 10px !important;
           }
           .mec-official-table tr {
-            height: 16px !important;
+            height: 15px !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
           .mec-official-table th, .mec-official-table td {
-            padding: 1.5px 2px !important;
-            font-size: 10px !important;
+            padding: 1px 3px !important;
+            font-size: 9px !important;
             line-height: 1.1 !important;
+          }
+          .mec-official-table.auto-fit-table {
+            width: auto !important;
+            max-width: 100% !important;
+            margin: 0 auto !important;
+          }
+          .mec-official-table th.col-name, .mec-official-table td.col-name {
+            max-width: 200px !important;
+            padding: 1px 6px !important;
+          }
+          .table-responsive-wrapper {
+            overflow: visible !important;
           }
         }
 
         .mec-official-table {
-          width: 100%;
           border-collapse: collapse;
           font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
           font-size: 11px;
           color: #000000;
         }
+        .mec-official-table.auto-fit-table {
+          width: auto !important;
+          max-width: 100% !important;
+          margin: 0 auto !important;
+          table-layout: auto !important;
+        }
+        .mec-official-table.full-width-table {
+          width: 100% !important;
+        }
         .mec-official-table th, .mec-official-table td {
           border: 1px solid #000000;
-          padding: 2.5px 2px;
-          text-align: center;
           vertical-align: middle;
         }
         .mec-official-table th {
@@ -1093,12 +1182,38 @@ export default function InternalMarkSheet() {
           font-family: "Times New Roman", Times, serif;
           font-size: 11px;
         }
-        .mec-official-table td.name-col {
-          text-align: left;
-          padding-left: 6px;
+        .mec-official-table th.col-sno, .mec-official-table td.col-sno {
+          width: 1%;
+          min-width: 34px;
+          max-width: 42px;
+          white-space: nowrap;
+          text-align: center;
+          padding: 2.5px 4px;
+        }
+        .mec-official-table th.col-reg, .mec-official-table td.col-reg {
+          width: 1%;
+          min-width: 95px;
+          max-width: 110px;
+          white-space: nowrap;
+          text-align: center;
+          padding: 2.5px 6px;
+        }
+        .mec-official-table th.col-name, .mec-official-table td.col-name {
+          width: auto;
+          min-width: 140px;
+          max-width: 240px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          text-align: left;
+          padding: 2.5px 8px;
+        }
+        .mec-official-table th.col-mark, .mec-official-table td.col-mark {
+          width: 1%;
+          min-width: 40px;
+          white-space: nowrap;
+          text-align: center;
+          padding: 2.5px 5px;
         }
       `}</style>
 
@@ -1109,7 +1224,7 @@ export default function InternalMarkSheet() {
             const pageNum = pageIndex + 1;
             const totalPages = studentPages.length;
             const isLastPage = pageNum === totalPages;
-            const startSno = pageIndex * (formData.rowsPerPage || 30) + 1;
+            const startSno = studentPages.slice(0, pageIndex).reduce((sum, p) => sum + p.length, 0) + 1;
 
             return (
               <div key={pageIndex} className="print-sheet">
@@ -1157,109 +1272,145 @@ export default function InternalMarkSheet() {
                   )}
 
                   {/* Metadata Row 1 */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", fontWeight: "bold", margin: "6px 0 4px 0", fontFamily: '"Times New Roman", Times, serif' }}>
+                  <div className="print-metadata-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", fontWeight: "bold", margin: "6px 0 4px 0", fontFamily: '"Times New Roman", Times, serif' }}>
                     <div style={{ flex: "0 0 160px" }}>Dept: {formData.department}</div>
                     <div style={{ flex: "0 0 200px" }}>Year/Sem/Sec: {formData.year} / {formData.semester} / {formData.section}</div>
                     <div style={{ flex: "1", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
                     <div style={{ flex: "0 0 140px", textAlign: "right" }}>Date: {formData.date}</div>
                   </div>
 
-                  {/* Metadata Row 2 (Course Code / Name - Automatically Populated & Printed) */}
-                  <div style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "6px", fontFamily: '"Times New Roman", Times, serif' }}>
-                    Course Code / Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
-                  </div>
+                  {/* TABLE WRAPPER - SUPPORTS AUTO-FIT CONTENT WIDTH OR FULL WIDTH */}
+                  <div className="table-responsive-wrapper" style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: formData.tableWidthMode === "autoFit" ? "center" : "stretch",
+                    width: "100%",
+                    overflowX: "auto"
+                  }}>
+                    <div style={{
+                      width: formData.tableWidthMode === "autoFit" ? "fit-content" : "100%",
+                      minWidth: formData.tableWidthMode === "autoFit" ? "min(100%, 750px)" : "100%",
+                      maxWidth: "100%"
+                    }}>
+                      {/* Metadata Row 2 (Course Code / Name - Automatically Populated & Printed) */}
+                      <div style={{ fontSize: "12px", fontWeight: "bold", margin: "2px 0 6px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left" }}>
+                        Course Code / Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
+                      </div>
 
-                  {/* DYNAMIC TEMPLATE TABLE */}
-                  <table className="mec-official-table">
-                    <thead>
-                      {/* HEADER ROW 1 */}
-                      <tr>
-                        <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "38px" }}>S.No</th>
-                        <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "105px" }}>Reg.No.</th>
-                        <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "200px" }}>Name</th>
-                        {visibleColumns.map((col, idx) => {
-                          const { title } = parseHeading(col.heading);
-                          return (
-                            <th key={idx}>
-                              {title}
+                      {/* DYNAMIC TEMPLATE TABLE */}
+                      <table className={`mec-official-table ${formData.tableWidthMode === "autoFit" ? "auto-fit-table" : "full-width-table"}`}>
+                        <thead>
+                          {/* HEADER ROW 1 */}
+                          <tr>
+                            <th rowSpan={hasSubHeaders ? 2 : 1} className="col-sno">S.No</th>
+                            <th rowSpan={hasSubHeaders ? 2 : 1} className="col-reg">Reg.No.</th>
+                            <th 
+                              rowSpan={hasSubHeaders ? 2 : 1} 
+                              className="col-name"
+                              style={{
+                                width: formData.nameColWidth === "auto" ? "auto" : formData.nameColWidth,
+                                minWidth: formData.nameColWidth === "auto" ? "140px" : formData.nameColWidth,
+                                maxWidth: formData.nameColWidth === "auto" ? "240px" : formData.nameColWidth
+                              }}
+                            >
+                              Name
                             </th>
-                          );
-                        })}
-                      </tr>
-
-                      {/* HEADER ROW 2 (MAX MARKS ROW IF APPLICABLE) */}
-                      {hasSubHeaders && (
-                        <tr>
-                          {visibleColumns.map((col, idx) => {
-                            const { maxMark } = parseHeading(col.heading);
-                            return (
-                              <th key={idx}>
-                                {maxMark}
-                              </th>
-                            );
-                          })}
-                        </tr>
-                      )}
-                    </thead>
-
-                    <tbody>
-                      {pageStudents.map((st, i) => {
-                        const globalIndex = pageIndex * (formData.rowsPerPage || 30) + i;
-                        const sNo = startSno + i;
-
-                        return (
-                          <tr key={st.regNo || i} style={{ height: "19px" }}>
-                            <td>{sNo}</td>
-                            <td>{st.regNo || ""}</td>
-                            <td className="name-col" title={st.name}>{st.name || ""}</td>
-
-                            {visibleColumns.map((col, colIdx) => {
-                              const val = st[col.heading];
-                              const isFormula = col.type === "formula" || col.type === "calculation";
-
+                            {visibleColumns.map((col, idx) => {
+                              const { title } = parseHeading(col.heading);
                               return (
-                                <td 
-                                  key={colIdx} 
-                                  style={{ fontWeight: isFormula ? "bold" : "normal" }}
-                                >
-                                  {isEditingMarks && !isFormula ? (
-                                    <input 
-                                      className="editable-cell-input" 
-                                      value={val !== undefined ? val : ""} 
-                                      onChange={e => handleCellEdit(globalIndex, col.heading, e.target.value)} 
-                                    />
-                                  ) : (
-                                    val !== undefined ? val : ""
-                                  )}
-                                </td>
+                                <th key={idx} className="col-mark">
+                                  {title}
+                                </th>
                               );
                             })}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
 
-                {/* BOTTOM SIGNATURE BLOCK (APPEARS ON FINAL PAGE) */}
-                <div className="print-bottom-block" style={{ marginTop: "10px" }}>
-                  {isLastPage ? (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "0 20px", fontWeight: "bold", fontSize: "11px", fontFamily: '"Times New Roman", Times, serif', marginBottom: "8px" }}>
-                      <div style={{ textAlign: "center", minWidth: "120px" }}>
-                        <div>Course Faculty</div>
-                      </div>
-                      <div style={{ textAlign: "center", minWidth: "140px" }}>
-                        <div>Year Co-ordinator</div>
-                      </div>
-                      <div style={{ textAlign: "center", minWidth: "120px" }}>
-                        <div>HoD</div>
+                          {/* HEADER ROW 2 (MAX MARKS ROW IF APPLICABLE) */}
+                          {hasSubHeaders && (
+                            <tr>
+                              {visibleColumns.map((col, idx) => {
+                                const { maxMark } = parseHeading(col.heading);
+                                return (
+                                  <th key={idx} className="col-mark">
+                                    {maxMark}
+                                  </th>
+                                );
+                              })}
+                            </tr>
+                          )}
+                        </thead>
+
+                        <tbody>
+                          {pageStudents.map((st, i) => {
+                            const sNo = startSno + i;
+                            const globalIndex = startSno - 1 + i;
+
+                            return (
+                              <tr key={st.regNo || i} style={{ height: "19px" }}>
+                                <td className="col-sno">{sNo}</td>
+                                <td className="col-reg">{st.regNo || ""}</td>
+                                <td 
+                                  className="col-name name-col" 
+                                  title={st.name}
+                                  style={{
+                                    width: formData.nameColWidth === "auto" ? "auto" : formData.nameColWidth,
+                                    minWidth: formData.nameColWidth === "auto" ? "140px" : formData.nameColWidth,
+                                    maxWidth: formData.nameColWidth === "auto" ? "240px" : formData.nameColWidth
+                                  }}
+                                >
+                                  {st.name || ""}
+                                </td>
+
+                                {visibleColumns.map((col, colIdx) => {
+                                  const val = st[col.heading];
+                                  const isFormula = col.type === "formula" || col.type === "calculation";
+
+                                  return (
+                                    <td 
+                                      key={colIdx} 
+                                      className="col-mark"
+                                      style={{ fontWeight: isFormula ? "bold" : "normal" }}
+                                    >
+                                      {isEditingMarks && !isFormula ? (
+                                        <input 
+                                          className="editable-cell-input" 
+                                          value={val !== undefined ? val : ""} 
+                                          onChange={e => handleCellEdit(globalIndex, col.heading, e.target.value)} 
+                                        />
+                                      ) : (
+                                        val !== undefined ? val : ""
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {/* BOTTOM SIGNATURE BLOCK (APPEARS ON FINAL PAGE) */}
+                      <div className="print-bottom-block" style={{ marginTop: "10px" }}>
+                        {isLastPage ? (
+                          <div className="print-signatures" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "0 15px", fontWeight: "bold", fontSize: "11px", fontFamily: '"Times New Roman", Times, serif', marginBottom: "8px" }}>
+                            <div style={{ textAlign: "center", minWidth: "120px" }}>
+                              <div>Course Faculty</div>
+                            </div>
+                            <div style={{ textAlign: "center", minWidth: "140px" }}>
+                              <div>Year Co-ordinator</div>
+                            </div>
+                            <div style={{ textAlign: "center", minWidth: "120px" }}>
+                              <div>HoD</div>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Centered Page Footer */}
+                        <div style={{ textAlign: "center", fontSize: "11px", fontFamily: '"Times New Roman", Times, serif' }}>
+                          Page {pageNum} of {totalPages}
+                        </div>
                       </div>
                     </div>
-                  ) : null}
-
-                  {/* Centered Page Footer */}
-                  <div style={{ textAlign: "center", fontSize: "11px", fontFamily: '"Times New Roman", Times, serif' }}>
-                    Page {pageNum} of {totalPages}
                   </div>
                 </div>
               </div>
