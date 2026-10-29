@@ -861,7 +861,7 @@ export default function InternalMarkSheet() {
         </div>
       )}
 
-      {/* PRINT STYLES - ROBUST MULTI-PAGE LAYOUT */}
+      {/* PRINT STYLES - ROBUST MULTI-PAGE LAYOUT WITHOUT EMPTY PAGES */}
       <style>{`
         @media screen {
           .print-container {
@@ -895,13 +895,16 @@ export default function InternalMarkSheet() {
         @media print {
           @page {
             size: landscape;
-            margin: 6mm 8mm 6mm 8mm;
+            margin: 6mm 8mm;
           }
           html, body {
             background: #ffffff !important;
             color: #000000 !important;
             margin: 0 !important;
             padding: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -912,14 +915,14 @@ export default function InternalMarkSheet() {
             visibility: visible;
           }
           .print-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
+            position: static !important;
+            display: block !important;
+            width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
           }
           .print-sheet {
+            display: block !important;
             width: 100% !important;
             max-width: 100% !important;
             box-shadow: none !important;
@@ -927,16 +930,17 @@ export default function InternalMarkSheet() {
             border-radius: 0 !important;
             padding: 0 !important;
             margin: 0 !important;
-            page-break-after: always;
-            break-after: page;
-            min-height: 190mm;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
+            height: auto !important;
+            min-height: 0 !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            overflow: visible !important;
           }
           .print-sheet:last-child {
-            page-break-after: avoid;
-            break-after: avoid;
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
           .no-print {
             display: none !important;
@@ -945,6 +949,26 @@ export default function InternalMarkSheet() {
             border: none !important;
             background: transparent !important;
             padding: 0 !important;
+          }
+          .print-sheet img.header-banner-img {
+            max-height: 52px !important;
+          }
+          .print-sheet img.mec-crest-logo {
+            height: 48px !important;
+          }
+          .print-bottom-block {
+            margin-top: 8px !important;
+            margin-bottom: 0 !important;
+          }
+          .mec-official-table tr {
+            height: 16px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .mec-official-table th, .mec-official-table td {
+            padding: 1.5px 2px !important;
+            font-size: 10px !important;
+            line-height: 1.1 !important;
           }
         }
 
@@ -957,7 +981,7 @@ export default function InternalMarkSheet() {
         }
         .mec-official-table th, .mec-official-table td {
           border: 1px solid #000000;
-          padding: 3px 2px;
+          padding: 2.5px 2px;
           text-align: center;
           vertical-align: middle;
         }
@@ -965,7 +989,7 @@ export default function InternalMarkSheet() {
           font-weight: bold;
           background: #ffffff;
           font-family: "Times New Roman", Times, serif;
-          font-size: 11.5px;
+          font-size: 11px;
         }
         .mec-official-table td.name-col {
           text-align: left;
@@ -996,20 +1020,22 @@ export default function InternalMarkSheet() {
 
                   {/* HEADER BANNER / LOGO BLOCK */}
                   {headerImage ? (
-                    <div style={{ textAlign: "center", marginBottom: "8px" }}>
+                    <div style={{ textAlign: "center", marginBottom: "6px" }}>
                       <img 
                         src={headerImage} 
                         alt="College Header Banner" 
-                        style={{ maxHeight: "90px", width: "100%", objectFit: "contain" }} 
+                        className="header-banner-img"
+                        style={{ maxHeight: "75px", width: "100%", objectFit: "contain" }} 
                       />
                     </div>
                   ) : (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: "6px" }}>
                       <div style={{ position: "absolute", left: "0", top: "0" }}>
                         <img 
                           src="/logo1.png" 
                           alt="MEC Logo" 
-                          style={{ height: "65px", width: "auto", objectFit: "contain" }}
+                          className="mec-crest-logo"
+                          style={{ height: "55px", width: "auto", objectFit: "contain" }}
                           onError={(e) => { e.target.style.display = "none"; }}
                         />
                       </div>
@@ -1114,9 +1140,9 @@ export default function InternalMarkSheet() {
                 </div>
 
                 {/* BOTTOM SIGNATURE BLOCK (APPEARS ON FINAL PAGE) */}
-                <div style={{ marginTop: "24px" }}>
+                <div className="print-bottom-block" style={{ marginTop: "10px" }}>
                   {isLastPage ? (
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "0 20px", fontWeight: "bold", fontSize: "12px", fontFamily: '"Times New Roman", Times, serif', marginBottom: "15px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "0 20px", fontWeight: "bold", fontSize: "11px", fontFamily: '"Times New Roman", Times, serif', marginBottom: "8px" }}>
                       <div style={{ textAlign: "center", minWidth: "120px" }}>
                         <div>Course Faculty</div>
                       </div>
