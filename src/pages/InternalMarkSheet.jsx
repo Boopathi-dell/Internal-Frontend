@@ -20,7 +20,9 @@ import {
   GraduationCap,
   Sliders,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 export default function InternalMarkSheet() {
@@ -52,6 +54,28 @@ export default function InternalMarkSheet() {
   const [allFetchedClasses, setAllFetchedClasses] = useState([]);
   const [isEditingMarks, setIsEditingMarks] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [userHiddenColumns, setUserHiddenColumns] = useState([]);
+  const [showColumnManager, setShowColumnManager] = useState(false);
+
+  // Sync hidden columns when active template changes
+  useEffect(() => {
+    if (activeTemplate && activeTemplate.columns) {
+      const templateHidden = activeTemplate.columns.filter(c => c.isHidden).map(c => c.heading);
+      setUserHiddenColumns(templateHidden);
+    } else {
+      setUserHiddenColumns([]);
+    }
+  }, [activeTemplate]);
+
+  const toggleColumnVisibility = (heading) => {
+    setUserHiddenColumns(prev => {
+      if (prev.includes(heading)) {
+        return prev.filter(h => h !== heading);
+      } else {
+        return [...prev, heading];
+      }
+    });
+  };
 
   // 1. Fetch All Admin Templates & Extract Regulations
   useEffect(() => {
@@ -429,10 +453,15 @@ export default function InternalMarkSheet() {
     ];
   }, [activeTemplate]);
 
-  // Check if columns have subheaders (like "(50)")
+  // Visible Columns (Filters out hidden columns while calculations still run for all columns in background)
+  const visibleColumns = useMemo(() => {
+    return currentColumns.filter(c => !userHiddenColumns.includes(c.heading));
+  }, [currentColumns, userHiddenColumns]);
+
+  // Check if visible columns have subheaders (like "(50)")
   const hasSubHeaders = useMemo(() => {
-    return currentColumns.some(c => c.heading && c.heading.includes("(") && c.heading.includes(")"));
-  }, [currentColumns]);
+    return visibleColumns.some(c => c.heading && c.heading.includes("(") && c.heading.includes(")"));
+  }, [visibleColumns]);
 
   // Clean title & max mark extractor
   const parseHeading = (headingStr) => {
@@ -495,7 +524,7 @@ export default function InternalMarkSheet() {
     const row1 = ["S.No", "Reg.No.", "Name"];
     const row2 = ["", "", ""];
 
-    currentColumns.forEach(c => {
+    visibleColumns.forEach(c => {
       const { title, maxMark } = parseHeading(c.heading);
       row1.push(title);
       row2.push(maxMark);
@@ -511,7 +540,7 @@ export default function InternalMarkSheet() {
         st.regNo,
         st.name
       ];
-      currentColumns.forEach(c => {
+      visibleColumns.forEach(c => {
         stRow.push(st[c.heading] !== undefined ? st[c.heading] : 0);
       });
       rows.push(stRow);
@@ -549,6 +578,16 @@ export default function InternalMarkSheet() {
 
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <button
+              onClick={() => setShowColumnManager(!showColumnManager)}
+              className={`btn ${userHiddenColumns.length > 0 ? "btn-warning" : "btn-secondary"}`}
+              style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", padding: "0.65rem 1.2rem", borderRadius: "10px" }}
+              title="Hide or show specific columns on report"
+            >
+              {userHiddenColumns.length > 0 ? <EyeOff size={18} /> : <Eye size={18} />}
+              Columns Visibility {userHiddenColumns.length > 0 ? `(${userHiddenColumns.length} Hidden)` : ""}
+            </button>
+
+            <button
               onClick={() => setIsEditingMarks(!isEditingMarks)}
               className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
               style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", padding: "0.65rem 1.2rem", borderRadius: "10px" }}
@@ -585,6 +624,69 @@ export default function InternalMarkSheet() {
             </button>
           </div>
         </div>
+
+        {/* COLUMN VISIBILITY DRAWER */}
+        {showColumnManager && (
+          <div style={{
+            background: "linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))",
+            border: "1px solid rgba(99, 102, 241, 0.3)",
+            borderRadius: "16px",
+            padding: "1.25rem",
+            marginBottom: "1.5rem",
+            boxShadow: "0 10px 25px -5px rgba(99, 102, 241, 0.1)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "8px" }}>
+              <div>
+                <h4 style={{ margin: 0, fontWeight: "800", color: "#1e293b", fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Eye size={16} color="var(--primary)" /> Manage Columns to Show / Hide on Mark Sheet
+                </h4>
+                <p style={{ margin: "3px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                  Click to hide raw marks (like MKC or SEM). Hidden columns are omitted from printout & sheet, but formulas calculate them in the backend!
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button 
+                  onClick={() => setUserHiddenColumns([])}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px" }}
+                >
+                  Show All Columns
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {currentColumns.map(col => {
+                const isHidden = userHiddenColumns.includes(col.heading);
+                return (
+                  <button
+                    key={col.heading}
+                    onClick={() => toggleColumnVisibility(col.heading)}
+                    type="button"
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "20px",
+                      fontSize: "0.82rem",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      transition: "all 0.15s ease",
+                      background: isHidden ? "rgba(239, 68, 68, 0.1)" : "rgba(99, 102, 241, 0.1)",
+                      color: isHidden ? "#ef4444" : "var(--primary)",
+                      border: isHidden ? "1px dashed rgba(239, 68, 68, 0.5)" : "1px solid rgba(99, 102, 241, 0.3)"
+                    }}
+                  >
+                    {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                    <span>{col.heading}</span>
+                    {isHidden && <span style={{ fontSize: "0.7rem", opacity: 0.85 }}>(Hidden)</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* LUXURIOUS, MODERN PARAMETERS CARD */}
         <div style={{
@@ -1075,7 +1177,7 @@ export default function InternalMarkSheet() {
                         <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "38px" }}>S.No</th>
                         <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "105px" }}>Reg.No.</th>
                         <th rowSpan={hasSubHeaders ? 2 : 1} style={{ width: "200px" }}>Name</th>
-                        {currentColumns.map((col, idx) => {
+                        {visibleColumns.map((col, idx) => {
                           const { title } = parseHeading(col.heading);
                           return (
                             <th key={idx}>
@@ -1088,7 +1190,7 @@ export default function InternalMarkSheet() {
                       {/* HEADER ROW 2 (MAX MARKS ROW IF APPLICABLE) */}
                       {hasSubHeaders && (
                         <tr>
-                          {currentColumns.map((col, idx) => {
+                          {visibleColumns.map((col, idx) => {
                             const { maxMark } = parseHeading(col.heading);
                             return (
                               <th key={idx}>
@@ -1111,7 +1213,7 @@ export default function InternalMarkSheet() {
                             <td>{st.regNo || ""}</td>
                             <td className="name-col" title={st.name}>{st.name || ""}</td>
 
-                            {currentColumns.map((col, colIdx) => {
+                            {visibleColumns.map((col, colIdx) => {
                               const val = st[col.heading];
                               const isFormula = col.type === "formula" || col.type === "calculation";
 

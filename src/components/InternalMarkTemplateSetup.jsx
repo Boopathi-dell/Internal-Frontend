@@ -147,6 +147,7 @@ export default function InternalMarkTemplateSetup() {
         type: type === "exam" ? "exam" : "calculation", 
         examName: "", 
         formula: "",
+        isHidden: false,
         calcSources: [],
         calcType: "scale",
         calcOutof: 110,
@@ -365,6 +366,17 @@ export default function InternalMarkTemplateSetup() {
                       value={col.heading} 
                       onChange={(e) => handleColumnChange(index, 'heading', e.target.value)}
                     />
+                    <div style={{ marginTop: "6px" }}>
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.8rem", fontWeight: "bold", color: col.isHidden ? "#ef4444" : "#16a34a", background: col.isHidden ? "rgba(239, 68, 68, 0.08)" : "rgba(34, 197, 94, 0.08)", padding: "3px 10px", borderRadius: "14px", border: col.isHidden ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(34, 197, 94, 0.3)" }}>
+                        <input 
+                          type="checkbox" 
+                          checked={col.isHidden || false} 
+                          onChange={(e) => handleColumnChange(index, 'isHidden', e.target.checked)}
+                          style={{ cursor: "pointer" }}
+                        />
+                        {col.isHidden ? "Hidden from Mark Sheet (Used for Backend Formulas Only)" : "Visible on Mark Sheet"}
+                      </label>
+                    </div>
                   </div>
                   <div style={{ width: "200px" }}>
                     <label style={{ fontSize: "0.85rem", fontWeight: "bold" }}>Column Type</label>
