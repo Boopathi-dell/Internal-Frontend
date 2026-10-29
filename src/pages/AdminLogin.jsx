@@ -40,7 +40,13 @@ export default function AdminLogin({ onLogin }) {
         loginSuccess(res.data);
       }
     } catch (err) {
-      setError(err.response?.data?.error || "Invalid credentials");
+      if (err.response?.data?.error) {
+        setError(err.response.data.error);
+      } else if (err.message && err.message.toLowerCase().includes("network")) {
+        setError("Backend Server Offline / Unreachable (Check Port 5000)");
+      } else {
+        setError("Invalid credentials");
+      }
     }
     setLoading(false);
   };

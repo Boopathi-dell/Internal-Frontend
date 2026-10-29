@@ -5,6 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 import SeatingManager from "../components/SeatingManager";
 import AttendanceReportsContainer from "../components/AttendanceReportsContainer";
 import InternalMarkTemplateSetup from "../components/InternalMarkTemplateSetup";
+import TimetableManager from "../components/TimetableManager";
 
 export default function AdminPanel() {
   const role = sessionStorage.getItem("role");
@@ -46,7 +47,8 @@ export default function AdminPanel() {
     { id: "reportsettings", label: "Report Settings" },
     { id: "seating", label: "Seating" },
     { id: "attendance-tracker", label: "Attendance Tracker" },
-    { id: "internal-marks", label: "Internal Mark Templates" }
+    { id: "internal-marks", label: "Internal Mark Templates" },
+    { id: "timetable", label: "Time Table & Workload" }
   ];
 
   const AVAILABLE_DASHBOARD_PAGES = [
@@ -2234,6 +2236,15 @@ export default function AdminPanel() {
           onClick={() => setActiveTab("internal-marks")}
         >
           📊 Internal Mark Templates
+        </button>
+        )}
+        {hasAccessTo("timetable") && (
+        <button 
+          className={`btn ${activeTab === "timetable" ? "btn-primary" : "btn-secondary"}`} 
+          style={{ borderRadius: "12px 12px 0 0", padding: "0.75rem 1.5rem" }}
+          onClick={() => setActiveTab("timetable")}
+        >
+          🗓️ Time Table
         </button>
         )}
       </div>
@@ -4669,6 +4680,13 @@ export default function AdminPanel() {
       {activeTab === "internal-marks" && (
         <div className="admin-grid-1col fade-in">
            <InternalMarkTemplateSetup />
+        </div>
+      )}
+
+      {/* TIMETABLE & WORKLOAD ALLOCATION TAB */}
+      {activeTab === "timetable" && (
+        <div className="admin-grid-1col fade-in">
+           <TimetableManager />
         </div>
       )}
 

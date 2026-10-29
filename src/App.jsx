@@ -18,6 +18,7 @@ import CorrectionRequests from "./pages/CorrectionRequests";
 import StudentNotices from "./pages/StudentNotices";
 import ParentLetter from "./pages/ParentLetter";
 import AttendanceEntry from "./pages/AttendanceEntry";
+import TimetablePage from "./pages/TimetablePage";
 import API from "./api";
 import { LayoutDashboard, Settings, FileEdit, BarChart, Trophy, LogOut, MessageSquareWarning, Menu, X, Bell, Calendar } from "lucide-react";
 import './App.css';
@@ -82,7 +83,7 @@ function App() {
     // Now start polling based on the current authState
     if (authState === "admin" || authState === "printAdmin") {
       if (authState === "admin") fetchPendingCount();
-      
+
       const verifySession = async () => {
         try {
           await API.get('/api/auth/admin/verify-session', {
@@ -110,7 +111,7 @@ function App() {
       window.addEventListener('click', resetInactivityTimer);
       window.addEventListener('scroll', resetInactivityTimer);
       resetInactivityTimer();
-      
+
       try {
         if (authState === "admin" && "Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
           const promise = Notification.requestPermission();
@@ -121,10 +122,10 @@ function App() {
       } catch (err) {
         console.error("Notification request failed", err);
       }
-      
+
       const pendingInterval = authState === "admin" ? setInterval(fetchPendingCount, 15000) : null;
       const sessionInterval = setInterval(verifySession, 30000);
-      
+
       return () => {
         if (pendingInterval) clearInterval(pendingInterval);
         clearInterval(sessionInterval);
@@ -183,11 +184,11 @@ function App() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       return;
     }
-    
+
     try {
       // Register service worker
       const registration = await navigator.serviceWorker.register('/sw.js');
-      
+
       // Request permission
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') return;
@@ -195,7 +196,7 @@ function App() {
       // Get VAPID key from backend
       const vapidRes = await API.get('/api/announcements/vapid-public-key');
       const publicKey = vapidRes.data.publicKey;
-      
+
       // Subscribe
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -338,10 +339,11 @@ function App() {
     { name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
     { name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
     { name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
-    { name: "Parent Letters", path: "/parent-letters", icon: <span style={{fontSize:"18px"}}>📬</span> },
-    { 
-      name: "Mark Requests", 
-      path: "/requests", 
+    { name: "Parent Letters", path: "/parent-letters", icon: <span style={{ fontSize: "18px" }}>📬</span> },
+    { name: "Time Table", path: "/timetable", icon: <Calendar size={20} /> },
+    {
+      name: "Mark Requests",
+      path: "/requests",
       icon: <MessageSquareWarning size={20} />,
       badge: pendingRequestsCount > 0 ? pendingRequestsCount : null
     },
@@ -355,10 +357,10 @@ function App() {
     { name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
     { name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
     { name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
-    { name: "Parent Letters", path: "/parent-letters", icon: <span style={{fontSize:"18px"}}>📬</span> },
-    { 
-      name: "Mark Requests", 
-      path: "/requests", 
+    { name: "Parent Letters", path: "/parent-letters", icon: <span style={{ fontSize: "18px" }}>📬</span> },
+    {
+      name: "Mark Requests",
+      path: "/requests",
       icon: <MessageSquareWarning size={20} />,
       badge: pendingRequestsCount > 0 ? pendingRequestsCount : null
     },
@@ -378,7 +380,8 @@ function App() {
     { id: "analysis", name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
     { id: "department-analysis", name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
     { id: "rank", name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
-    { id: "parent-letters", name: "Parent Letters", path: "/parent-letters", icon: <span style={{fontSize:"18px"}}>📬</span> },
+    { id: "parent-letters", name: "Parent Letters", path: "/parent-letters", icon: <span style={{ fontSize: "18px" }}>📬</span> },
+    { id: "timetable", name: "Time Table", path: "/timetable", icon: <Calendar size={20} /> },
     { id: "requests", name: "Mark Requests", path: "/requests", icon: <MessageSquareWarning size={20} />, badge: pendingRequestsCount > 0 ? pendingRequestsCount : null },
   ];
 
@@ -391,14 +394,14 @@ function App() {
     if (adminTabs.length > 0) {
       userNavItems.push({ name: "Admin Setup", path: "/admin", icon: <Settings size={20} /> });
     }
-  } catch(e) {}
+  } catch (e) { }
 
   const studentNavItems = [
     { name: "My Results", path: "/", icon: <Trophy size={20} /> },
     { name: "Campus Notices", path: "/notices", icon: <Bell size={20} /> },
-    { 
-      name: "My Requests", 
-      path: "/student-requests", 
+    {
+      name: "My Requests",
+      path: "/student-requests",
       icon: <MessageSquareWarning size={20} />,
       badge: pendingRequestsCount > 0 ? pendingRequestsCount : null
     },
@@ -411,7 +414,7 @@ function App() {
   return (
     <div className="app-container">
       <style>{blinkAnimation}</style>
-      
+
       {showNav && (
         <div className="mobile-top-bar no-print">
           <button className="menu-toggle-btn" onClick={() => setSidebarOpen(true)}>
@@ -503,6 +506,7 @@ function App() {
               {(isAdmin || isPrintAdmin) && <Route path="/rank" element={<RankList />} />}
               {(isAdmin || isPrintAdmin) && <Route path="/parent-letters" element={<ParentLetter />} />}
               {(isAdmin || isPrintAdmin) && <Route path="/requests" element={<CorrectionRequests />} />}
+              <Route path="/timetable" element={<TimetablePage />} />
               {/* Faculty (user) routes for allocated dashboard pages */}
               {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/internal-mark" element={<InternalMarkSheet />} />}
               {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/analysis" element={<ResultAnalysis />} />}
