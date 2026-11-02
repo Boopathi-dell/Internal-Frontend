@@ -289,6 +289,7 @@ export default function TimetableManager() {
     name: "",
     shortName: "",
     type: "Theory",
+    difficulty: "Normal",
     hoursPerWeek: 4
   }));
 
@@ -312,6 +313,38 @@ export default function TimetableManager() {
     if (t.includes("placement") || t.includes("training")) return { bg: "rgba(236, 72, 153, 0.15)", text: "#f472b6", border: "rgba(236, 72, 153, 0.3)", icon: "💼" };
     if (t.includes("mentor") || t.includes("tutor")) return { bg: "rgba(14, 165, 233, 0.15)", text: "#38bdf8", border: "rgba(14, 165, 233, 0.3)", icon: "👥" };
     return { bg: "rgba(99, 102, 241, 0.15)", text: "#818cf8", border: "rgba(99, 102, 241, 0.3)", icon: "📘" };
+  };
+
+  const getDifficultyBadgeDetails = (diff) => {
+    const d = diff || "Normal";
+    if (d === "Tough") {
+      return { 
+        label: "Tough", 
+        icon: "🔥", 
+        bg: "rgba(239, 68, 68, 0.15)", 
+        text: "#f87171", 
+        border: "rgba(239, 68, 68, 0.35)",
+        tooltip: "Tough / Analytical: Strictly blocks Period 7 & avoids Period 6. Morning priority." 
+      };
+    }
+    if (d === "Light") {
+      return { 
+        label: "Light", 
+        icon: "🍃", 
+        bg: "rgba(16, 185, 129, 0.15)", 
+        text: "#34d399", 
+        border: "rgba(16, 185, 129, 0.35)",
+        tooltip: "Light / Leisure: Afternoon priority (Period 5-7)." 
+      };
+    }
+    return { 
+      label: "Normal", 
+      icon: "📘", 
+      bg: "rgba(148, 163, 184, 0.15)", 
+      text: "#cbd5e1", 
+      border: "rgba(148, 163, 184, 0.3)",
+      tooltip: "Normal: Balanced across morning & afternoon periods." 
+    };
   };
 
   // Load initial data
@@ -396,6 +429,7 @@ export default function TimetableManager() {
                 subjectName: sub.name,
                 shortName: sub.shortName || codeUpper,
                 type: sub.type || "Theory",
+                difficulty: existing?.difficulty || sub.difficulty || "Normal",
                 hoursPerWeek: Number(sub.hoursPerWeek) || (sub.type?.toLowerCase().includes("lab") ? 3 : 4),
                 facultyNames: existing ? (existing.facultyNames || []) : []
               });
@@ -870,6 +904,16 @@ export default function TimetableManager() {
     }));
   };
 
+  // Handle Subject Difficulty Change in Workload Allocation
+  const handleChangeDifficulty = (allocId, newDiff) => {
+    setAllocations(prev => prev.map(item => {
+      if (item.id === allocId) {
+        return { ...item, difficulty: newDiff };
+      }
+      return item;
+    }));
+  };
+
   // Save Allocations, Year-Sections, Class Advisors, IQAC & Coordinators to DB
   const handleSaveAllocations = async () => {
     try {
@@ -1178,6 +1222,7 @@ export default function TimetableManager() {
       name: sub.name,
       shortName: sub.shortName || sub.code,
       type: isPreset ? matchedType : "custom",
+      difficulty: sub.difficulty || "Normal",
       hoursPerWeek: sub.hoursPerWeek || 4
     });
 
@@ -1201,6 +1246,7 @@ export default function TimetableManager() {
       name: "",
       shortName: "",
       type: "Theory",
+      difficulty: "Normal",
       hoursPerWeek: 4
     }));
   };
@@ -1263,6 +1309,7 @@ export default function TimetableManager() {
             name: formattedName,
             shortName: formattedShort,
             type: finalType,
+            difficulty: subjectForm.difficulty || "Normal",
             hoursPerWeek: defaultHours
           });
           await API.post("/api/timetable/subjects", {
@@ -1289,6 +1336,7 @@ export default function TimetableManager() {
                 name: formattedName,
                 shortName: formattedShort,
                 type: finalType,
+                difficulty: subjectForm.difficulty || "Normal",
                 hoursPerWeek: defaultHours
               };
             }
@@ -1315,6 +1363,7 @@ export default function TimetableManager() {
               subjectName: formattedName,
               shortName: formattedShort,
               type: finalType,
+              difficulty: subjectForm.difficulty || "Normal",
               hoursPerWeek: defaultHours
             };
           }
@@ -1345,6 +1394,7 @@ export default function TimetableManager() {
           name: formattedName,
           shortName: formattedShort,
           type: finalType,
+          difficulty: subjectForm.difficulty || "Normal",
           hoursPerWeek: defaultHours
         });
 
@@ -1357,7 +1407,7 @@ export default function TimetableManager() {
         });
 
         showAlert(`Subject ${formattedCode} (${finalType}) added to ${subjectForm.year} Year!`);
-        setSubjectForm(prev => ({ ...prev, code: "", name: "", shortName: "" }));
+        setSubjectForm(prev => ({ ...prev, code: "", name: "", shortName: "", difficulty: "Normal" }));
         setIsCustomSubjectType(false);
         setCustomSubjectTypeText("");
       }
@@ -2024,6 +2074,7 @@ export default function TimetableManager() {
                       <th style={{ width: "110px" }}>Subject Code</th>
                       <th>Subject Name</th>
                       <th style={{ width: "100px" }}>Type</th>
+                      <th style={{ width: "135px" }}>Difficulty</th>
                       <th style={{ width: "90px" }}>Hours/Wk</th>
                       <th style={{ width: "320px" }}>Assign Faculty</th>
                     </tr>
@@ -2085,6 +2136,34 @@ export default function TimetableManager() {
                             }}>
                               {badge.icon} {item.type}
                             </span>
+                          </td>
+                          <td>
+                            {(() => {
+                              const diff = item.difficulty || "Normal";
+                              const dBadge = getDifficultyBadgeDetails(diff);
+                              return (
+                                <select 
+                                  value={diff}
+                                  onChange={(e) => handleChangeDifficulty(item.id, e.target.value)}
+                                  title={dBadge.tooltip}
+                                  style={{
+                                    fontSize: "0.76rem",
+                                    fontWeight: "700",
+                                    padding: "3px 6px",
+                                    borderRadius: "8px",
+                                    background: dBadge.bg,
+                                    color: dBadge.text,
+                                    border: `1px solid ${dBadge.border}`,
+                                    cursor: "pointer",
+                                    outline: "none"
+                                  }}
+                                >
+                                  <option value="Normal" style={{ background: "#1e1e2d", color: "#f8fafc" }}>📘 Normal</option>
+                                  <option value="Tough" style={{ background: "#1e1e2d", color: "#f87171" }}>🔥 Tough (No P7)</option>
+                                  <option value="Light" style={{ background: "#1e1e2d", color: "#34d399" }}>🍃 Light (Afternoon)</option>
+                                </select>
+                              );
+                            })()}
                           </td>
                           <td style={{ fontWeight: "700", textAlign: "center" }}>
                             {item.hoursPerWeek} hrs
@@ -2496,8 +2575,10 @@ export default function TimetableManager() {
                                     </div>
                                   ) : (
                                     <div>
-                                      <div style={{ fontWeight: "800", fontSize: "0.9rem", color: isLab ? "#c084fc" : "#818cf8" }}>
-                                        {slot.shortName || slot.subjectCode}
+                                      <div style={{ fontWeight: "800", fontSize: "0.9rem", color: isLab ? "#c084fc" : "#818cf8", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                        <span>{slot.shortName || slot.subjectCode}</span>
+                                        {slot.difficulty === "Tough" && <span title="Tough / Problematic Subject (Protected from Period 7)" style={{ fontSize: "0.72rem" }}>🔥</span>}
+                                        {slot.difficulty === "Light" && <span title="Light Subject" style={{ fontSize: "0.72rem" }}>🍃</span>}
                                       </div>
                                       <div style={{ fontSize: "0.72rem", color: "var(--text-color)", opacity: 0.85, marginTop: "2px" }}>
                                         {slot.facultyName || "-"}
@@ -3419,7 +3500,7 @@ export default function TimetableManager() {
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: editingSubject ? "1fr 1fr 1.5fr 1fr" : "1fr 1fr 1fr", gap: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: editingSubject ? "1fr 1fr 1.3fr 1.3fr 0.8fr" : "1fr 1fr 1.4fr 1.3fr", gap: "8px" }}>
                 <input 
                   type="text" 
                   className="text-input" 
@@ -3436,6 +3517,20 @@ export default function TimetableManager() {
                   onChange={e => setSubjectForm({ ...subjectForm, hoursPerWeek: e.target.value })}
                   style={{ fontSize: "0.85rem" }}
                 />
+                <select
+                  className="select-input"
+                  value={subjectForm.difficulty || "Normal"}
+                  onChange={e => setSubjectForm({ ...subjectForm, difficulty: e.target.value })}
+                  style={{ 
+                    fontSize: "0.85rem",
+                    borderColor: subjectForm.difficulty === "Tough" ? "#ef4444" : (subjectForm.difficulty === "Light" ? "#10b981" : "var(--border-color)")
+                  }}
+                  title="Tough: strictly blocks Period 7 & avoids Period 6. Morning priority. Light: afternoon priority."
+                >
+                  <option value="Normal">📘 Normal</option>
+                  <option value="Tough">🔥 Tough (No P7)</option>
+                  <option value="Light">🍃 Light (Afternoon)</option>
+                </select>
                 <button 
                   type="submit" 
                   className="btn btn-primary"
@@ -3555,6 +3650,18 @@ export default function TimetableManager() {
                             }}>
                               {sub.hoursPerWeek || 4}h
                             </span>
+                            {sub.difficulty && sub.difficulty !== "Normal" && (
+                              <span style={{ 
+                                fontSize: "0.66rem", 
+                                fontWeight: "700",
+                                background: sub.difficulty === "Tough" ? "rgba(239, 68, 68, 0.25)" : "rgba(16, 185, 129, 0.25)", 
+                                color: sub.difficulty === "Tough" ? "#fca5a5" : "#6ee7b7",
+                                padding: "1px 5px", 
+                                borderRadius: "4px"
+                              }}>
+                                {sub.difficulty === "Tough" ? "🔥 Tough" : "🍃 Light"}
+                              </span>
+                            )}
 
                             {/* Edit Button */}
                             <button
