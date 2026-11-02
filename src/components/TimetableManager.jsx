@@ -7,6 +7,18 @@ import {
   Lock, Unlock, History
 } from "lucide-react";
 
+export const DEFAULT_PERIOD_TIMINGS = {
+  1: "09:10 - 10:05",
+  2: "10:05 - 11:00",
+  teaBreak: "11:00 - 11:15",
+  3: "11:15 - 12:10",
+  4: "12:10 - 01:00",
+  lunchBreak: "01:00 - 01:45",
+  5: "01:45 - 02:40",
+  6: "02:40 - 03:35",
+  7: "03:35 - 04:30"
+};
+
 export default function TimetableManager() {
   // Navigation sub-tabs
   const [activeSubTab, setActiveSubTab] = useState("allocation"); // "allocation", "schedule", "master"
@@ -170,6 +182,18 @@ export default function TimetableManager() {
   const [historyList, setHistoryList] = useState([]);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [lockingSchedule, setLockingSchedule] = useState(false);
+
+  // Period Timings Configuration States (Admin Controlled)
+  const [periodTimings, setPeriodTimings] = useState(() => {
+    try {
+      const saved = localStorage.getItem("timetable_period_timings");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return DEFAULT_PERIOD_TIMINGS;
+  });
+  const [showTimingsModal, setShowTimingsModal] = useState(false);
+  const [tempTimings, setTempTimings] = useState(DEFAULT_PERIOD_TIMINGS);
+  const [savingTimings, setSavingTimings] = useState(false);
 
   // Roman Numeral Semester Helper
   const getRomanSem = (year, semType) => {
@@ -439,6 +463,12 @@ export default function TimetableManager() {
         localStorage.setItem("timetable_coordinators", JSON.stringify(allocRes.data.coordinators));
       }
 
+      // Update Period Timings from DB if available
+      if (allocRes.data?.periodTimings && Object.keys(allocRes.data.periodTimings).length > 0) {
+        setPeriodTimings(allocRes.data.periodTimings);
+        localStorage.setItem("timetable_period_timings", JSON.stringify(allocRes.data.periodTimings));
+      }
+
       setSubjectMasters(masters);
 
       // Merge saved faculty allocations with full curriculum master across all sections
@@ -543,6 +573,10 @@ export default function TimetableManager() {
       );
       if (res.data && res.data.classes && res.data.classes.length > 0) {
         setTimetableSchedule(res.data);
+        if (res.data.periodTimings && Object.keys(res.data.periodTimings).length > 0) {
+          setPeriodTimings(res.data.periodTimings);
+          localStorage.setItem("timetable_period_timings", JSON.stringify(res.data.periodTimings));
+        }
         if (!selectedClassKey && res.data.classes[0]) {
           setSelectedClassKey(res.data.classes[0].classKey);
         }
@@ -625,6 +659,40 @@ export default function TimetableManager() {
       fetchHistory();
     } catch (err) {
       showAlert("Delete failed: " + (err.response?.data?.error || err.message), "error");
+    }
+  };
+
+  // 8. Open & Save Period Timings Modal (Admin Configurable)
+  const handleOpenTimingsModal = () => {
+    setTempTimings({
+      ...DEFAULT_PERIOD_TIMINGS,
+      ...(periodTimings || {})
+    });
+    setShowTimingsModal(true);
+  };
+
+  const handleSavePeriodTimings = async () => {
+    try {
+      setSavingTimings(true);
+      const res = await API.put("/api/timetable/timings", {
+        department,
+        academicYear,
+        semesterType,
+        timings: tempTimings
+      });
+      if (res.data.success) {
+        setPeriodTimings(tempTimings);
+        localStorage.setItem("timetable_period_timings", JSON.stringify(tempTimings));
+        if (res.data.schedule) {
+          setTimetableSchedule(res.data.schedule);
+        }
+        showAlert("⏱️ Period timings saved and updated across all timetables!");
+        setShowTimingsModal(false);
+      }
+    } catch (err) {
+      showAlert("Failed to save timings: " + (err.response?.data?.error || err.message), "error");
+    } finally {
+      setSavingTimings(false);
     }
   };
 
@@ -815,13 +883,15 @@ export default function TimetableManager() {
         classAdvisors,
         iqacNumber,
         hallNumbers,
-        coordinators
+        coordinators,
+        periodTimings
       });
       localStorage.setItem("timetable_year_sections", JSON.stringify(yearSections));
       localStorage.setItem("timetable_class_advisors", JSON.stringify(classAdvisors));
       localStorage.setItem("timetable_iqac_number", iqacNumber);
       localStorage.setItem("timetable_hall_numbers", JSON.stringify(hallNumbers));
       localStorage.setItem("timetable_coordinators", JSON.stringify(coordinators));
+      localStorage.setItem("timetable_period_timings", JSON.stringify(periodTimings));
       showAlert("Subject Allocations, IQAC Number, Hall Numbers & Coordinators saved successfully!");
     } catch (err) {
       showAlert("Failed to save allocations: " + (err.response?.data?.error || err.message), "error");
@@ -855,12 +925,14 @@ export default function TimetableManager() {
         classAdvisors,
         iqacNumber,
         hallNumbers,
-        coordinators
+        coordinators,
+        periodTimings
       });
       localStorage.setItem("timetable_class_advisors", JSON.stringify(classAdvisors));
       localStorage.setItem("timetable_iqac_number", iqacNumber);
       localStorage.setItem("timetable_hall_numbers", JSON.stringify(hallNumbers));
       localStorage.setItem("timetable_coordinators", JSON.stringify(coordinators));
+      localStorage.setItem("timetable_period_timings", JSON.stringify(periodTimings));
 
       // Call generation algorithm
       const res = await API.post("/api/timetable/generate", {
@@ -868,7 +940,8 @@ export default function TimetableManager() {
         academicYear,
         semesterType,
         allocations,
-        classAdvisors
+        classAdvisors,
+        timings: periodTimings
       });
 
       if (res.data.success) {
@@ -1864,7 +1937,17 @@ export default function TimetableManager() {
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: "flex", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={handleOpenTimingsModal}
+                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                  title="Configure start and end timings for all periods"
+                >
+                  <Clock size={16} />
+                  <span>⏱️ Period Timings</span>
+                </button>
+
                 <button 
                   className="btn btn-secondary" 
                   onClick={handleSaveAllocations} 
@@ -2214,6 +2297,24 @@ export default function TimetableManager() {
                   </button>
                 )}
 
+                {/* Period Timings Config Button */}
+                <button 
+                  className="btn btn-secondary"
+                  onClick={handleOpenTimingsModal}
+                  style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: "7px", 
+                    fontWeight: "700",
+                    padding: "0.5rem 1rem",
+                    borderRadius: "8px"
+                  }}
+                  title="Configure official start and end times for all 7 periods"
+                >
+                  <Clock size={16} />
+                  <span>⏱️ Period Timings</span>
+                </button>
+
                 {/* Version History Button */}
                 <button 
                   className="btn btn-secondary"
@@ -2329,15 +2430,9 @@ export default function TimetableManager() {
                         <th style={{ width: "110px", textAlign: "center" }}>Day / Period</th>
                         {[1, 2, 3, 4, 5, 6, 7].map(p => (
                           <th key={p} style={{ textAlign: "center", minWidth: "135px" }}>
-                            <div>Period {p}</div>
-                            <div style={{ fontSize: "0.68rem", fontWeight: "normal", opacity: 0.7 }}>
-                              {p === 1 && "09:00 - 09:50"}
-                              {p === 2 && "09:50 - 10:40"}
-                              {p === 3 && "11:00 - 11:50"}
-                              {p === 4 && "11:50 - 12:40"}
-                              {p === 5 && "01:30 - 02:20"}
-                              {p === 6 && "02:20 - 03:10"}
-                              {p === 7 && "03:10 - 04:00"}
+                            <div style={{ fontWeight: "800" }}>Period {p}</div>
+                            <div style={{ fontSize: "0.7rem", fontWeight: "600", opacity: 0.85, color: "#818cf8" }}>
+                              {periodTimings[p] || DEFAULT_PERIOD_TIMINGS[p]}
                             </div>
                           </th>
                         ))}
@@ -2456,15 +2551,9 @@ export default function TimetableManager() {
                       <th style={{ width: "110px", textAlign: "center" }}>Day / Period</th>
                       {[1, 2, 3, 4, 5, 6, 7].map(p => (
                         <th key={p} style={{ textAlign: "center", minWidth: "135px" }}>
-                          <div>Period {p}</div>
-                          <div style={{ fontSize: "0.68rem", fontWeight: "normal", opacity: 0.7 }}>
-                            {p === 1 && "09:00 - 09:50"}
-                            {p === 2 && "09:50 - 10:40"}
-                            {p === 3 && "11:00 - 11:50"}
-                            {p === 4 && "11:50 - 12:40"}
-                            {p === 5 && "01:30 - 02:20"}
-                            {p === 6 && "02:20 - 03:10"}
-                            {p === 7 && "03:10 - 04:00"}
+                          <div style={{ fontWeight: "800" }}>Period {p}</div>
+                          <div style={{ fontSize: "0.7rem", fontWeight: "600", opacity: 0.85, color: "#10b981" }}>
+                            {periodTimings[p] || DEFAULT_PERIOD_TIMINGS[p]}
                           </div>
                         </th>
                       ))}
@@ -3942,6 +4031,184 @@ export default function TimetableManager() {
       )}
 
       {/* ============================================================== */}
+      {/* PERIOD TIMINGS CONFIGURATION MODAL (ADMIN CONTROLLED)          */}
+      {/* ============================================================== */}
+      {showTimingsModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.8)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 10002,
+          padding: "1.5rem"
+        }}>
+          <div style={{
+            background: "var(--card-bg, #1e293b)",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "620px",
+            maxHeight: "90vh",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
+            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.12))"
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: "1.25rem 1.5rem",
+              borderBottom: "1px solid var(--border-color, rgba(255, 255, 255, 0.1))",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "rgba(255, 255, 255, 0.02)"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <Clock size={22} style={{ color: "#38bdf8" }} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "800", color: "var(--text-color)" }}>
+                    ⏱️ Set Official Period Timings
+                  </h3>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    Set timings for Period 1 to 7 and breaks. Applies across all classes, routines & official prints!
+                  </span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowTimingsModal(false)}
+                className="btn btn-secondary"
+                style={{ padding: "6px", borderRadius: "8px", border: "none", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Timings Form Body */}
+            <div style={{ padding: "1.25rem 1.5rem", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+              {[1, 2].map(p => (
+                <div key={p} style={{ display: "grid", gridTemplateColumns: "130px 1fr", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--border-color)" }}>
+                  <span style={{ fontWeight: "800", fontSize: "0.9rem", color: "#818cf8" }}>Period {p}:</span>
+                  <input
+                    type="text"
+                    className="text-input"
+                    value={tempTimings[p] || ""}
+                    onChange={e => setTempTimings({ ...tempTimings, [p]: e.target.value })}
+                    placeholder="e.g. 09:10 - 10:05"
+                    style={{ fontWeight: "700", fontSize: "0.88rem" }}
+                  />
+                </div>
+              ))}
+
+              {/* Tea Break */}
+              <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", alignItems: "center", gap: "12px", background: "rgba(245, 158, 11, 0.08)", padding: "8px 14px", borderRadius: "10px", border: "1px dashed rgba(245, 158, 11, 0.3)" }}>
+                <span style={{ fontWeight: "800", fontSize: "0.85rem", color: "#f59e0b" }}>☕ Tea Break:</span>
+                <input
+                  type="text"
+                  className="text-input"
+                  value={tempTimings.teaBreak || ""}
+                  onChange={e => setTempTimings({ ...tempTimings, teaBreak: e.target.value })}
+                  placeholder="e.g. 11:00 - 11:15"
+                  style={{ fontWeight: "700", fontSize: "0.85rem" }}
+                />
+              </div>
+
+              {[3, 4].map(p => (
+                <div key={p} style={{ display: "grid", gridTemplateColumns: "130px 1fr", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--border-color)" }}>
+                  <span style={{ fontWeight: "800", fontSize: "0.9rem", color: "#818cf8" }}>Period {p}:</span>
+                  <input
+                    type="text"
+                    className="text-input"
+                    value={tempTimings[p] || ""}
+                    onChange={e => setTempTimings({ ...tempTimings, [p]: e.target.value })}
+                    placeholder="e.g. 11:15 - 12:10"
+                    style={{ fontWeight: "700", fontSize: "0.88rem" }}
+                  />
+                </div>
+              ))}
+
+              {/* Lunch Break */}
+              <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", alignItems: "center", gap: "12px", background: "rgba(16, 185, 129, 0.08)", padding: "8px 14px", borderRadius: "10px", border: "1px dashed rgba(16, 185, 129, 0.3)" }}>
+                <span style={{ fontWeight: "800", fontSize: "0.85rem", color: "#10b981" }}>🍱 Lunch Break:</span>
+                <input
+                  type="text"
+                  className="text-input"
+                  value={tempTimings.lunchBreak || ""}
+                  onChange={e => setTempTimings({ ...tempTimings, lunchBreak: e.target.value })}
+                  placeholder="e.g. 01:00 - 01:45"
+                  style={{ fontWeight: "700", fontSize: "0.85rem" }}
+                />
+              </div>
+
+              {[5, 6, 7].map(p => (
+                <div key={p} style={{ display: "grid", gridTemplateColumns: "130px 1fr", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.03)", padding: "10px 14px", borderRadius: "10px", border: "1px solid var(--border-color)" }}>
+                  <span style={{ fontWeight: "800", fontSize: "0.9rem", color: "#818cf8" }}>Period {p}:</span>
+                  <input
+                    type="text"
+                    className="text-input"
+                    value={tempTimings[p] || ""}
+                    onChange={e => setTempTimings({ ...tempTimings, [p]: e.target.value })}
+                    placeholder="e.g. 01:45 - 02:40"
+                    style={{ fontWeight: "700", fontSize: "0.88rem" }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: "1rem 1.5rem",
+              borderTop: "1px solid var(--border-color, rgba(255, 255, 255, 0.1))",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "rgba(0, 0, 0, 0.15)"
+            }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setTempTimings(DEFAULT_PERIOD_TIMINGS)}
+                style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+              >
+                Reset to Default
+              </button>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowTimingsModal(false)}
+                  style={{ fontSize: "0.85rem", padding: "6px 16px" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSavePeriodTimings}
+                  disabled={savingTimings}
+                  style={{
+                    fontSize: "0.85rem",
+                    padding: "6px 18px",
+                    fontWeight: "800",
+                    background: "linear-gradient(135deg, #0284c7, #06b6d4)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  <Save size={15} />
+                  <span>{savingTimings ? "Saving..." : "Save Timings"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
       {/* PRINT MODAL 1: OFFICIAL CLASS TIME TABLE (IMAGE 1 FORMAT)      */}
       {/* ============================================================== */}
       {showClassPrintModal && (
@@ -4099,15 +4366,15 @@ export default function TimetableManager() {
                   <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>7</th>
                 </tr>
                 <tr style={{ background: "#f8fafc" }}>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(9:10-10:05)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(10:05-11:00)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(11:00-11:15)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(11:15-12:10)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(12:10-01:00)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(01:05-01:45)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(1:45-2:40)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(2:40-3:35)</th>
-                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(3:35-4:30)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings[1] || "09:10-10:05"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings[2] || "10:05-11:00"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings.teaBreak || "11:00-11:15"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings[3] || "11:15-12:10"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings[4] || "12:10-01:00"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings.lunchBreak || "01:00-01:45"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings[5] || "01:45-02:40"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings[6] || "02:40-03:35"})</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>({periodTimings[7] || "03:35-04:30"})</th>
                 </tr>
               </thead>
               <tbody>
@@ -4461,13 +4728,12 @@ export default function TimetableManager() {
               <thead>
                 <tr style={{ background: "#d9e2ec" }}>
                   <th style={{ border: "1px solid #718096", width: "65px", padding: "7px 4px", textAlign: "center", fontSize: "11pt", fontWeight: "900" }}>↓→</th>
-                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>1<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(9:10-10:05)</span></th>
-                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>2<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(10:05-11:00)</span></th>
-                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>3<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(11:15-12:10)</span></th>
-                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>4<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(12:10-01:00)</span></th>
-                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>5<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(01:45-2:40)</span></th>
-                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>6<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(2:40-3:35)</span></th>
-                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>7<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(3:35-4:30)</span></th>
+                  {[1, 2, 3, 4, 5, 6, 7].map(pr => (
+                    <th key={pr} style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>
+                      {pr}<br/>
+                      <span style={{ fontSize: "7pt", fontWeight: "normal" }}>({periodTimings[pr] || DEFAULT_PERIOD_TIMINGS[pr]})</span>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
