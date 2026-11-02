@@ -290,6 +290,7 @@ export default function TimetableManager() {
     shortName: "",
     type: "Theory",
     difficulty: "Normal",
+    isTraining: false,
     hoursPerWeek: 4
   }));
 
@@ -310,7 +311,8 @@ export default function TimetableManager() {
     if (t.includes("project")) return { bg: "rgba(245, 158, 11, 0.15)", text: "#f59e0b", border: "rgba(245, 158, 11, 0.3)", icon: "🚀" };
     if (t.includes("seminar")) return { bg: "rgba(6, 182, 212, 0.15)", text: "#22d3ee", border: "rgba(6, 182, 212, 0.3)", icon: "🎤" };
     if (t.includes("library")) return { bg: "rgba(16, 185, 129, 0.15)", text: "#34d399", border: "rgba(16, 185, 129, 0.3)", icon: "📚" };
-    if (t.includes("placement") || t.includes("training")) return { bg: "rgba(236, 72, 153, 0.15)", text: "#f472b6", border: "rgba(236, 72, 153, 0.3)", icon: "💼" };
+    if (t.includes("training")) return { bg: "rgba(236, 72, 153, 0.15)", text: "#f472b6", border: "rgba(236, 72, 153, 0.3)", icon: "🎯" };
+    if (t.includes("placement")) return { bg: "rgba(236, 72, 153, 0.15)", text: "#f472b6", border: "rgba(236, 72, 153, 0.3)", icon: "💼" };
     if (t.includes("mentor") || t.includes("tutor")) return { bg: "rgba(14, 165, 233, 0.15)", text: "#38bdf8", border: "rgba(14, 165, 233, 0.3)", icon: "👥" };
     return { bg: "rgba(99, 102, 241, 0.15)", text: "#818cf8", border: "rgba(99, 102, 241, 0.3)", icon: "📘" };
   };
@@ -430,6 +432,7 @@ export default function TimetableManager() {
                 shortName: sub.shortName || codeUpper,
                 type: sub.type || "Theory",
                 difficulty: existing?.difficulty || sub.difficulty || "Normal",
+                isTraining: existing?.isTraining !== undefined ? existing.isTraining : (sub.isTraining || sub.type?.toLowerCase().includes("training") || false),
                 hoursPerWeek: Number(sub.hoursPerWeek) || (sub.type?.toLowerCase().includes("lab") ? 3 : 4),
                 facultyNames: existing ? (existing.facultyNames || []) : []
               });
@@ -914,6 +917,16 @@ export default function TimetableManager() {
     }));
   };
 
+  // Handle Subject Training Mode Toggle in Workload Allocation
+  const handleToggleTraining = (allocId) => {
+    setAllocations(prev => prev.map(item => {
+      if (item.id === allocId) {
+        return { ...item, isTraining: !item.isTraining };
+      }
+      return item;
+    }));
+  };
+
   // Save Allocations, Year-Sections, Class Advisors, IQAC & Coordinators to DB
   const handleSaveAllocations = async () => {
     try {
@@ -1223,6 +1236,7 @@ export default function TimetableManager() {
       shortName: sub.shortName || sub.code,
       type: isPreset ? matchedType : "custom",
       difficulty: sub.difficulty || "Normal",
+      isTraining: sub.isTraining !== undefined ? sub.isTraining : (sub.type?.toLowerCase().includes("training") || false),
       hoursPerWeek: sub.hoursPerWeek || 4
     });
 
@@ -1247,6 +1261,7 @@ export default function TimetableManager() {
       shortName: "",
       type: "Theory",
       difficulty: "Normal",
+      isTraining: false,
       hoursPerWeek: 4
     }));
   };
@@ -1310,6 +1325,7 @@ export default function TimetableManager() {
             shortName: formattedShort,
             type: finalType,
             difficulty: subjectForm.difficulty || "Normal",
+            isTraining: !!subjectForm.isTraining,
             hoursPerWeek: defaultHours
           });
           await API.post("/api/timetable/subjects", {
@@ -1337,6 +1353,7 @@ export default function TimetableManager() {
                 shortName: formattedShort,
                 type: finalType,
                 difficulty: subjectForm.difficulty || "Normal",
+                isTraining: !!subjectForm.isTraining,
                 hoursPerWeek: defaultHours
               };
             }
@@ -1364,6 +1381,7 @@ export default function TimetableManager() {
               shortName: formattedShort,
               type: finalType,
               difficulty: subjectForm.difficulty || "Normal",
+              isTraining: !!subjectForm.isTraining,
               hoursPerWeek: defaultHours
             };
           }
@@ -1395,6 +1413,7 @@ export default function TimetableManager() {
           shortName: formattedShort,
           type: finalType,
           difficulty: subjectForm.difficulty || "Normal",
+          isTraining: !!subjectForm.isTraining,
           hoursPerWeek: defaultHours
         });
 
@@ -1407,7 +1426,7 @@ export default function TimetableManager() {
         });
 
         showAlert(`Subject ${formattedCode} (${finalType}) added to ${subjectForm.year} Year!`);
-        setSubjectForm(prev => ({ ...prev, code: "", name: "", shortName: "", difficulty: "Normal" }));
+        setSubjectForm(prev => ({ ...prev, code: "", name: "", shortName: "", difficulty: "Normal", isTraining: false }));
         setIsCustomSubjectType(false);
         setCustomSubjectTypeText("");
       }
@@ -2142,26 +2161,50 @@ export default function TimetableManager() {
                               const diff = item.difficulty || "Normal";
                               const dBadge = getDifficultyBadgeDetails(diff);
                               return (
-                                <select 
-                                  value={diff}
-                                  onChange={(e) => handleChangeDifficulty(item.id, e.target.value)}
-                                  title={dBadge.tooltip}
-                                  style={{
-                                    fontSize: "0.76rem",
-                                    fontWeight: "700",
-                                    padding: "3px 6px",
-                                    borderRadius: "8px",
-                                    background: dBadge.bg,
-                                    color: dBadge.text,
-                                    border: `1px solid ${dBadge.border}`,
-                                    cursor: "pointer",
-                                    outline: "none"
-                                  }}
-                                >
-                                  <option value="Normal" style={{ background: "#1e1e2d", color: "#f8fafc" }}>📘 Normal</option>
-                                  <option value="Tough" style={{ background: "#1e1e2d", color: "#f87171" }}>🔥 Tough (No P7)</option>
-                                  <option value="Light" style={{ background: "#1e1e2d", color: "#34d399" }}>🍃 Light (Afternoon)</option>
-                                </select>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                  <select 
+                                    value={diff}
+                                    onChange={(e) => handleChangeDifficulty(item.id, e.target.value)}
+                                    title={dBadge.tooltip}
+                                    style={{
+                                      fontSize: "0.76rem",
+                                      fontWeight: "700",
+                                      padding: "3px 6px",
+                                      borderRadius: "8px",
+                                      background: dBadge.bg,
+                                      color: dBadge.text,
+                                      border: `1px solid ${dBadge.border}`,
+                                      cursor: "pointer",
+                                      outline: "none"
+                                    }}
+                                  >
+                                    <option value="Normal" style={{ background: "#1e1e2d", color: "#f8fafc" }}>📘 Normal</option>
+                                    <option value="Tough" style={{ background: "#1e1e2d", color: "#f87171" }}>🔥 Tough (No P7)</option>
+                                    <option value="Light" style={{ background: "#1e1e2d", color: "#34d399" }}>🍃 Light (Afternoon)</option>
+                                  </select>
+                                  <span
+                                    onClick={() => handleToggleTraining(item.id)}
+                                    title="Click to toggle External Trainer Continuous Block scheduling mode"
+                                    style={{
+                                      fontSize: "0.68rem",
+                                      fontWeight: "800",
+                                      padding: "2px 6px",
+                                      borderRadius: "6px",
+                                      cursor: "pointer",
+                                      background: item.isTraining ? "rgba(236, 72, 153, 0.22)" : "rgba(255, 255, 255, 0.05)",
+                                      color: item.isTraining ? "#f472b6" : "var(--text-muted)",
+                                      border: item.isTraining ? "1px solid rgba(236, 72, 153, 0.45)" : "1px solid var(--border-color)",
+                                      textAlign: "center",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: "3px",
+                                      userSelect: "none"
+                                    }}
+                                  >
+                                    {item.isTraining ? "🎯 Trainer Block" : "Regular (1h)"}
+                                  </span>
+                                </div>
                               );
                             })()}
                           </td>
@@ -2577,6 +2620,7 @@ export default function TimetableManager() {
                                     <div>
                                       <div style={{ fontWeight: "800", fontSize: "0.9rem", color: isLab ? "#c084fc" : "#818cf8", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
                                         <span>{slot.shortName || slot.subjectCode}</span>
+                                        {slot.isTraining && <span title="External Trainer Continuous Block Session" style={{ fontSize: "0.72rem" }}>🎯</span>}
                                         {slot.difficulty === "Tough" && <span title="Tough / Problematic Subject (Protected from Period 7)" style={{ fontSize: "0.72rem" }}>🔥</span>}
                                         {slot.difficulty === "Light" && <span title="Light Subject" style={{ fontSize: "0.72rem" }}>🍃</span>}
                                       </div>
@@ -3441,15 +3485,18 @@ export default function TimetableManager() {
                           setIsCustomSubjectType(false);
                           const t = e.target.value;
                           let hrs = 4;
-                          if (t === "Laboratory" || t === "Project Work") hrs = 3;
+                          let isTr = subjectForm.isTraining;
+                          if (t === "Training") { hrs = 4; isTr = true; }
+                          else if (t === "Laboratory" || t === "Project Work") hrs = 3;
                           else if (t === "Seminar" || t === "Library" || t === "Mentoring / Tutor Ward") hrs = 1;
                           else if (t === "Placement / Soft Skills") hrs = 2;
-                          setSubjectForm({ ...subjectForm, type: t, hoursPerWeek: hrs });
+                          setSubjectForm({ ...subjectForm, type: t, isTraining: isTr, hoursPerWeek: hrs });
                         }
                       }}
                       style={{ fontSize: "0.85rem" }}
                     >
                       <option value="Theory">📘 Theory</option>
+                      <option value="Training">🎯 External Training / Continuous Block</option>
                       <option value="Laboratory">🔬 Laboratory</option>
                       <option value="Project Work">🚀 Project Work</option>
                       <option value="Seminar">🎤 Seminar / Presentation</option>
@@ -3500,47 +3547,112 @@ export default function TimetableManager() {
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: editingSubject ? "1fr 1fr 1.3fr 1.3fr 0.8fr" : "1fr 1fr 1.4fr 1.3fr", gap: "8px" }}>
-                <input 
-                  type="text" 
-                  className="text-input" 
-                  placeholder="Short (e.g. OS)" 
-                  value={subjectForm.shortName} 
-                  onChange={e => setSubjectForm({ ...subjectForm, shortName: e.target.value })}
-                  style={{ fontSize: "0.85rem" }}
-                />
-                <input 
-                  type="number" 
-                  className="text-input" 
-                  placeholder="Hours/Week" 
-                  value={subjectForm.hoursPerWeek} 
-                  onChange={e => setSubjectForm({ ...subjectForm, hoursPerWeek: e.target.value })}
-                  style={{ fontSize: "0.85rem" }}
-                />
-                <select
-                  className="select-input"
-                  value={subjectForm.difficulty || "Normal"}
-                  onChange={e => setSubjectForm({ ...subjectForm, difficulty: e.target.value })}
-                  style={{ 
-                    fontSize: "0.85rem",
-                    borderColor: subjectForm.difficulty === "Tough" ? "#ef4444" : (subjectForm.difficulty === "Light" ? "#10b981" : "var(--border-color)")
-                  }}
-                  title="Tough: strictly blocks Period 7 & avoids Period 6. Morning priority. Light: afternoon priority."
-                >
-                  <option value="Normal">📘 Normal</option>
-                  <option value="Tough">🔥 Tough (No P7)</option>
-                  <option value="Light">🍃 Light (Afternoon)</option>
-                </select>
+              {/* External Trainer / Continuous Block Selection Box */}
+              <div 
+                onClick={() => setSubjectForm(prev => ({ ...prev, isTraining: !prev.isTraining }))}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  background: subjectForm.isTraining ? "rgba(236, 72, 153, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                  border: subjectForm.isTraining ? "1.5px solid #ec4899" : "1px solid var(--border-color)",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <input 
+                    type="checkbox"
+                    id="subjectIsTraining"
+                    checked={!!subjectForm.isTraining}
+                    onChange={e => {
+                      e.stopPropagation();
+                      setSubjectForm(prev => ({ ...prev, isTraining: e.target.checked }));
+                    }}
+                    style={{ width: "17px", height: "17px", cursor: "pointer", accentColor: "#ec4899" }}
+                  />
+                  <div>
+                    <div style={{ fontSize: "0.84rem", fontWeight: "800", color: subjectForm.isTraining ? "#f472b6" : "var(--text-color)" }}>
+                      🎯 External Trainer / Continuous Session (e.g. DAA, Aptitude)
+                    </div>
+                    <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                      {subjectForm.isTraining 
+                        ? "Continuous block enabled (4-hr Morning & 3-hr Afternoon flip across sections)"
+                        : "Click here to mark as Training Subject (Continuous Block)"}
+                    </div>
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: "0.68rem",
+                  fontWeight: "800",
+                  padding: "3px 8px",
+                  borderRadius: "6px",
+                  background: subjectForm.isTraining ? "rgba(236, 72, 153, 0.3)" : "rgba(255, 255, 255, 0.08)",
+                  color: subjectForm.isTraining ? "#f472b6" : "var(--text-muted)",
+                  whiteSpace: "nowrap"
+                }}>
+                  {subjectForm.isTraining ? "⚡ CONTINUOUS BLOCK" : "REGULAR (1H)"}
+                </span>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.5fr", gap: "8px" }}>
+                <div>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>SHORT NAME</span>
+                  <input 
+                    type="text" 
+                    className="text-input" 
+                    placeholder="Short (e.g. DAA)" 
+                    value={subjectForm.shortName} 
+                    onChange={e => setSubjectForm({ ...subjectForm, shortName: e.target.value })}
+                    style={{ fontSize: "0.85rem", width: "100%" }}
+                  />
+                </div>
+                <div>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>HOURS / WEEK</span>
+                  <input 
+                    type="number" 
+                    className="text-input" 
+                    placeholder="Hours/Week" 
+                    value={subjectForm.hoursPerWeek} 
+                    onChange={e => setSubjectForm({ ...subjectForm, hoursPerWeek: e.target.value })}
+                    style={{ fontSize: "0.85rem", width: "100%" }}
+                  />
+                </div>
+                <div>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>DIFFICULTY</span>
+                  <select
+                    className="select-input"
+                    value={subjectForm.difficulty || "Normal"}
+                    onChange={e => setSubjectForm({ ...subjectForm, difficulty: e.target.value })}
+                    style={{ 
+                      fontSize: "0.85rem",
+                      width: "100%",
+                      borderColor: subjectForm.difficulty === "Tough" ? "#ef4444" : (subjectForm.difficulty === "Light" ? "#10b981" : "var(--border-color)")
+                    }}
+                    title="Tough: strictly blocks Period 7 & avoids Period 6. Morning priority. Light: afternoon priority."
+                  >
+                    <option value="Normal">📘 Normal</option>
+                    <option value="Tough">🔥 Tough (No P7)</option>
+                    <option value="Light">🍃 Light (Afternoon)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
                 <button 
                   type="submit" 
                   className="btn btn-primary"
                   disabled={loading}
                   style={{ 
+                    flex: 1,
                     justifyContent: "center", 
                     display: "flex", 
                     alignItems: "center", 
                     gap: "6px", 
                     fontSize: "0.85rem",
+                    padding: "0.55rem 1rem",
                     background: editingSubject ? "linear-gradient(135deg, #a855f7 0%, #6366f1 100%)" : undefined
                   }}
                 >
@@ -3553,7 +3665,7 @@ export default function TimetableManager() {
                     type="button" 
                     className="btn btn-secondary" 
                     onClick={handleCancelEditSubject}
-                    style={{ fontSize: "0.85rem", padding: "0.45rem" }}
+                    style={{ fontSize: "0.85rem", padding: "0.55rem 1.25rem" }}
                   >
                     Cancel
                   </button>
@@ -3660,6 +3772,19 @@ export default function TimetableManager() {
                                 borderRadius: "4px"
                               }}>
                                 {sub.difficulty === "Tough" ? "🔥 Tough" : "🍃 Light"}
+                              </span>
+                            )}
+                            {(sub.isTraining || sub.type === "Training") && (
+                              <span style={{ 
+                                fontSize: "0.66rem", 
+                                fontWeight: "800",
+                                background: "rgba(236, 72, 153, 0.25)", 
+                                color: "#f472b6",
+                                padding: "1px 6px", 
+                                borderRadius: "4px",
+                                border: "1px solid rgba(236, 72, 153, 0.4)"
+                              }}>
+                                🎯 Trainer
                               </span>
                             )}
 
