@@ -3,7 +3,7 @@ import API from "../api";
 import { 
   Calendar, Clock, Users, BookOpen, Sparkles, CheckCircle2, 
   AlertTriangle, RefreshCw, Plus, Trash2, Edit3, Save, Download, 
-  Printer, Filter, Search, Layers, ChevronRight, UserCheck
+  Printer, Filter, Search, Layers, ChevronRight, UserCheck, X
 } from "lucide-react";
 
 export default function TimetableManager() {
@@ -121,6 +121,74 @@ export default function TimetableManager() {
     } catch (e) {}
     return {};
   });
+
+  // Official IQAC Number (Editable from Time Table Admin tab)
+  const [iqacNumber, setIqacNumber] = useState(() => {
+    try {
+      return localStorage.getItem("timetable_iqac_number") || "MEC/IQAC/2026 - 27/CSE/006";
+    } catch (e) {
+      return "MEC/IQAC/2026 - 27/CSE/006";
+    }
+  });
+
+  // Official Hall Numbers per classKey (e.g. { "II-A": "LH-1", "IV-B": "LH-2" })
+  const [hallNumbers, setHallNumbers] = useState(() => {
+    try {
+      const saved = localStorage.getItem("timetable_hall_numbers");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      "II-A": "LH-1", "II-B": "LH-2", "II-C": "LH-3",
+      "III-A": "LH-4", "III-B": "LH-5", "III-C": "LH-6",
+      "IV-A": "LH-7", "IV-B": "LH-8", "IV-C": "LH-9"
+    };
+  });
+
+  // Official Coordinators and Incharges
+  const [coordinators, setCoordinators] = useState(() => {
+    try {
+      const saved = localStorage.getItem("timetable_coordinators");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      examCoordinator: "Mrs.M.Logapriya, AP/CSE",
+      placementCoordinator: "Mrs.M.Buvaneswari, AP/CSE",
+      timetableIncharge: "TIME TABLE INCHARGE",
+      hod: "HOD"
+    };
+  });
+
+  // Letter Template Header data
+  const [letterTemplateData, setLetterTemplateData] = useState(null);
+
+  // Print Modals
+  const [showClassPrintModal, setShowClassPrintModal] = useState(false);
+  const [showFacultyPrintModal, setShowFacultyPrintModal] = useState(false);
+
+  // Roman Numeral Semester Helper
+  const getRomanSem = (year, semType) => {
+    if (year === "II") return semType === "Odd" ? "III" : "IV";
+    if (year === "III") return semType === "Odd" ? "V" : "VI";
+    if (year === "IV") return semType === "Odd" ? "VII" : "VIII";
+    return semType === "Odd" ? "I" : "II";
+  };
+
+  // Helper to format Faculty with Designation and Department
+  const formatFacultyInfo = (facName) => {
+    if (!facName || facName === "-") return "-";
+    const staff = staffList.find(s => s.name?.trim().toLowerCase() === facName.trim().toLowerCase());
+    let desig = "AP";
+    if (staff && staff.designation) {
+      const dLow = staff.designation.toLowerCase();
+      if (dLow.includes("associate")) desig = "ASP";
+      else if (dLow.includes("head") || dLow.includes("hod")) desig = "Prof & Head";
+      else if (dLow.includes("prof")) desig = "Prof";
+      else if (dLow.includes("assistant")) desig = "AP";
+      else desig = staff.designation;
+    }
+    const dept = (staff && staff.department) || department || "CSE";
+    return `${facName}, ${desig}/${dept}`;
+  };
 
   // Modal state for manual slot editing
   const [slotEditModal, setSlotEditModal] = useState(null);
@@ -346,6 +414,24 @@ export default function TimetableManager() {
         setClassAdvisors({});
       }
 
+      // Update IQAC number from DB if available
+      if (allocRes.data?.iqacNumber) {
+        setIqacNumber(allocRes.data.iqacNumber);
+        localStorage.setItem("timetable_iqac_number", allocRes.data.iqacNumber);
+      }
+
+      // Update Hall numbers from DB if available
+      if (allocRes.data?.hallNumbers && Object.keys(allocRes.data.hallNumbers).length > 0) {
+        setHallNumbers(allocRes.data.hallNumbers);
+        localStorage.setItem("timetable_hall_numbers", JSON.stringify(allocRes.data.hallNumbers));
+      }
+
+      // Update Coordinators from DB if available
+      if (allocRes.data?.coordinators && Object.keys(allocRes.data.coordinators).length > 0) {
+        setCoordinators(allocRes.data.coordinators);
+        localStorage.setItem("timetable_coordinators", JSON.stringify(allocRes.data.coordinators));
+      }
+
       setSubjectMasters(masters);
 
       // Merge saved faculty allocations with full curriculum master across all sections
@@ -356,6 +442,15 @@ export default function TimetableManager() {
       console.error("Failed to load subjects and allocations", err);
     }
   };
+
+  // Fetch Letter Template header logo
+  useEffect(() => {
+    API.get("/api/letter-template")
+      .then(res => {
+        if (res.data) setLetterTemplateData(res.data);
+      })
+      .catch(e => console.log("Letter template header not loaded:", e));
+  }, []);
 
   // Admin section intake count changer (1 to 5+ sections per year)
   const handleUpdateYearSectionCount = (targetYear, count) => {
@@ -627,7 +722,7 @@ export default function TimetableManager() {
     }));
   };
 
-  // Save Allocations & Year-Sections & Class Advisors to DB
+  // Save Allocations, Year-Sections, Class Advisors, IQAC & Coordinators to DB
   const handleSaveAllocations = async () => {
     try {
       setLoading(true);
@@ -637,11 +732,17 @@ export default function TimetableManager() {
         semesterType,
         allocations,
         yearSections,
-        classAdvisors
+        classAdvisors,
+        iqacNumber,
+        hallNumbers,
+        coordinators
       });
       localStorage.setItem("timetable_year_sections", JSON.stringify(yearSections));
       localStorage.setItem("timetable_class_advisors", JSON.stringify(classAdvisors));
-      showAlert("Subject-Staff Allocations, Section Settings & Class Advisors saved successfully!");
+      localStorage.setItem("timetable_iqac_number", iqacNumber);
+      localStorage.setItem("timetable_hall_numbers", JSON.stringify(hallNumbers));
+      localStorage.setItem("timetable_coordinators", JSON.stringify(coordinators));
+      showAlert("Subject Allocations, IQAC Number, Hall Numbers & Coordinators saved successfully!");
     } catch (err) {
       showAlert("Failed to save allocations: " + (err.response?.data?.error || err.message), "error");
     } finally {
@@ -659,16 +760,22 @@ export default function TimetableManager() {
 
     try {
       setGenerating(true);
-      // Save current allocations, sections & class advisors first
+      // Save current allocations, sections, class advisors, IQAC & coordinators first
       await API.post("/api/timetable/allocation", {
         department,
         academicYear,
         semesterType,
         allocations,
         yearSections,
-        classAdvisors
+        classAdvisors,
+        iqacNumber,
+        hallNumbers,
+        coordinators
       });
       localStorage.setItem("timetable_class_advisors", JSON.stringify(classAdvisors));
+      localStorage.setItem("timetable_iqac_number", iqacNumber);
+      localStorage.setItem("timetable_hall_numbers", JSON.stringify(hallNumbers));
+      localStorage.setItem("timetable_coordinators", JSON.stringify(coordinators));
 
       // Call generation algorithm
       const res = await API.post("/api/timetable/generate", {
@@ -1969,15 +2076,46 @@ export default function TimetableManager() {
                   </div>
                 )}
 
-                {/* Print Button */}
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => window.print()}
-                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
-                >
-                  <Printer size={16} />
-                  <span>Print Timetable</span>
-                </button>
+                {/* Official Print Buttons */}
+                {selectedScheduleView === "class" ? (
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => setShowClassPrintModal(true)}
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: "7px", 
+                      background: "linear-gradient(135deg, #4f46e5, #06b6d4)", 
+                      color: "#ffffff", 
+                      fontWeight: "700",
+                      padding: "0.5rem 1.1rem",
+                      borderRadius: "8px",
+                      boxShadow: "0 4px 14px rgba(79, 70, 229, 0.35)"
+                    }}
+                  >
+                    <Printer size={16} />
+                    <span>🖨️ Print Class Timetable (Official Format)</span>
+                  </button>
+                ) : (
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => setShowFacultyPrintModal(true)}
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: "7px", 
+                      background: "linear-gradient(135deg, #059669, #10b981)", 
+                      color: "#ffffff", 
+                      fontWeight: "700",
+                      padding: "0.5rem 1.1rem",
+                      borderRadius: "8px",
+                      boxShadow: "0 4px 14px rgba(16, 185, 129, 0.35)"
+                    }}
+                  >
+                    <Printer size={16} />
+                    <span>🖨️ Print / Download Faculty Routine (Official Format)</span>
+                  </button>
+                )}
               </div>
 
             </div>
@@ -2509,6 +2647,145 @@ export default function TimetableManager() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* SECTION 0B: OFFICIAL TIMETABLE PRINT & IQAC HEADER CONFIGURATION */}
+          <div className="glass-card" style={{ 
+            gridColumn: "1 / -1", 
+            padding: "1.5rem 1.75rem", 
+            borderRadius: "16px", 
+            background: "linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85))", 
+            border: "1px solid rgba(99, 102, 241, 0.3)" 
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.2rem", flexWrap: "wrap", gap: "10px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px", color: "#818cf8" }}>
+                  <span>🏛️</span>
+                  <span>Official Timetable Print & IQAC Header Configuration</span>
+                </h3>
+                <span style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                  Fill IQAC Number, Class Hall Numbers, and Coordinators to appear dynamically in the printed timetable headers
+                </span>
+              </div>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleSaveAllocations}
+                style={{ fontSize: "0.82rem", padding: "0.5rem 1.25rem", display: "flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg, #4f46e5, #06b6d4)", color: "#fff", fontWeight: "700" }}
+              >
+                <Save size={15} />
+                <span>Save IQAC & Print Settings</span>
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.25rem" }}>
+              {/* Card 1: IQAC Reference Number */}
+              <div style={{ background: "rgba(0,0,0,0.25)", padding: "1.2rem", borderRadius: "12px", border: "1px solid rgba(56, 189, 248, 0.25)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "1.2rem" }}>📋</span>
+                  <span style={{ fontWeight: "700", fontSize: "0.95rem", color: "#38bdf8" }}>IQAC Number (Top-Right Header)</span>
+                </div>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0 0 10px 0" }}>
+                  Whatever you enter here will automatically appear on the top right of the official Faculty Timetable:
+                </p>
+                <input 
+                  type="text"
+                  className="select-input"
+                  value={iqacNumber}
+                  onChange={e => {
+                    setIqacNumber(e.target.value);
+                    localStorage.setItem("timetable_iqac_number", e.target.value);
+                  }}
+                  placeholder="e.g. MEC/IQAC/2026 - 27/CSE/006"
+                  style={{ width: "100%", padding: "0.6rem 0.9rem", fontSize: "0.95rem", fontWeight: "700", letterSpacing: "0.5px", background: "rgba(0,0,0,0.4)" }}
+                />
+                <span style={{ fontSize: "0.7rem", color: "#38bdf8", opacity: 0.85, marginTop: "6px", display: "block" }}>
+                  💡 Live Output: <code>{iqacNumber || "MEC/IQAC/2026 - 27/CSE/006"}</code>
+                </span>
+              </div>
+
+              {/* Card 2: Coordinators and Incharges */}
+              <div style={{ background: "rgba(0,0,0,0.25)", padding: "1.2rem", borderRadius: "12px", border: "1px solid rgba(192, 132, 252, 0.25)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "1.2rem" }}>👥</span>
+                  <span style={{ fontWeight: "700", fontSize: "0.95rem", color: "#c084fc" }}>Official Coordinators (Print Footer)</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginBottom: "3px" }}>Exam Coordinator:</label>
+                    <input 
+                      type="text" 
+                      className="select-input"
+                      value={coordinators.examCoordinator || ""} 
+                      onChange={e => setCoordinators(prev => ({ ...prev, examCoordinator: e.target.value }))}
+                      placeholder="e.g. Mrs.M.Logapriya, AP/CSE"
+                      style={{ width: "100%", padding: "0.45rem 0.75rem", fontSize: "0.8rem" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginBottom: "3px" }}>Placement Coordinator:</label>
+                    <input 
+                      type="text" 
+                      className="select-input"
+                      value={coordinators.placementCoordinator || ""} 
+                      onChange={e => setCoordinators(prev => ({ ...prev, placementCoordinator: e.target.value }))}
+                      placeholder="e.g. Mrs.M.Buvaneswari, AP/CSE"
+                      style={{ width: "100%", padding: "0.45rem 0.75rem", fontSize: "0.8rem" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginBottom: "3px" }}>Timetable Incharge:</label>
+                    <input 
+                      type="text" 
+                      className="select-input"
+                      value={coordinators.timetableIncharge || ""} 
+                      onChange={e => setCoordinators(prev => ({ ...prev, timetableIncharge: e.target.value }))}
+                      placeholder="TIME TABLE INCHARGE"
+                      style={{ width: "100%", padding: "0.45rem 0.75rem", fontSize: "0.8rem" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginBottom: "3px" }}>HOD Name / Signature:</label>
+                    <input 
+                      type="text" 
+                      className="select-input"
+                      value={coordinators.hod || ""} 
+                      onChange={e => setCoordinators(prev => ({ ...prev, hod: e.target.value }))}
+                      placeholder="HOD"
+                      style={{ width: "100%", padding: "0.45rem 0.75rem", fontSize: "0.8rem" }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Hall Numbers per Class */}
+              <div style={{ background: "rgba(0,0,0,0.25)", padding: "1.2rem", borderRadius: "12px", border: "1px solid rgba(52, 211, 153, 0.25)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "1.2rem" }}>🚪</span>
+                  <span style={{ fontWeight: "700", fontSize: "0.95rem", color: "#34d399" }}>Class Hall Numbers (HALL NO)</span>
+                </div>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: "0 0 8px 0" }}>
+                  Enter room/hall for each section to appear on top-right of Class Timetable:
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "8px", maxHeight: "150px", overflowY: "auto", paddingRight: "4px" }}>
+                  {["II", "III", "IV"].flatMap(yr => ((yearSections && yearSections[yr]) || ["A", "B"]).map(s => {
+                    const ck = `${yr}-${s}`;
+                    return (
+                      <div key={ck} style={{ background: "rgba(0,0,0,0.25)", padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                        <span style={{ fontSize: "0.72rem", fontWeight: "800", color: "#34d399" }}>{ck}:</span>
+                        <input 
+                          type="text"
+                          className="select-input"
+                          value={hallNumbers[ck] || ""}
+                          onChange={e => setHallNumbers(prev => ({ ...prev, [ck]: e.target.value }))}
+                          placeholder="LH-1"
+                          style={{ width: "100%", padding: "3px 6px", fontSize: "0.78rem", marginTop: "2px" }}
+                        />
+                      </div>
+                    );
+                  }))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3360,6 +3637,603 @@ export default function TimetableManager() {
           </div>
         </div>
       )}
+
+      {/* ============================================================== */}
+      {/* PRINT MODAL 1: OFFICIAL CLASS TIME TABLE (IMAGE 1 FORMAT)      */}
+      {/* ============================================================== */}
+      {showClassPrintModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 15, 29, 0.88)",
+          backdropFilter: "blur(8px)",
+          zIndex: 10000,
+          overflowY: "auto",
+          padding: "1.5rem 1rem",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center"
+        }}>
+          {/* Top Control Bar (Hidden during print) */}
+          <div className="no-print" style={{
+            width: "100%",
+            maxWidth: "850px",
+            background: "rgba(30, 41, 59, 0.95)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            borderRadius: "12px",
+            padding: "0.85rem 1.25rem",
+            marginBottom: "1rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "10px",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.4)"
+          }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: "700", color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>🖨️</span>
+                <span>Official Class Timetable Print Preview</span>
+              </h3>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                {currentClassSchedule?.year} Year - Section {currentClassSchedule?.section} | Academic Year {academicYear}
+              </span>
+            </div>
+
+            {/* Quick Hall No Editor */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>HALL NO:</span>
+              <input 
+                type="text"
+                className="select-input"
+                value={hallNumbers[currentClassSchedule?.classKey] || ""}
+                onChange={e => {
+                  const updated = { ...hallNumbers, [currentClassSchedule?.classKey]: e.target.value };
+                  setHallNumbers(updated);
+                  localStorage.setItem("timetable_hall_numbers", JSON.stringify(updated));
+                }}
+                placeholder="e.g. LH-1"
+                style={{ width: "90px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowClassPrintModal(false)}
+                style={{ fontSize: "0.8rem", padding: "0.5rem 0.9rem", display: "flex", alignItems: "center", gap: "5px" }}
+              >
+                <X size={15} />
+                <span>Close</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => window.print()}
+                style={{
+                  fontSize: "0.8rem",
+                  padding: "0.5rem 1.25rem",
+                  fontWeight: "700",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "linear-gradient(135deg, #4f46e5, #06b6d4)",
+                  color: "#ffffff"
+                }}
+              >
+                <Printer size={16} />
+                <span>Print / Save as PDF</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Printable White Sheet (Exact Image 1 Layout) */}
+          <div 
+            id="official-class-print-area"
+            style={{
+              width: "100%",
+              maxWidth: "850px",
+              background: "#ffffff",
+              color: "#000000",
+              padding: "24px 30px",
+              borderRadius: "4px",
+              boxShadow: "0 12px 35px rgba(0,0,0,0.6)",
+              fontFamily: "Arial, sans-serif",
+              boxSizing: "border-box"
+            }}
+          >
+            {/* Header: Logo on left, text centered */}
+            <div style={{ position: "relative", marginBottom: "6px", textAlign: "center", padding: "0 70px", minHeight: "80px" }}>
+              <img 
+                src={letterTemplateData?.headerLogo || "/logo1.png"} 
+                alt="College Logo" 
+                style={{ position: "absolute", left: 0, top: 0, width: "65px", height: "78px", objectFit: "contain" }}
+                onError={e => { e.target.src = "/logo1.png"; }}
+              />
+              <div style={{ fontSize: "14pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.3px", lineHeight: 1.25 }}>
+                MUTHAYAMMAL ENGINEERING COLLEGE, RASIPURAM – 637 408
+              </div>
+              <div style={{ fontSize: "12pt", fontWeight: "900", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
+                (AUTONOMOUS)
+              </div>
+              <div style={{ fontSize: "10.5pt", fontWeight: "900", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
+                DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
+              </div>
+              <div style={{ fontSize: "11.5pt", fontWeight: "900", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
+                CLASS TIME TABLE
+              </div>
+              <div style={{ fontSize: "10.5pt", fontWeight: "900", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginTop: "3px", fontFamily: "Arial, sans-serif" }}>
+                {semesterType.toUpperCase()} SEMESTER - Academic Year [{academicYear}]
+              </div>
+            </div>
+
+            {/* Subheader: Year/Sem/Sec & HALL NO */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", fontWeight: "900", fontSize: "10pt", margin: "10px 0 4px", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+              <div>
+                Year/Sem/Sec: {currentClassSchedule?.year}/{getRomanSem(currentClassSchedule?.year, semesterType)}/{currentClassSchedule?.section}
+              </div>
+              <div>
+                HALL NO: {hallNumbers[currentClassSchedule?.classKey] || "LH-1"}
+              </div>
+            </div>
+
+            {/* 7-Period Timetable Grid */}
+            <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #000000", fontSize: "8.5pt", color: "#000000", fontFamily: "Arial, sans-serif", textAlign: "center" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th rowSpan={2} style={{ border: "1px solid #000000", padding: "4px 2px", width: "55px", fontSize: "8.5pt", fontWeight: "900" }}>
+                    Hour /<br/>Time /<br/>Day
+                  </th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>1</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>2</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "26px" }}>-</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>3</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>4</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "26px" }}>-</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>5</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>6</th>
+                  <th style={{ border: "1px solid #000000", padding: "3px", fontWeight: "900", width: "70px" }}>7</th>
+                </tr>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(9:10-10:05)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(10:05-11:00)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(11:00-11:15)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(11:15-12:10)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(12:10-01:00)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(01:05-01:45)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(1:45-2:40)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(2:40-3:35)</th>
+                  <th style={{ border: "1px solid #000000", padding: "2px", fontSize: "7pt", fontWeight: "800" }}>(3:35-4:30)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day, dIdx) => {
+                  const shortDay = ["MON", "TUE", "WED", "THU", "FRI"][dIdx];
+                  const daySlots = currentClassSchedule?.days?.[day] || [];
+                  const getSlotVal = (period) => {
+                    const s = daySlots.find(item => item.period === period);
+                    if (!s || s.type === "Free") return "";
+                    return s.shortName || s.subjectCode || "";
+                  };
+
+                  return (
+                    <tr key={day} style={{ height: "36px" }}>
+                      <td style={{ border: "1px solid #000000", fontWeight: "900", background: "#f8fafc", fontSize: "9pt" }}>
+                        {shortDay}
+                      </td>
+                      <td style={{ border: "1px solid #000000", fontWeight: "800", fontSize: "9pt", padding: "4px 2px" }}>
+                        {getSlotVal(1)}
+                      </td>
+                      <td style={{ border: "1px solid #000000", fontWeight: "800", fontSize: "9pt", padding: "4px 2px" }}>
+                        {getSlotVal(2)}
+                      </td>
+
+                      {/* BREAK column with rowSpan=5 on Monday */}
+                      {dIdx === 0 && (
+                        <td rowSpan={5} style={{
+                          border: "1px solid #000000",
+                          width: "26px",
+                          textAlign: "center",
+                          fontWeight: "900",
+                          fontSize: "9pt",
+                          letterSpacing: "4px",
+                          writingMode: "vertical-rl",
+                          transform: "rotate(180deg)",
+                          background: "#ffffff",
+                          padding: 0
+                        }}>
+                          BREAK
+                        </td>
+                      )}
+
+                      <td style={{ border: "1px solid #000000", fontWeight: "800", fontSize: "9pt", padding: "4px 2px" }}>
+                        {getSlotVal(3)}
+                      </td>
+                      <td style={{ border: "1px solid #000000", fontWeight: "800", fontSize: "9pt", padding: "4px 2px" }}>
+                        {getSlotVal(4)}
+                      </td>
+
+                      {/* LUNCH BREAK column with rowSpan=5 on Monday */}
+                      {dIdx === 0 && (
+                        <td rowSpan={5} style={{
+                          border: "1px solid #000000",
+                          width: "26px",
+                          textAlign: "center",
+                          fontWeight: "900",
+                          fontSize: "8.5pt",
+                          letterSpacing: "3px",
+                          writingMode: "vertical-rl",
+                          transform: "rotate(180deg)",
+                          background: "#ffffff",
+                          padding: 0
+                        }}>
+                          LUNCH BREAK
+                        </td>
+                      )}
+
+                      <td style={{ border: "1px solid #000000", fontWeight: "800", fontSize: "9pt", padding: "4px 2px" }}>
+                        {getSlotVal(5)}
+                      </td>
+                      <td style={{ border: "1px solid #000000", fontWeight: "800", fontSize: "9pt", padding: "4px 2px" }}>
+                        {getSlotVal(6)}
+                      </td>
+                      <td style={{ border: "1px solid #000000", fontWeight: "800", fontSize: "9pt", padding: "4px 2px" }}>
+                        {getSlotVal(7)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Course & Faculty Table */}
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "12px", border: "1px solid #000000", fontSize: "8.5pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th rowSpan={2} style={{ border: "1px solid #000000", width: "35px", textAlign: "center", padding: "4px", fontWeight: "900" }}>S.No</th>
+                  <th colSpan={2} style={{ border: "1px solid #000000", textAlign: "center", padding: "4px", fontWeight: "900" }}>Course</th>
+                  <th style={{ border: "1px solid #000000", textAlign: "center", padding: "4px", fontWeight: "900" }}>Faculty</th>
+                </tr>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ border: "1px solid #000000", textAlign: "center", padding: "4px", fontWeight: "900" }}>Code & Title</th>
+                  <th style={{ border: "1px solid #000000", width: "85px", textAlign: "center", padding: "4px", fontWeight: "900" }}>Abbreviation</th>
+                  <th style={{ border: "1px solid #000000", textAlign: "center", padding: "4px", fontWeight: "900" }}>Name/Designation/Department</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allocations
+                  .filter(a => a.year === currentClassSchedule?.year && a.section === currentClassSchedule?.section)
+                  .map((a, idx) => (
+                    <tr key={idx}>
+                      <td style={{ border: "1px solid #000000", textAlign: "center", padding: "4px" }}>{idx + 1}</td>
+                      <td style={{ border: "1px solid #000000", padding: "4px 8px", fontWeight: "600" }}>
+                        {a.subjectCode === a.subjectName ? a.subjectCode : `${a.subjectCode} - ${a.subjectName}`}
+                      </td>
+                      <td style={{ border: "1px solid #000000", textAlign: "center", padding: "4px", fontWeight: "800" }}>
+                        {a.shortName || a.subjectCode}
+                      </td>
+                      <td style={{ border: "1px solid #000000", padding: "4px 8px" }}>
+                        {a.facultyNames && a.facultyNames.length > 0
+                          ? a.facultyNames.map(f => formatFacultyInfo(f)).join(", ")
+                          : "-"}
+                      </td>
+                    </tr>
+                  ))
+                }
+                {/* Coordinator Rows */}
+                <tr>
+                  <td colSpan={3} style={{ border: "1px solid #000000", textAlign: "right", padding: "4px 12px", fontWeight: "900" }}>Class Advisor</td>
+                  <td style={{ border: "1px solid #000000", padding: "4px 8px", fontWeight: "800" }}>
+                    {classAdvisors[currentClassSchedule?.classKey] ? formatFacultyInfo(classAdvisors[currentClassSchedule?.classKey]) : "-"}
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={3} style={{ border: "1px solid #000000", textAlign: "right", padding: "4px 12px", fontWeight: "900" }}>Exam Coordinator</td>
+                  <td style={{ border: "1px solid #000000", padding: "4px 8px", fontWeight: "800" }}>
+                    {coordinators.examCoordinator || "Mrs.M.Logapriya, AP/CSE"}
+                  </td>
+                </tr>
+                <tr>
+                  <td colSpan={3} style={{ border: "1px solid #000000", textAlign: "right", padding: "4px 12px", fontWeight: "900" }}>Placement Coordinator</td>
+                  <td style={{ border: "1px solid #000000", padding: "4px 8px", fontWeight: "800" }}>
+                    {coordinators.placementCoordinator || "Mrs.M.Buvaneswari, AP/CSE"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Bottom Signatures */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "35px", padding: "0 10px", fontWeight: "900", fontSize: "9.5pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+              <div>{coordinators.timetableIncharge || "TIME TABLE INCHARGE"}</div>
+              <div>{coordinators.hod || "HOD"}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* PRINT MODAL 2: OFFICIAL FACULTY ROUTINE (IMAGE 2 FORMAT)       */}
+      {/* ============================================================== */}
+      {showFacultyPrintModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 15, 29, 0.88)",
+          backdropFilter: "blur(8px)",
+          zIndex: 10000,
+          overflowY: "auto",
+          padding: "1.5rem 1rem",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center"
+        }}>
+          {/* Top Control Bar (Hidden during print) */}
+          <div className="no-print" style={{
+            width: "100%",
+            maxWidth: "850px",
+            background: "rgba(30, 41, 59, 0.95)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            borderRadius: "12px",
+            padding: "0.85rem 1.25rem",
+            marginBottom: "1rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "10px",
+            boxShadow: "0 10px 25px rgba(0,0,0,0.4)"
+          }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: "700", color: "#ffffff", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>🖨️</span>
+                <span>Official Faculty Timetable Print Preview</span>
+              </h3>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                Staff: <strong style={{ color: "#34d399" }}>{selectedFacultyView}</strong> | IQAC: {iqacNumber}
+              </span>
+            </div>
+
+            {/* Quick IQAC Editor */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>IQAC NO:</span>
+              <input 
+                type="text"
+                className="select-input"
+                value={iqacNumber}
+                onChange={e => {
+                  setIqacNumber(e.target.value);
+                  localStorage.setItem("timetable_iqac_number", e.target.value);
+                }}
+                placeholder="MEC/IQAC/..."
+                style={{ width: "210px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowFacultyPrintModal(false)}
+                style={{ fontSize: "0.8rem", padding: "0.5rem 0.9rem", display: "flex", alignItems: "center", gap: "5px" }}
+              >
+                <X size={15} />
+                <span>Close</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => window.print()}
+                style={{
+                  fontSize: "0.8rem",
+                  padding: "0.5rem 1.25rem",
+                  fontWeight: "700",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "linear-gradient(135deg, #059669, #10b981)",
+                  color: "#ffffff"
+                }}
+              >
+                <Printer size={16} />
+                <span>Print / Save as PDF</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Printable White Sheet (Exact Image 2 Layout) */}
+          <div 
+            id="official-faculty-print-area"
+            style={{
+              width: "100%",
+              maxWidth: "850px",
+              background: "#ffffff",
+              color: "#000000",
+              padding: "24px 30px",
+              borderRadius: "4px",
+              boxShadow: "0 12px 35px rgba(0,0,0,0.6)",
+              fontFamily: "Arial, sans-serif",
+              boxSizing: "border-box"
+            }}
+          >
+            {/* Top Right IQAC Number */}
+            <div style={{ textAlign: "right", fontSize: "10pt", fontWeight: "700", color: "#000000", marginBottom: "8px", fontFamily: "Arial, sans-serif" }}>
+              {iqacNumber || "MEC/IQAC/2026 - 27/CSE/006"}
+            </div>
+
+            {/* Header: Logo on left, text centered */}
+            <div style={{ position: "relative", marginBottom: "18px", textAlign: "center", padding: "0 60px", minHeight: "75px" }}>
+              <img 
+                src={letterTemplateData?.headerLogo || "/logo1.png"} 
+                alt="College Logo" 
+                style={{ position: "absolute", left: 0, top: 0, width: "65px", height: "78px", objectFit: "contain" }}
+                onError={e => { e.target.src = "/logo1.png"; }}
+              />
+              <div style={{ fontSize: "15pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.3px", lineHeight: 1.2 }}>
+                MUTHAYAMMAL ENGINEERING COLLEGE
+              </div>
+              <div style={{ fontSize: "11.5pt", fontWeight: "800", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
+                (Autonomous)
+              </div>
+              <div style={{ fontSize: "9.5pt", fontWeight: "600", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
+                Rasipuram - 637 408, Namakkal Dist., Tamil Nadu, India.
+              </div>
+            </div>
+
+            {/* Staff Workload Summary Table */}
+            {(() => {
+              const facAllocs = allocations.filter(a => a.facultyNames && a.facultyNames.includes(selectedFacultyView));
+              const theoryList = facAllocs.filter(a => !(a.type || "").toLowerCase().includes("lab"));
+              const labList = facAllocs.filter(a => (a.type || "").toLowerCase().includes("lab"));
+              const rowCount = Math.max(theoryList.length, labList.length, 1);
+              const totalTheoryH = theoryList.reduce((s, a) => s + (Number(a.hoursPerWeek) || 0), 0);
+              const totalLabH = labList.reduce((s, a) => s + (Number(a.hoursPerWeek) || 0), 0);
+              const totalH = totalTheoryH + totalLabH;
+
+              const rows = [];
+              for (let i = 0; i < rowCount; i++) {
+                const t = theoryList[i];
+                const l = labList[i];
+                rows.push({
+                  theoryBranch: t ? `B.E/${t.year}/${getRomanSem(t.year, semesterType)}/CSE-${t.section}` : "-",
+                  theoryCourse: t ? `${t.subjectCode}& ${t.subjectName}` : "-",
+                  labBranch: l ? `B.E/${l.year}/${getRomanSem(l.year, semesterType)}/CSE-${l.section}` : "-",
+                  labCourse: l ? `${l.subjectCode}& ${l.subjectName}` : "-"
+                });
+              }
+
+              return (
+                <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #718096", fontSize: "8.5pt", color: "#000000", fontFamily: "Arial, sans-serif", marginBottom: "22px" }}>
+                  <thead>
+                    <tr style={{ background: "#ffffff" }}>
+                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "17%", fontWeight: "800" }}>Name of the Staff</th>
+                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "14%", fontWeight: "800" }}>Year/Sem/Branch</th>
+                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "22%", fontWeight: "800" }}>Theory</th>
+                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "13%", fontWeight: "800" }}>Year/Sem/Branch</th>
+                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "13%", fontWeight: "800" }}>Lab</th>
+                      <th colSpan={3} style={{ border: "1px solid #718096", padding: "3px 4px", textAlign: "center", fontWeight: "800" }}>Workload</th>
+                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "10%", fontWeight: "800" }}>Signature</th>
+                    </tr>
+                    <tr style={{ background: "#ffffff" }}>
+                      <th style={{ border: "1px solid #718096", padding: "3px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "800" }}>Theory</th>
+                      <th style={{ border: "1px solid #718096", padding: "3px 2px", textAlign: "center", fontSize: "7pt", fontWeight: "800" }}>Lab/Sem/Tut/Lib/Pro</th>
+                      <th style={{ border: "1px solid #718096", padding: "3px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "800" }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, idx) => (
+                      <tr key={idx} style={{ minHeight: "30px" }}>
+                        {idx === 0 && (
+                          <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "6px 5px", fontWeight: "800", verticalAlign: "middle" }}>
+                            {selectedFacultyView}
+                          </td>
+                        )}
+                        <td style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "600" }}>{row.theoryBranch}</td>
+                        <td style={{ border: "1px solid #718096", padding: "5px 6px" }}>{row.theoryCourse}</td>
+                        <td style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "600" }}>{row.labBranch}</td>
+                        <td style={{ border: "1px solid #718096", padding: "5px 6px" }}>{row.labCourse}</td>
+                        {idx === 0 && (
+                          <>
+                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "700", verticalAlign: "middle" }}>
+                              {totalTheoryH || "-"}
+                            </td>
+                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "700", verticalAlign: "middle" }}>
+                              {totalLabH > 0 ? totalLabH : "-"}
+                            </td>
+                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
+                              {totalH}
+                            </td>
+                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", verticalAlign: "middle" }}></td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
+
+            {/* 7-Period Faculty Routine Grid */}
+            <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #718096", fontSize: "9pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+              <thead>
+                <tr style={{ background: "#d9e2ec" }}>
+                  <th style={{ border: "1px solid #718096", width: "65px", padding: "7px 4px", textAlign: "center", fontSize: "11pt", fontWeight: "900" }}>↓→</th>
+                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>1<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(9:10-10:05)</span></th>
+                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>2<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(10:05-11:00)</span></th>
+                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>3<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(11:15-12:10)</span></th>
+                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>4<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(12:10-01:00)</span></th>
+                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>5<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(01:45-2:40)</span></th>
+                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>6<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(2:40-3:35)</span></th>
+                  <th style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>7<br/><span style={{ fontSize: "7pt", fontWeight: "normal" }}>(3:35-4:30)</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day, dIdx) => {
+                  const shortDay = ["MON", "TUE", "WED", "THU", "FRI"][dIdx];
+                  const daySlots = facultySchedules[selectedFacultyView]?.days?.[day] || [];
+                  return (
+                    <tr key={day} style={{ height: "40px" }}>
+                      <td style={{ border: "1px solid #718096", background: "#e9f2df", fontWeight: "900", textAlign: "center", padding: "4px", fontSize: "9pt" }}>
+                        {shortDay}
+                      </td>
+                      {[1, 2, 3, 4, 5, 6, 7].map(period => {
+                        const slot = daySlots.find(s => s.period === period);
+                        const isOccupied = slot && slot.occupied;
+                        const formattedClass = isOccupied ? (slot.classKey ? slot.classKey.replace("-", " – ") : "") : "";
+                        return (
+                          <td key={period} style={{ border: "1px solid #718096", textAlign: "center", padding: "4px", fontWeight: "800", fontSize: "9.5pt" }}>
+                            {formattedClass}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* Bottom Signatures */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", padding: "0 10px", fontWeight: "900", fontSize: "10pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+              <div>Timetable Coordinator</div>
+              <div>HOD</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global CSS for Print Optimization */}
+      <style>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #official-class-print-area, #official-class-print-area *,
+          #official-faculty-print-area, #official-faculty-print-area * {
+            visibility: visible !important;
+          }
+          #official-class-print-area, #official-faculty-print-area {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            display: block !important;
+            box-shadow: none !important;
+            border: none !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
 
     </div>
   );
