@@ -3,7 +3,8 @@ import API from "../api";
 import { 
   Calendar, Clock, Users, BookOpen, Sparkles, CheckCircle2, 
   AlertTriangle, RefreshCw, Plus, Trash2, Edit3, Save, Download, 
-  Printer, Filter, Search, Layers, ChevronRight, UserCheck, X
+  Printer, Filter, Search, Layers, ChevronRight, UserCheck, X,
+  Lock, Unlock, History
 } from "lucide-react";
 
 export default function TimetableManager() {
@@ -165,6 +166,11 @@ export default function TimetableManager() {
   const [showClassPrintModal, setShowClassPrintModal] = useState(false);
   const [showFacultyPrintModal, setShowFacultyPrintModal] = useState(false);
 
+  // Version History & Lock Modals/States
+  const [historyList, setHistoryList] = useState([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [lockingSchedule, setLockingSchedule] = useState(false);
+
   // Roman Numeral Semester Helper
   const getRomanSem = (year, semType) => {
     if (year === "II") return semType === "Odd" ? "III" : "IV";
@@ -289,6 +295,7 @@ export default function TimetableManager() {
     fetchStaff();
     fetchSubjectsAndAllocations();
     fetchSavedSchedule();
+    fetchHistory();
   }, [department, academicYear, semesterType]);
 
   const showAlert = (text, type = "success") => {
@@ -548,6 +555,79 @@ export default function TimetableManager() {
     }
   };
 
+  // 4. Fetch Timetable Version History
+  const fetchHistory = async () => {
+    try {
+      const res = await API.get(
+        `/api/timetable/history?department=${department}&academicYear=${academicYear}&semesterType=${semesterType}`
+      );
+      setHistoryList(res.data || []);
+    } catch (err) {
+      console.error("Failed to load history versions", err);
+    }
+  };
+
+  // 5. Lock or Unlock Timetable Schedule (Finalize)
+  const handleToggleLock = async () => {
+    if (!timetableSchedule) return;
+    const willLock = !timetableSchedule.isLocked;
+    try {
+      setLockingSchedule(true);
+      const res = await API.put("/api/timetable/lock", {
+        department,
+        academicYear,
+        semesterType,
+        isLocked: willLock,
+        lockedBy: "Admin"
+      });
+      if (res.data.success) {
+        setTimetableSchedule(prev => ({ ...prev, isLocked: willLock }));
+        showAlert(
+          willLock 
+            ? "🔒 Timetable Finalized and LOCKED! Generating or modifying slots is protected." 
+            : "🔓 Timetable Unlocked! Generation and editing are now enabled.",
+          willLock ? "success" : "info"
+        );
+        fetchHistory();
+      }
+    } catch (err) {
+      showAlert("Lock toggle failed: " + (err.response?.data?.error || err.message), "error");
+    } finally {
+      setLockingSchedule(false);
+    }
+  };
+
+  // 6. Restore Historical Version
+  const handleRestoreVersion = async (versionId) => {
+    if (!window.confirm("Are you sure you want to restore this historical version as the active timetable?")) return;
+    try {
+      const res = await API.post(`/api/timetable/history/restore/${versionId}`);
+      if (res.data.success) {
+        showAlert("✅ " + res.data.message);
+        setTimetableSchedule(res.data.schedule);
+        if (res.data.schedule.classes && res.data.schedule.classes.length > 0) {
+          setSelectedClassKey(res.data.schedule.classes[0].classKey);
+        }
+        setShowHistoryModal(false);
+        fetchHistory();
+      }
+    } catch (err) {
+      showAlert("Restore failed: " + (err.response?.data?.error || err.message), "error");
+    }
+  };
+
+  // 7. Delete Historical Version
+  const handleDeleteHistoryVersion = async (versionId) => {
+    if (!window.confirm("Are you sure you want to delete this historical archive?")) return;
+    try {
+      await API.delete(`/api/timetable/history/${versionId}`);
+      showAlert("Historical version removed.");
+      fetchHistory();
+    } catch (err) {
+      showAlert("Delete failed: " + (err.response?.data?.error || err.message), "error");
+    }
+  };
+
   // Add default curriculums if empty
   const handleLoadSampleSubjects = async () => {
     const sampleCurriculum = semesterType === "Odd" ? [
@@ -752,6 +832,11 @@ export default function TimetableManager() {
 
   // Generate Clash-Free Timetable
   const handleGenerateTimetable = async () => {
+    // Check if timetable is locked
+    if (timetableSchedule?.isLocked) {
+      return showAlert("🔒 Timetable is LOCKED (Finalized)! Please unlock it in the Schedule view before generating a new timetable.", "error");
+    }
+
     // Check if at least some subjects have staff assigned
     const assignedCount = allocations.filter(a => a.facultyNames && a.facultyNames.length > 0).length;
     if (assignedCount === 0) {
@@ -793,6 +878,7 @@ export default function TimetableManager() {
           setSelectedClassKey(res.data.classes[0].classKey);
         }
         showAlert("⚡ Clash-Free Timetable Generated Successfully with Staff Rest Breaks & Monday Period 1 Advisors!");
+        fetchHistory();
         setActiveSubTab("schedule");
       }
     } catch (err) {
@@ -804,6 +890,9 @@ export default function TimetableManager() {
 
   // Open slot edit modal
   const handleOpenSlotEdit = (classKey, day, slot) => {
+    if (timetableSchedule?.isLocked) {
+      return showAlert("🔒 Timetable is LOCKED (Finalized)! Unlock it first to edit slots.", "error");
+    }
     setSlotEditModal({
       isOpen: true,
       classKey,
@@ -1789,18 +1878,26 @@ export default function TimetableManager() {
                 <button 
                   className="btn btn-primary" 
                   onClick={handleGenerateTimetable} 
-                  disabled={generating}
+                  disabled={generating || timetableSchedule?.isLocked}
                   style={{
-                    background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+                    background: timetableSchedule?.isLocked 
+                      ? "#64748b" 
+                      : "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
                     display: "flex",
                     alignItems: "center",
                     gap: "8px",
                     fontWeight: "700",
-                    boxShadow: "0 4px 15px rgba(99, 102, 241, 0.35)"
+                    boxShadow: timetableSchedule?.isLocked ? "none" : "0 4px 15px rgba(99, 102, 241, 0.35)",
+                    cursor: timetableSchedule?.isLocked ? "not-allowed" : "pointer"
                   }}
+                  title={timetableSchedule?.isLocked ? "Timetable is Locked! Unlock in Schedule view to re-generate." : ""}
                 >
-                  <Sparkles size={18} />
-                  <span>{generating ? "Generating Clash-Free..." : "⚡ Auto-Generate Timetable"}</span>
+                  {timetableSchedule?.isLocked ? <Lock size={18} /> : <Sparkles size={18} />}
+                  <span>
+                    {generating 
+                      ? "Generating Clash-Free..." 
+                      : (timetableSchedule?.isLocked ? "🔒 Timetable Locked (Finalized)" : "⚡ Auto-Generate Timetable")}
+                  </span>
                 </button>
               </div>
             </div>
@@ -2116,6 +2213,52 @@ export default function TimetableManager() {
                     <span>🖨️ Print / Download Faculty Routine (Official Format)</span>
                   </button>
                 )}
+
+                {/* Version History Button */}
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => { fetchHistory(); setShowHistoryModal(true); }}
+                  style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: "7px", 
+                    fontWeight: "700",
+                    padding: "0.5rem 1rem",
+                    borderRadius: "8px"
+                  }}
+                  title="View and restore previously generated timetables"
+                >
+                  <History size={16} />
+                  <span>📜 History ({historyList.length})</span>
+                </button>
+
+                {/* Finalize / Lock Button */}
+                {timetableSchedule && timetableSchedule.classes && timetableSchedule.classes.length > 0 && (
+                  <button 
+                    className="btn"
+                    onClick={handleToggleLock}
+                    disabled={lockingSchedule}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "7px",
+                      background: timetableSchedule.isLocked 
+                        ? "rgba(239, 68, 68, 0.15)" 
+                        : "linear-gradient(135deg, #10b981, #059669)",
+                      color: timetableSchedule.isLocked ? "#ef4444" : "#ffffff",
+                      border: timetableSchedule.isLocked ? "1px solid rgba(239, 68, 68, 0.4)" : "none",
+                      fontWeight: "700",
+                      padding: "0.5rem 1.1rem",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      boxShadow: timetableSchedule.isLocked ? "none" : "0 4px 14px rgba(16, 185, 129, 0.35)"
+                    }}
+                    title={timetableSchedule.isLocked ? "Click to unlock this timetable for editing/generating" : "Click to finalize & protect this timetable"}
+                  >
+                    {timetableSchedule.isLocked ? <Unlock size={16} /> : <Lock size={16} />}
+                    <span>{timetableSchedule.isLocked ? "🔓 Unlock Schedule" : "🔒 Finalize & Lock"}</span>
+                  </button>
+                )}
               </div>
 
             </div>
@@ -2140,10 +2283,26 @@ export default function TimetableManager() {
             // ================= CLASS SCHEDULE GRID =================
             currentClassSchedule && (
               <div className="glass-card" style={{ padding: "1.75rem", borderRadius: "16px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.75rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "0.75rem", flexWrap: "wrap", gap: "10px" }}>
                   <div>
-                    <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: "800", color: "var(--text-color)" }}>
+                    <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: "800", color: "var(--text-color)", display: "flex", alignItems: "center", gap: "10px" }}>
                       Class Schedule: {currentClassSchedule.year} Year - Section {currentClassSchedule.section}
+                      {timetableSchedule?.isLocked && (
+                        <span style={{
+                          fontSize: "0.75rem",
+                          padding: "3px 10px",
+                          borderRadius: "6px",
+                          background: "rgba(16, 185, 129, 0.15)",
+                          color: "#10b981",
+                          border: "1px solid rgba(16, 185, 129, 0.4)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          fontWeight: "800"
+                        }}>
+                          🔒 FINALIZED / OFFICIAL
+                        </span>
+                      )}
                     </h2>
                     <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                       Department of {department} | Academic Year {academicYear} | {semesterType} Semester
@@ -3618,6 +3777,165 @@ export default function TimetableManager() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* VERSION HISTORY MODAL (OPTION A - RESTORE PREVIOUS TIMETABLES) */}
+      {/* ============================================================== */}
+      {showHistoryModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.78)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 10001,
+          padding: "1.5rem"
+        }}>
+          <div style={{
+            background: "var(--card-bg, #1e293b)",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "680px",
+            maxHeight: "85vh",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
+            border: "1px solid var(--border-color, rgba(255, 255, 255, 0.12))"
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: "1.25rem 1.5rem",
+              borderBottom: "1px solid var(--border-color, rgba(255, 255, 255, 0.1))",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "rgba(255, 255, 255, 0.02)"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <History size={22} style={{ color: "#818cf8" }} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "800", color: "var(--text-color)" }}>
+                    📜 Timetable Version History
+                  </h3>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    Department of {department} | {academicYear} | {semesterType} Semester
+                  </span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowHistoryModal(false)}
+                className="btn btn-secondary"
+                style={{ padding: "6px", borderRadius: "8px", border: "none", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* List */}
+            <div style={{ padding: "1.25rem 1.5rem", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "12px" }}>
+              {historyList.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--text-muted)" }}>
+                  <History size={42} style={{ opacity: 0.3, marginBottom: "0.75rem" }} />
+                  <p style={{ margin: 0, fontWeight: "700", fontSize: "1rem" }}>No saved history versions yet.</p>
+                  <span style={{ fontSize: "0.8rem", display: "block", marginTop: "4px", maxWidth: "420px", margin: "4px auto 0" }}>
+                    Whenever you generate a new timetable, your previous schedule is automatically archived here so you never lose it!
+                  </span>
+                </div>
+              ) : (
+                historyList.map((ver, idx) => (
+                  <div key={ver._id} style={{
+                    padding: "1rem 1.25rem",
+                    borderRadius: "12px",
+                    background: "rgba(255, 255, 255, 0.03)",
+                    border: "1px solid var(--border-color, rgba(255, 255, 255, 0.08))",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "1rem",
+                    flexWrap: "wrap"
+                  }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontWeight: "800", fontSize: "0.95rem", color: "var(--text-color)" }}>
+                          {ver.versionName || `Version ${historyList.length - idx}`}
+                        </span>
+                        {ver.isLocked && (
+                          <span style={{ fontSize: "0.7rem", padding: "2px 6px", borderRadius: "4px", background: "rgba(16, 185, 129, 0.2)", color: "#10b981", fontWeight: "700" }}>
+                            🔒 Finalized
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", display: "block", marginTop: "3px" }}>
+                        Generated: {new Date(ver.generatedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        {" • "}{ver.classes?.length || 0} Classes Included
+                      </span>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <button
+                        onClick={() => handleRestoreVersion(ver._id)}
+                        className="btn btn-primary"
+                        style={{
+                          fontSize: "0.8rem",
+                          fontWeight: "700",
+                          padding: "6px 14px",
+                          borderRadius: "8px",
+                          background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px"
+                        }}
+                      >
+                        <RefreshCw size={13} />
+                        <span>Restore</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteHistoryVersion(ver._id)}
+                        className="btn btn-secondary"
+                        style={{
+                          fontSize: "0.8rem",
+                          padding: "6px 10px",
+                          borderRadius: "8px",
+                          color: "#ef4444",
+                          borderColor: "rgba(239, 68, 68, 0.3)"
+                        }}
+                        title="Delete this history version"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: "1rem 1.5rem",
+              borderTop: "1px solid var(--border-color, rgba(255, 255, 255, 0.1))",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "rgba(0, 0, 0, 0.15)"
+            }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                Restoring a version will set it as your active timetable schedule.
+              </span>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowHistoryModal(false)}
+                style={{ fontSize: "0.85rem", padding: "6px 16px", borderRadius: "8px" }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
