@@ -12,10 +12,71 @@ export default function TimetableManager() {
   
   // Master Filters
   const [department, setDepartment] = useState("CSE");
-  const [academicYear, setAcademicYear] = useState("2026-2027");
+  const [academicYear, setAcademicYear] = useState(() => {
+    try {
+      return localStorage.getItem("timetable_selected_academic_year") || "2026-2027";
+    } catch (e) {
+      return "2026-2027";
+    }
+  });
   const [semesterType, setSemesterType] = useState("Odd"); // "Odd" (Sem 3, 5, 7) or "Even" (Sem 4, 6, 8)
   const [yearFilter, setYearFilter] = useState("All"); // "All", "II", "III", "IV"
   const [sectionFilter, setSectionFilter] = useState("All"); // "All", "A", "B", "C", "D"
+
+  // Academic Years List (Preset + Saved in localStorage)
+  const [academicYearList, setAcademicYearList] = useState(() => {
+    try {
+      const saved = localStorage.getItem("timetable_academic_years");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return ["2024-2025", "2025-2026", "2026-2027", "2027-2028", "2028-2029"];
+  });
+
+  const [isAddingCustomYear, setIsAddingCustomYear] = useState(false);
+  const [customAcademicYearInput, setCustomAcademicYearInput] = useState("");
+
+  // Ensure current academicYear is always included in the list
+  useEffect(() => {
+    if (academicYear && !academicYearList.includes(academicYear)) {
+      setAcademicYearList(prev => [...prev, academicYear].sort());
+    }
+  }, [academicYear, academicYearList]);
+
+  // Handler for adding custom academic year
+  const handleAddCustomAcademicYear = (inputVal) => {
+    const raw = (inputVal !== undefined ? inputVal : customAcademicYearInput).trim();
+    if (!raw) {
+      showAlert("Please enter an Academic Year (e.g. 2027-2028)", "error");
+      return;
+    }
+
+    // Normalize input: e.g. "2027 - 2028" -> "2027-2028"
+    const cleaned = raw.replace(/\s*[-/]\s*/g, "-").replace(/\s+/g, "");
+    if (!cleaned) {
+      showAlert("Invalid Academic Year format", "error");
+      return;
+    }
+
+    let updatedList = [...academicYearList];
+    if (!updatedList.includes(cleaned)) {
+      updatedList = [...updatedList, cleaned].sort();
+      setAcademicYearList(updatedList);
+      try {
+        localStorage.setItem("timetable_academic_years", JSON.stringify(updatedList));
+      } catch (e) {}
+    }
+
+    setAcademicYear(cleaned);
+    try {
+      localStorage.setItem("timetable_selected_academic_year", cleaned);
+    } catch (e) {}
+    setIsAddingCustomYear(false);
+    setCustomAcademicYearInput("");
+    showAlert(`Academic Year ${cleaned.includes("-") ? cleaned.replace("-", " - ") : cleaned} selected!`);
+  };
 
   // Intake Sections per Year (e.g. II: A, B; III: A, B; IV: A, B, C)
   const [yearSections, setYearSections] = useState(() => {
@@ -368,9 +429,12 @@ export default function TimetableManager() {
         if (!selectedClassKey && res.data.classes[0]) {
           setSelectedClassKey(res.data.classes[0].classKey);
         }
+      } else {
+        setTimetableSchedule(null);
       }
     } catch (err) {
       console.error("Failed to load saved schedule", err);
+      setTimetableSchedule(null);
     }
   };
 
@@ -1142,17 +1206,102 @@ export default function TimetableManager() {
               </select>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: "700" }}>ACADEMIC YEAR</span>
-              <select 
-                className="select-input" 
-                value={academicYear} 
-                onChange={e => setAcademicYear(e.target.value)}
-                style={{ padding: "0.5rem 0.8rem", fontSize: "0.85rem" }}
-              >
-                <option value="2026-2027">2026 - 2027</option>
-                <option value="2025-2026">2025 - 2026</option>
-              </select>
+            <div style={{ display: "flex", flexDirection: "column", minWidth: "165px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
+                <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: "700" }}>ACADEMIC YEAR</span>
+                {!isAddingCustomYear && (
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCustomYear(true);
+                      setCustomAcademicYearInput("");
+                    }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#818cf8",
+                      fontSize: "0.68rem",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      padding: "0 2px"
+                    }}
+                    title="Add Custom Academic Year"
+                  >
+                    + Custom
+                  </button>
+                )}
+              </div>
+
+              {isAddingCustomYear ? (
+                <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+                  <input 
+                    type="text" 
+                    className="text-input" 
+                    placeholder="e.g. 2027-2028"
+                    value={customAcademicYearInput}
+                    onChange={e => setCustomAcademicYearInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCustomAcademicYear();
+                      } else if (e.key === "Escape") {
+                        setIsAddingCustomYear(false);
+                        setCustomAcademicYearInput("");
+                      }
+                    }}
+                    autoFocus
+                    style={{ 
+                      padding: "0.45rem 0.6rem", 
+                      fontSize: "0.82rem", 
+                      width: "120px",
+                      borderColor: "#818cf8"
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => handleAddCustomAcademicYear()}
+                    style={{ padding: "0.45rem 0.6rem", fontSize: "0.75rem", fontWeight: "700" }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setIsAddingCustomYear(false);
+                      setCustomAcademicYearInput("");
+                    }}
+                    style={{ padding: "0.45rem 0.5rem", fontSize: "0.75rem" }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <select 
+                  className="select-input" 
+                  value={academicYear} 
+                  onChange={e => {
+                    if (e.target.value === "__add_custom__") {
+                      setIsAddingCustomYear(true);
+                      setCustomAcademicYearInput("");
+                    } else {
+                      setAcademicYear(e.target.value);
+                      try {
+                        localStorage.setItem("timetable_selected_academic_year", e.target.value);
+                      } catch (err) {}
+                    }
+                  }}
+                  style={{ padding: "0.5rem 0.8rem", fontSize: "0.85rem" }}
+                >
+                  {academicYearList.map(yr => (
+                    <option key={yr} value={yr}>
+                      {yr.includes("-") ? yr.replace("-", " - ") : yr}
+                    </option>
+                  ))}
+                  <option value="__add_custom__">➕ + Add Custom Year...</option>
+                </select>
+              )}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column" }}>
