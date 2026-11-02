@@ -2242,21 +2242,6 @@ export default function TimetableManager() {
                                     </div>
                                   ) : (
                                     <div>
-                                      {slot.isClassAdvisorHour && (
-                                        <span style={{
-                                          fontSize: "0.62rem",
-                                          fontWeight: "800",
-                                          padding: "1px 6px",
-                                          borderRadius: "4px",
-                                          background: "rgba(16, 185, 129, 0.2)",
-                                          color: "#34d399",
-                                          border: "1px solid rgba(16, 185, 129, 0.4)",
-                                          display: "inline-block",
-                                          marginBottom: "2px"
-                                        }}>
-                                          ⭐ Advisor Hour
-                                        </span>
-                                      )}
                                       <div style={{ fontWeight: "800", fontSize: "0.9rem", color: isLab ? "#c084fc" : "#818cf8" }}>
                                         {slot.shortName || slot.subjectCode}
                                       </div>
@@ -2586,7 +2571,7 @@ export default function TimetableManager() {
                     {/* Class Advisor Configuration (Monday Period 1 Incharges) */}
                     <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px" }}>
                       <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: "700", display: "block", marginBottom: "6px" }}>
-                        👨‍🏫 CLASS ADVISORS (MONDAY PERIOD 1 INCHARGE):
+                        👨‍🏫 CLASS ADVISORS (If teaching a subject in this class, scheduled on Monday Period 1):
                       </span>
                       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                         {currentSecs.map(s => {
