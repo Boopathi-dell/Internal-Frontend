@@ -291,6 +291,7 @@ export default function TimetableManager() {
     type: "Theory",
     difficulty: "Normal",
     isTraining: false,
+    slotPattern: "regular",
     hoursPerWeek: 4
   }));
 
@@ -433,6 +434,7 @@ export default function TimetableManager() {
                 type: sub.type || "Theory",
                 difficulty: existing?.difficulty || sub.difficulty || "Normal",
                 isTraining: existing?.isTraining !== undefined ? existing.isTraining : (sub.isTraining || sub.type?.toLowerCase().includes("training") || false),
+                slotPattern: existing?.slotPattern || sub.slotPattern || (sub.isTraining ? (sub.hoursPerWeek >= 4 ? "4" : "3") : "regular"),
                 hoursPerWeek: Number(sub.hoursPerWeek) || (sub.type?.toLowerCase().includes("lab") ? 3 : 4),
                 facultyNames: existing ? (existing.facultyNames || []) : []
               });
@@ -927,6 +929,16 @@ export default function TimetableManager() {
     }));
   };
 
+  // Handle Subject Continuous Hours Pattern Change in Workload Allocation
+  const handleUpdateSlotPattern = (allocId, newPattern) => {
+    setAllocations(prev => prev.map(item => {
+      if (item.id === allocId) {
+        return { ...item, slotPattern: newPattern };
+      }
+      return item;
+    }));
+  };
+
   // Save Allocations, Year-Sections, Class Advisors, IQAC & Coordinators to DB
   const handleSaveAllocations = async () => {
     try {
@@ -1237,6 +1249,7 @@ export default function TimetableManager() {
       type: isPreset ? matchedType : "custom",
       difficulty: sub.difficulty || "Normal",
       isTraining: sub.isTraining !== undefined ? sub.isTraining : (sub.type?.toLowerCase().includes("training") || false),
+      slotPattern: sub.slotPattern || (sub.isTraining ? (sub.hoursPerWeek >= 4 ? "4" : "3") : "regular"),
       hoursPerWeek: sub.hoursPerWeek || 4
     });
 
@@ -1262,6 +1275,7 @@ export default function TimetableManager() {
       type: "Theory",
       difficulty: "Normal",
       isTraining: false,
+      slotPattern: "regular",
       hoursPerWeek: 4
     }));
   };
@@ -1326,6 +1340,7 @@ export default function TimetableManager() {
             type: finalType,
             difficulty: subjectForm.difficulty || "Normal",
             isTraining: !!subjectForm.isTraining,
+            slotPattern: subjectForm.slotPattern || "regular",
             hoursPerWeek: defaultHours
           });
           await API.post("/api/timetable/subjects", {
@@ -1354,6 +1369,7 @@ export default function TimetableManager() {
                 type: finalType,
                 difficulty: subjectForm.difficulty || "Normal",
                 isTraining: !!subjectForm.isTraining,
+                slotPattern: subjectForm.slotPattern || "regular",
                 hoursPerWeek: defaultHours
               };
             }
@@ -1382,6 +1398,7 @@ export default function TimetableManager() {
               type: finalType,
               difficulty: subjectForm.difficulty || "Normal",
               isTraining: !!subjectForm.isTraining,
+              slotPattern: subjectForm.slotPattern || "regular",
               hoursPerWeek: defaultHours
             };
           }
@@ -1414,6 +1431,7 @@ export default function TimetableManager() {
           type: finalType,
           difficulty: subjectForm.difficulty || "Normal",
           isTraining: !!subjectForm.isTraining,
+          slotPattern: subjectForm.slotPattern || "regular",
           hoursPerWeek: defaultHours
         });
 
@@ -1426,7 +1444,7 @@ export default function TimetableManager() {
         });
 
         showAlert(`Subject ${formattedCode} (${finalType}) added to ${subjectForm.year} Year!`);
-        setSubjectForm(prev => ({ ...prev, code: "", name: "", shortName: "", difficulty: "Normal", isTraining: false }));
+        setSubjectForm(prev => ({ ...prev, code: "", name: "", shortName: "", difficulty: "Normal", isTraining: false, slotPattern: "regular" }));
         setIsCustomSubjectType(false);
         setCustomSubjectTypeText("");
       }
@@ -2209,7 +2227,71 @@ export default function TimetableManager() {
                             })()}
                           </td>
                           <td style={{ fontWeight: "700", textAlign: "center" }}>
-                            {item.hoursPerWeek} hrs
+                            <div>{item.hoursPerWeek} hrs</div>
+                            {!["Laboratory", "Lab", "Project Work"].includes(item.type) && (
+                              <select
+                                className="select-input"
+                                value={item.slotPattern || (item.isTraining ? (Number(item.hoursPerWeek) >= 7 ? "4+3" : "2+2") : "regular")}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  handleUpdateSlotPattern(item.id, val);
+                                  if (val !== "regular" && !item.isTraining) {
+                                    handleToggleTraining(item.id);
+                                  } else if (val === "regular" && item.isTraining) {
+                                    handleToggleTraining(item.id);
+                                  }
+                                }}
+                                style={{
+                                  fontSize: "0.68rem",
+                                  padding: "2px 4px",
+                                  marginTop: "4px",
+                                  borderRadius: "6px",
+                                  background: (item.slotPattern && item.slotPattern !== "regular") || item.isTraining ? "rgba(147, 51, 234, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                                  borderColor: (item.slotPattern && item.slotPattern !== "regular") || item.isTraining ? "#a855f7" : "var(--border-color)",
+                                  color: (item.slotPattern && item.slotPattern !== "regular") || item.isTraining ? "#c084fc" : "var(--text-muted)",
+                                  width: "100%",
+                                  maxWidth: "105px",
+                                  cursor: "pointer"
+                                }}
+                                title="Continuous Hours Slot Pattern (e.g. 2h+2h, 4h Block, or 1h Daily)"
+                              >
+                                <option value="regular" style={{ background: "#1e1e2d", color: "#f8fafc" }}>1h Daily</option>
+                                {Number(item.hoursPerWeek) === 4 && (
+                                  <>
+                                    <option value="2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h</option>
+                                    <option value="2+1+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h + 1h</option>
+                                    <option value="3+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 1h</option>
+                                    <option value="4" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h Block</option>
+                                  </>
+                                )}
+                                {Number(item.hoursPerWeek) === 3 && (
+                                  <>
+                                    <option value="3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h Block</option>
+                                    <option value="2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h</option>
+                                  </>
+                                )}
+                                {Number(item.hoursPerWeek) === 2 && (
+                                  <option value="2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h Block</option>
+                                )}
+                                {Number(item.hoursPerWeek) === 5 && (
+                                  <>
+                                    <option value="2+2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h + 1h</option>
+                                    <option value="3+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 2h</option>
+                                  </>
+                                )}
+                                {Number(item.hoursPerWeek) >= 7 && (
+                                  <option value="4+3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h + 3h Trainer</option>
+                                )}
+                                {![2, 3, 4, 5, 7].includes(Number(item.hoursPerWeek)) && (
+                                  <>
+                                    <option value="2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h</option>
+                                    <option value="2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h Block</option>
+                                    <option value="3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h Block</option>
+                                    <option value="4" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h Block</option>
+                                  </>
+                                )}
+                              </select>
+                            )}
                           </td>
                           <td>
                             {/* Staff Dropdown Selector */}
@@ -3549,13 +3631,23 @@ export default function TimetableManager() {
 
               {/* External Trainer / Continuous Block Selection Box */}
               <div 
-                onClick={() => setSubjectForm(prev => ({ ...prev, isTraining: !prev.isTraining }))}
+                onClick={() => setSubjectForm(prev => {
+                  const nextIsTraining = !prev.isTraining;
+                  let nextPattern = prev.slotPattern;
+                  if (nextIsTraining && (!nextPattern || nextPattern === "regular")) {
+                    const h = Number(prev.hoursPerWeek) || 4;
+                    nextPattern = h >= 7 ? "4+3" : (h === 4 ? "2+2" : (h === 3 ? "3" : (h === 2 ? "2" : "2+2")));
+                  } else if (!nextIsTraining) {
+                    nextPattern = "regular";
+                  }
+                  return { ...prev, isTraining: nextIsTraining, slotPattern: nextPattern };
+                })}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  background: subjectForm.isTraining ? "rgba(236, 72, 153, 0.15)" : "rgba(255, 255, 255, 0.03)",
-                  border: subjectForm.isTraining ? "1.5px solid #ec4899" : "1px solid var(--border-color)",
+                  background: subjectForm.isTraining || (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") ? "rgba(236, 72, 153, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                  border: subjectForm.isTraining || (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") ? "1.5px solid #ec4899" : "1px solid var(--border-color)",
                   borderRadius: "10px",
                   padding: "8px 12px",
                   cursor: "pointer",
@@ -3566,21 +3658,31 @@ export default function TimetableManager() {
                   <input 
                     type="checkbox"
                     id="subjectIsTraining"
-                    checked={!!subjectForm.isTraining}
+                    checked={!!subjectForm.isTraining || (subjectForm.slotPattern && subjectForm.slotPattern !== "regular")}
                     onChange={e => {
                       e.stopPropagation();
-                      setSubjectForm(prev => ({ ...prev, isTraining: e.target.checked }));
+                      const checked = e.target.checked;
+                      setSubjectForm(prev => {
+                        let nextPattern = prev.slotPattern;
+                        if (checked && (!nextPattern || nextPattern === "regular")) {
+                          const h = Number(prev.hoursPerWeek) || 4;
+                          nextPattern = h >= 7 ? "4+3" : (h === 4 ? "2+2" : (h === 3 ? "3" : (h === 2 ? "2" : "2+2")));
+                        } else if (!checked) {
+                          nextPattern = "regular";
+                        }
+                        return { ...prev, isTraining: checked, slotPattern: nextPattern };
+                      });
                     }}
                     style={{ width: "17px", height: "17px", cursor: "pointer", accentColor: "#ec4899" }}
                   />
                   <div>
-                    <div style={{ fontSize: "0.84rem", fontWeight: "800", color: subjectForm.isTraining ? "#f472b6" : "var(--text-color)" }}>
-                      🎯 External Trainer / Continuous Session (e.g. DAA, Aptitude)
+                    <div style={{ fontSize: "0.84rem", fontWeight: "800", color: subjectForm.isTraining || (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") ? "#f472b6" : "var(--text-color)" }}>
+                      🎯 Continuous Block Session (e.g. DAA 2h+2h, Aptitude, Trainer)
                     </div>
                     <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                      {subjectForm.isTraining 
-                        ? "Continuous block enabled (4-hr Morning & 3-hr Afternoon flip across sections)"
-                        : "Click here to mark as Training Subject (Continuous Block)"}
+                      {subjectForm.isTraining || (subjectForm.slotPattern && subjectForm.slotPattern !== "regular")
+                        ? `Continuous block active: ${subjectForm.slotPattern || "2+2"} (Scheduled as continuous periods on separate days)`
+                        : "Click here to mark as Continuous Session (e.g. 2h+2h continuous periods)"}
                     </div>
                   </div>
                 </div>
@@ -3589,15 +3691,15 @@ export default function TimetableManager() {
                   fontWeight: "800",
                   padding: "3px 8px",
                   borderRadius: "6px",
-                  background: subjectForm.isTraining ? "rgba(236, 72, 153, 0.3)" : "rgba(255, 255, 255, 0.08)",
-                  color: subjectForm.isTraining ? "#f472b6" : "var(--text-muted)",
+                  background: subjectForm.isTraining || (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") ? "rgba(236, 72, 153, 0.3)" : "rgba(255, 255, 255, 0.08)",
+                  color: subjectForm.isTraining || (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") ? "#f472b6" : "var(--text-muted)",
                   whiteSpace: "nowrap"
                 }}>
-                  {subjectForm.isTraining ? "⚡ CONTINUOUS BLOCK" : "REGULAR (1H)"}
+                  {subjectForm.slotPattern && subjectForm.slotPattern !== "regular" ? `⚡ ${subjectForm.slotPattern.toUpperCase()} BLOCK` : (subjectForm.isTraining ? "⚡ CONTINUOUS" : "REGULAR (1H)")}
                 </span>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.5fr", gap: "8px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.2fr 1.6fr", gap: "8px" }}>
                 <div>
                   <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>SHORT NAME</span>
                   <input 
@@ -3636,6 +3738,64 @@ export default function TimetableManager() {
                     <option value="Normal">📘 Normal</option>
                     <option value="Tough">🔥 Tough (No P7)</option>
                     <option value="Light">🍃 Light (Afternoon)</option>
+                  </select>
+                </div>
+                <div>
+                  <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>SESSION PATTERN</span>
+                  <select
+                    className="select-input"
+                    value={subjectForm.slotPattern || "regular"}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setSubjectForm(prev => ({
+                        ...prev,
+                        slotPattern: val,
+                        isTraining: val !== "regular"
+                      }));
+                    }}
+                    style={{ 
+                      fontSize: "0.82rem",
+                      width: "100%",
+                      borderColor: subjectForm.slotPattern && subjectForm.slotPattern !== "regular" ? "#a855f7" : "var(--border-color)",
+                      color: subjectForm.slotPattern && subjectForm.slotPattern !== "regular" ? "#c084fc" : "inherit"
+                    }}
+                    title="Choose whether this subject runs as regular 1-hour periods daily, or continuous 2h+2h, 4h block, etc."
+                  >
+                    <option value="regular">1h Daily (Regular)</option>
+                    {Number(subjectForm.hoursPerWeek) === 4 && (
+                      <>
+                        <option value="2+2">⚡ 2h + 2h Continuous</option>
+                        <option value="2+1+1">⚡ 2h + 1h + 1h</option>
+                        <option value="3+1">⚡ 3h + 1h</option>
+                        <option value="4">⚡ 4h Half-Day Block</option>
+                      </>
+                    )}
+                    {Number(subjectForm.hoursPerWeek) === 3 && (
+                      <>
+                        <option value="3">⚡ 3h Half-Day Block</option>
+                        <option value="2+1">⚡ 2h + 1h</option>
+                      </>
+                    )}
+                    {Number(subjectForm.hoursPerWeek) === 2 && (
+                      <option value="2">⚡ 2h Continuous Block</option>
+                    )}
+                    {Number(subjectForm.hoursPerWeek) === 5 && (
+                      <>
+                        <option value="2+2+1">⚡ 2h + 2h + 1h</option>
+                        <option value="3+2">⚡ 3h + 2h</option>
+                      </>
+                    )}
+                    {Number(subjectForm.hoursPerWeek) >= 7 && (
+                      <option value="4+3">⚡ 4h + 3h (Trainer Flip)</option>
+                    )}
+                    {![2, 3, 4, 5, 7].includes(Number(subjectForm.hoursPerWeek)) && (
+                      <>
+                        <option value="2+2">⚡ 2h + 2h Continuous</option>
+                        <option value="2">⚡ 2h Continuous Block</option>
+                        <option value="3">⚡ 3h Continuous Block</option>
+                        <option value="4">⚡ 4h Continuous Block</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>
@@ -3785,6 +3945,19 @@ export default function TimetableManager() {
                                 border: "1px solid rgba(236, 72, 153, 0.4)"
                               }}>
                                 🎯 Trainer
+                              </span>
+                            )}
+                            {sub.slotPattern && sub.slotPattern !== "regular" && (
+                              <span style={{ 
+                                fontSize: "0.66rem", 
+                                fontWeight: "800",
+                                background: "rgba(147, 51, 234, 0.25)", 
+                                color: "#c084fc",
+                                padding: "1px 6px", 
+                                borderRadius: "4px",
+                                border: "1px solid rgba(147, 51, 234, 0.4)"
+                              }}>
+                                ⚡ {sub.slotPattern}
                               </span>
                             )}
 
