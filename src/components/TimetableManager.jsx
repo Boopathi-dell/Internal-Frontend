@@ -280,6 +280,9 @@ export default function TimetableManager() {
   const [isCustomSubjectType, setIsCustomSubjectType] = useState(false);
   const [customSubjectTypeText, setCustomSubjectTypeText] = useState("");
 
+  const [isCustomSlotPattern, setIsCustomSlotPattern] = useState(false);
+  const [customSlotPatternText, setCustomSlotPatternText] = useState("");
+
   const [subjectForm, setSubjectForm] = useState(() => ({
     batch: "2023-2027",
     year: "II",
@@ -1238,6 +1241,17 @@ export default function TimetableManager() {
       setCustomSubjectTypeText("");
     }
 
+    const PRESET_PATTERNS = ["regular", "2+2", "2+1", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3"];
+    const initialPattern = sub.slotPattern || (sub.isTraining ? (sub.hoursPerWeek >= 4 ? "4" : "3") : "regular");
+    const isPresetPattern = PRESET_PATTERNS.includes(initialPattern);
+    if (!isPresetPattern && initialPattern) {
+      setIsCustomSlotPattern(true);
+      setCustomSlotPatternText(initialPattern);
+    } else {
+      setIsCustomSlotPattern(false);
+      setCustomSlotPatternText("");
+    }
+
     setSubjectForm({
       batch: sm.batch,
       year: sm.year,
@@ -1249,7 +1263,7 @@ export default function TimetableManager() {
       type: isPreset ? matchedType : "custom",
       difficulty: sub.difficulty || "Normal",
       isTraining: sub.isTraining !== undefined ? sub.isTraining : (sub.type?.toLowerCase().includes("training") || false),
-      slotPattern: sub.slotPattern || (sub.isTraining ? (sub.hoursPerWeek >= 4 ? "4" : "3") : "regular"),
+      slotPattern: initialPattern,
       hoursPerWeek: sub.hoursPerWeek || 4
     });
 
@@ -1267,6 +1281,8 @@ export default function TimetableManager() {
     setEditingSubject(null);
     setIsCustomSubjectType(false);
     setCustomSubjectTypeText("");
+    setIsCustomSlotPattern(false);
+    setCustomSlotPatternText("");
     setSubjectForm(prev => ({
       ...prev,
       code: "",
@@ -1290,6 +1306,12 @@ export default function TimetableManager() {
     const finalType = isCustomSubjectType 
       ? (customSubjectTypeText.trim() || "Theory") 
       : (subjectForm.type === "custom" ? (customSubjectTypeText.trim() || "Theory") : subjectForm.type);
+
+    const finalSlotPattern = isCustomSlotPattern
+      ? (customSlotPatternText.trim() || "regular")
+      : (subjectForm.slotPattern === "custom" ? (customSlotPatternText.trim() || "regular") : (subjectForm.slotPattern || "regular"));
+
+    const finalIsTraining = !!subjectForm.isTraining || (finalSlotPattern !== "regular");
 
     let defaultHours = Number(subjectForm.hoursPerWeek);
     if (!defaultHours) {
@@ -1339,8 +1361,8 @@ export default function TimetableManager() {
             shortName: formattedShort,
             type: finalType,
             difficulty: subjectForm.difficulty || "Normal",
-            isTraining: !!subjectForm.isTraining,
-            slotPattern: subjectForm.slotPattern || "regular",
+            isTraining: finalIsTraining,
+            slotPattern: finalSlotPattern,
             hoursPerWeek: defaultHours
           });
           await API.post("/api/timetable/subjects", {
@@ -1368,8 +1390,8 @@ export default function TimetableManager() {
                 shortName: formattedShort,
                 type: finalType,
                 difficulty: subjectForm.difficulty || "Normal",
-                isTraining: !!subjectForm.isTraining,
-                slotPattern: subjectForm.slotPattern || "regular",
+                isTraining: finalIsTraining,
+                slotPattern: finalSlotPattern,
                 hoursPerWeek: defaultHours
               };
             }
@@ -1397,8 +1419,8 @@ export default function TimetableManager() {
               shortName: formattedShort,
               type: finalType,
               difficulty: subjectForm.difficulty || "Normal",
-              isTraining: !!subjectForm.isTraining,
-              slotPattern: subjectForm.slotPattern || "regular",
+              isTraining: finalIsTraining,
+              slotPattern: finalSlotPattern,
               hoursPerWeek: defaultHours
             };
           }
@@ -1430,8 +1452,8 @@ export default function TimetableManager() {
           shortName: formattedShort,
           type: finalType,
           difficulty: subjectForm.difficulty || "Normal",
-          isTraining: !!subjectForm.isTraining,
-          slotPattern: subjectForm.slotPattern || "regular",
+          isTraining: finalIsTraining,
+          slotPattern: finalSlotPattern,
           hoursPerWeek: defaultHours
         });
 
@@ -1447,6 +1469,8 @@ export default function TimetableManager() {
         setSubjectForm(prev => ({ ...prev, code: "", name: "", shortName: "", difficulty: "Normal", isTraining: false, slotPattern: "regular" }));
         setIsCustomSubjectType(false);
         setCustomSubjectTypeText("");
+        setIsCustomSlotPattern(false);
+        setCustomSlotPatternText("");
       }
 
       await fetchSubjectsAndAllocations();
@@ -2234,6 +2258,23 @@ export default function TimetableManager() {
                                 value={item.slotPattern || (item.isTraining ? (Number(item.hoursPerWeek) >= 7 ? "4+3" : "2+2") : "regular")}
                                 onChange={(e) => {
                                   const val = e.target.value;
+                                  if (val === "custom_prompt") {
+                                    const customVal = window.prompt(
+                                      "Enter Continuous Pattern (e.g. 2+1, 2+2, 3+1, 4):", 
+                                      item.slotPattern && item.slotPattern !== "regular" ? item.slotPattern : "2+1"
+                                    );
+                                    if (customVal && customVal.trim()) {
+                                      const clean = customVal.trim();
+                                      handleUpdateSlotPattern(item.id, clean);
+                                      if (!item.isTraining && clean !== "regular") {
+                                        handleToggleTraining(item.id);
+                                      } else if (item.isTraining && clean === "regular") {
+                                        handleToggleTraining(item.id);
+                                      }
+                                    }
+                                    return;
+                                  }
+
                                   handleUpdateSlotPattern(item.id, val);
                                   if (val !== "regular" && !item.isTraining) {
                                     handleToggleTraining(item.id);
@@ -2250,46 +2291,26 @@ export default function TimetableManager() {
                                   borderColor: (item.slotPattern && item.slotPattern !== "regular") || item.isTraining ? "#a855f7" : "var(--border-color)",
                                   color: (item.slotPattern && item.slotPattern !== "regular") || item.isTraining ? "#c084fc" : "var(--text-muted)",
                                   width: "100%",
-                                  maxWidth: "105px",
+                                  maxWidth: "110px",
                                   cursor: "pointer"
                                 }}
-                                title="Continuous Hours Slot Pattern (e.g. 2h+2h, 4h Block, or 1h Daily)"
+                                title="Continuous Hours Slot Pattern (e.g. 2h+1h, 2h+2h, 4h Block, or type custom)"
                               >
                                 <option value="regular" style={{ background: "#1e1e2d", color: "#f8fafc" }}>1h Daily</option>
-                                {Number(item.hoursPerWeek) === 4 && (
-                                  <>
-                                    <option value="2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h</option>
-                                    <option value="2+1+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h + 1h</option>
-                                    <option value="3+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 1h</option>
-                                    <option value="4" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h Block</option>
-                                  </>
+                                <option value="2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h</option>
+                                <option value="2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h</option>
+                                <option value="2+1+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h + 1h</option>
+                                <option value="3+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 1h</option>
+                                <option value="4" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h Block</option>
+                                <option value="3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h Block</option>
+                                <option value="2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h Block</option>
+                                <option value="2+2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h + 1h</option>
+                                <option value="3+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 2h</option>
+                                <option value="4+3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h + 3h Trainer</option>
+                                {item.slotPattern && !["regular", "2+1", "2+2", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3"].includes(item.slotPattern) && (
+                                  <option value={item.slotPattern} style={{ background: "#1e1e2d", color: "#f472b6" }}>⚡ {item.slotPattern} (Custom)</option>
                                 )}
-                                {Number(item.hoursPerWeek) === 3 && (
-                                  <>
-                                    <option value="3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h Block</option>
-                                    <option value="2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h</option>
-                                  </>
-                                )}
-                                {Number(item.hoursPerWeek) === 2 && (
-                                  <option value="2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h Block</option>
-                                )}
-                                {Number(item.hoursPerWeek) === 5 && (
-                                  <>
-                                    <option value="2+2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h + 1h</option>
-                                    <option value="3+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 2h</option>
-                                  </>
-                                )}
-                                {Number(item.hoursPerWeek) >= 7 && (
-                                  <option value="4+3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h + 3h Trainer</option>
-                                )}
-                                {![2, 3, 4, 5, 7].includes(Number(item.hoursPerWeek)) && (
-                                  <>
-                                    <option value="2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h</option>
-                                    <option value="2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h Block</option>
-                                    <option value="3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h Block</option>
-                                    <option value="4" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h Block</option>
-                                  </>
-                                )}
+                                <option value="custom_prompt" style={{ background: "#1e1e2d", color: "#38bdf8" }}>✏️ Custom Pattern...</option>
                               </select>
                             )}
                           </td>
@@ -3744,61 +3765,92 @@ export default function TimetableManager() {
                   <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>SESSION PATTERN</span>
                   <select
                     className="select-input"
-                    value={subjectForm.slotPattern || "regular"}
+                    value={isCustomSlotPattern ? "custom" : (subjectForm.slotPattern || "regular")}
                     onChange={e => {
                       const val = e.target.value;
-                      setSubjectForm(prev => ({
-                        ...prev,
-                        slotPattern: val,
-                        isTraining: val !== "regular"
-                      }));
+                      if (val === "custom") {
+                        setIsCustomSlotPattern(true);
+                        const defaultCustom = (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") ? subjectForm.slotPattern : "2+1";
+                        setCustomSlotPatternText(defaultCustom);
+                        setSubjectForm(prev => ({ ...prev, slotPattern: defaultCustom, isTraining: true }));
+                      } else {
+                        setIsCustomSlotPattern(false);
+                        setCustomSlotPatternText("");
+                        setSubjectForm(prev => ({
+                          ...prev,
+                          slotPattern: val,
+                          isTraining: val !== "regular"
+                        }));
+                      }
                     }}
                     style={{ 
                       fontSize: "0.82rem",
                       width: "100%",
-                      borderColor: subjectForm.slotPattern && subjectForm.slotPattern !== "regular" ? "#a855f7" : "var(--border-color)",
-                      color: subjectForm.slotPattern && subjectForm.slotPattern !== "regular" ? "#c084fc" : "inherit"
+                      borderColor: (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") || isCustomSlotPattern ? "#a855f7" : "var(--border-color)",
+                      color: (subjectForm.slotPattern && subjectForm.slotPattern !== "regular") || isCustomSlotPattern ? "#c084fc" : "inherit"
                     }}
-                    title="Choose whether this subject runs as regular 1-hour periods daily, or continuous 2h+2h, 4h block, etc."
+                    title="Choose whether this subject runs as regular 1-hour periods daily, or continuous 2h+1h, 2h+2h, 4h block, or enter custom pattern."
                   >
                     <option value="regular">1h Daily (Regular)</option>
-                    {Number(subjectForm.hoursPerWeek) === 4 && (
-                      <>
-                        <option value="2+2">⚡ 2h + 2h Continuous</option>
-                        <option value="2+1+1">⚡ 2h + 1h + 1h</option>
-                        <option value="3+1">⚡ 3h + 1h</option>
-                        <option value="4">⚡ 4h Half-Day Block</option>
-                      </>
+                    <option value="2+1">⚡ 2h + 1h Continuous</option>
+                    <option value="2+2">⚡ 2h + 2h Continuous</option>
+                    <option value="2+1+1">⚡ 2h + 1h + 1h</option>
+                    <option value="3+1">⚡ 3h + 1h</option>
+                    <option value="4">⚡ 4h Half-Day Block</option>
+                    <option value="3">⚡ 3h Half-Day Block</option>
+                    <option value="2">⚡ 2h Continuous Block</option>
+                    <option value="2+2+1">⚡ 2h + 2h + 1h</option>
+                    <option value="3+2">⚡ 3h + 2h</option>
+                    <option value="4+3">⚡ 4h + 3h (Trainer Flip)</option>
+                    {subjectForm.slotPattern && !["regular", "2+1", "2+2", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3", "custom"].includes(subjectForm.slotPattern) && (
+                      <option value={subjectForm.slotPattern}>⚡ {subjectForm.slotPattern} (Custom)</option>
                     )}
-                    {Number(subjectForm.hoursPerWeek) === 3 && (
-                      <>
-                        <option value="3">⚡ 3h Half-Day Block</option>
-                        <option value="2+1">⚡ 2h + 1h</option>
-                      </>
-                    )}
-                    {Number(subjectForm.hoursPerWeek) === 2 && (
-                      <option value="2">⚡ 2h Continuous Block</option>
-                    )}
-                    {Number(subjectForm.hoursPerWeek) === 5 && (
-                      <>
-                        <option value="2+2+1">⚡ 2h + 2h + 1h</option>
-                        <option value="3+2">⚡ 3h + 2h</option>
-                      </>
-                    )}
-                    {Number(subjectForm.hoursPerWeek) >= 7 && (
-                      <option value="4+3">⚡ 4h + 3h (Trainer Flip)</option>
-                    )}
-                    {![2, 3, 4, 5, 7].includes(Number(subjectForm.hoursPerWeek)) && (
-                      <>
-                        <option value="2+2">⚡ 2h + 2h Continuous</option>
-                        <option value="2">⚡ 2h Continuous Block</option>
-                        <option value="3">⚡ 3h Continuous Block</option>
-                        <option value="4">⚡ 4h Continuous Block</option>
-                      </>
-                    )}
+                    <option value="custom">✏️ Custom Pattern (Enter manual e.g. 2+1)...</option>
                   </select>
                 </div>
               </div>
+
+              {/* Custom Continuous Pattern Manual Input Box */}
+              {isCustomSlotPattern && (
+                <div style={{
+                  background: "rgba(168, 85, 247, 0.1)",
+                  border: "1.5px dashed #a855f7",
+                  borderRadius: "10px",
+                  padding: "10px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "0.78rem", fontWeight: "800", color: "#c084fc" }}>
+                      ✏️ ENTER CUSTOM CONTINUOUS PATTERN:
+                    </span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                      Separate hours with '+' (e.g. <b>2+1</b>, <b>2+2</b>, <b>3+1</b>)
+                    </span>
+                  </div>
+                  <input 
+                    type="text" 
+                    className="text-input" 
+                    placeholder="Enter pattern e.g. 2+1, 2+2, 3+1" 
+                    value={customSlotPatternText} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      setCustomSlotPatternText(val);
+                      setSubjectForm(prev => ({
+                        ...prev,
+                        slotPattern: val,
+                        isTraining: val.trim() !== "regular" && val.trim() !== ""
+                      }));
+                    }}
+                    style={{ fontSize: "0.85rem", width: "100%", borderColor: "#a855f7", color: "#c084fc", fontWeight: "700" }}
+                    autoFocus
+                  />
+                  <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                    💡 Example: typing <b>2+1</b> schedules a 2-hour continuous block on Day 1, and 1-hour regular period on Day 2!
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
                 <button 
