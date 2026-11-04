@@ -426,6 +426,8 @@ export default function TimetableManager() {
             if (!seen.has(key)) {
               seen.add(key);
               const existing = allocMap[`${m.year}-${m.semester}-${sec}-${codeUpper}`] || allocMap[`${m.year}-${sec}-${codeUpper}`];
+              const resolvedPattern = sub.slotPattern || (existing?.slotPattern ? existing.slotPattern : "regular");
+              const resolvedIsTraining = resolvedPattern !== "regular";
               merged.push({
                 id: key,
                 year: m.year,
@@ -435,9 +437,9 @@ export default function TimetableManager() {
                 subjectName: sub.name,
                 shortName: sub.shortName || codeUpper,
                 type: sub.type || "Theory",
-                difficulty: existing?.difficulty || sub.difficulty || "Normal",
-                isTraining: (sub.slotPattern && sub.slotPattern !== "regular") || sub.isTraining !== undefined ? sub.isTraining : (existing?.isTraining !== undefined ? existing.isTraining : false),
-                slotPattern: sub.slotPattern || existing?.slotPattern || (sub.isTraining ? (Number(sub.hoursPerWeek) >= 7 ? "4+3" : (Number(sub.hoursPerWeek) === 4 ? "2+2" : (Number(sub.hoursPerWeek) === 3 ? "2+1" : "2"))) : "regular"),
+                difficulty: sub.difficulty || existing?.difficulty || "Normal",
+                isTraining: resolvedIsTraining,
+                slotPattern: resolvedPattern,
                 hoursPerWeek: Number(sub.hoursPerWeek) || (sub.type?.toLowerCase().includes("lab") ? 3 : 4),
                 facultyNames: existing ? (existing.facultyNames || []) : []
               });
@@ -1408,7 +1410,7 @@ export default function TimetableManager() {
         }
 
         // Sync Allocations state if matching subject exists
-        setAllocations(prev => prev.map(a => {
+        const nextAllocations = allocations.map(a => {
           if (a.year === editingSubject.year && a.semester === Number(editingSubject.semester) && a.subjectCode === editingSubject.originalCode) {
             return {
               ...a,
@@ -1425,9 +1427,24 @@ export default function TimetableManager() {
             };
           }
           return a;
-        }));
+        });
 
-        showAlert(`Subject ${formattedCode} updated successfully!`);
+        setAllocations(nextAllocations);
+
+        // Also persist updated allocation state to MongoDB immediately so slotPattern is permanently stored
+        try {
+          await API.post("/api/timetable/allocation", {
+            department,
+            academicYear,
+            semesterType,
+            allocations: nextAllocations,
+            yearSections
+          });
+        } catch (saveAllocErr) {
+          console.log("Could not auto-sync allocations to DB:", saveAllocErr);
+        }
+
+        showAlert(`Subject ${formattedCode} updated successfully with pattern ${finalSlotPattern}!`);
         handleCancelEditSubject();
       } else {
         // Adding brand new subject
