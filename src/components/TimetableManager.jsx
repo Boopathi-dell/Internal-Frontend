@@ -436,8 +436,8 @@ export default function TimetableManager() {
                 shortName: sub.shortName || codeUpper,
                 type: sub.type || "Theory",
                 difficulty: existing?.difficulty || sub.difficulty || "Normal",
-                isTraining: existing?.isTraining !== undefined ? existing.isTraining : (sub.isTraining || sub.type?.toLowerCase().includes("training") || false),
-                slotPattern: existing?.slotPattern || sub.slotPattern || (sub.isTraining ? (sub.hoursPerWeek >= 4 ? "4" : "3") : "regular"),
+                isTraining: (sub.slotPattern && sub.slotPattern !== "regular") || sub.isTraining !== undefined ? sub.isTraining : (existing?.isTraining !== undefined ? existing.isTraining : false),
+                slotPattern: sub.slotPattern || existing?.slotPattern || (sub.isTraining ? (Number(sub.hoursPerWeek) >= 7 ? "4+3" : (Number(sub.hoursPerWeek) === 4 ? "2+2" : (Number(sub.hoursPerWeek) === 3 ? "2+1" : "2"))) : "regular"),
                 hoursPerWeek: Number(sub.hoursPerWeek) || (sub.type?.toLowerCase().includes("lab") ? 3 : 4),
                 facultyNames: existing ? (existing.facultyNames || []) : []
               });
