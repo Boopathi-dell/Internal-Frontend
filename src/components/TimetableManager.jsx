@@ -1065,12 +1065,12 @@ export default function TimetableManager() {
       period,
       time,
       subjectCode: isFree ? "FREE" : subjectCode.trim(),
-      subjectName: isFree ? "Library / Mentoring" : (subjectName || subjectCode).trim(),
-      shortName: isFree ? "LIB/SEM" : (shortName || subjectCode).trim(),
+      subjectName: isFree ? "Free Period / Self Study" : (subjectName || subjectCode).trim(),
+      shortName: isFree ? "FREE" : (shortName || subjectCode).trim(),
       facultyName: isFree ? "-" : (facultyName || "").trim(),
       facultyNames: (!isFree && facultyName) ? [facultyName.trim()] : [],
       type: isFree ? "Free" : type,
-      room: isFree ? "Library" : (room || (type === "Lab" ? "Lab" : "LH-1"))
+      room: isFree ? "-" : (room || (type === "Lab" ? "Lab" : "LH-1"))
     };
 
     try {
