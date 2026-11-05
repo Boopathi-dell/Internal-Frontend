@@ -1065,6 +1065,7 @@ export default function TimetableManager() {
           // Single select (Theory)
           return {
             ...item,
+            facultyName: facultyName || "",
             facultyNames: facultyName ? [facultyName] : []
           };
         } else {
@@ -1075,11 +1076,37 @@ export default function TimetableManager() {
           } else {
             current.push(facultyName);
           }
-          return { ...item, facultyNames: current };
+          return { 
+            ...item, 
+            facultyName: current.join(", "),
+            facultyNames: current 
+          };
         }
       }
       return item;
     }));
+  };
+
+  // Bulk Reallocate / Transfer all subjects from one faculty to another
+  const handleBulkReallocate = (fromFaculty, toFaculty) => {
+    if (!fromFaculty || !toFaculty) return;
+    if (fromFaculty === toFaculty) return showAlert("Source and Target faculty are the same", "error");
+    if (!window.confirm(`Reallocate ALL subjects from ${fromFaculty} to ${toFaculty}?`)) return;
+
+    setAllocations(prev => prev.map(item => {
+      const hasFrom = (item.facultyNames || []).some(f => isSameFacultyName(f, fromFaculty));
+      if (!hasFrom) return item;
+
+      const newFacs = (item.facultyNames || []).map(f => isSameFacultyName(f, fromFaculty) ? toFaculty : f);
+      return {
+        ...item,
+        facultyName: newFacs.join(", "),
+        facultyNames: newFacs
+      };
+    }));
+
+    showAlert(`All subjects of ${fromFaculty} reallocated to ${toFaculty}! Remember to click "Save Allocations".`);
+    setSelectedStaffFilter(toFaculty);
   };
 
   // Handle Subject Difficulty Change in Workload Allocation
@@ -1865,7 +1892,7 @@ export default function TimetableManager() {
       const matchSem = item.semester ? validSems.includes(Number(item.semester)) : true;
       const matchYear = yearFilter === "All" || item.year === yearFilter;
       const matchSection = sectionFilter === "All" || item.section === sectionFilter;
-      const matchStaff = !selectedStaffFilter || (item.facultyNames || []).includes(selectedStaffFilter);
+      const matchStaff = !selectedStaffFilter || (item.facultyNames || []).some(f => isSameFacultyName(f, selectedStaffFilter));
       return matchSem && matchYear && matchSection && matchStaff;
     });
   }, [allocations, yearFilter, sectionFilter, selectedStaffFilter, semesterType]);
@@ -2137,7 +2164,15 @@ export default function TimetableManager() {
                 return (
                   <div 
                     key={fac.name}
-                    onClick={() => setSelectedStaffFilter(isSelected ? "" : fac.name)}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedStaffFilter("");
+                      } else {
+                        setSelectedStaffFilter(fac.name);
+                        setYearFilter("All");
+                        setSectionFilter("All");
+                      }
+                    }}
                     style={{
                       background: isSelected ? "rgba(99, 102, 241, 0.18)" : "var(--card-bg, rgba(255,255,255,0.03))",
                       border: isSelected 
@@ -2423,6 +2458,62 @@ export default function TimetableManager() {
                 </button>
               </div>
             </div>
+
+            {/* Filter & Quick Reallocate Banner */}
+            {selectedStaffFilter && (
+              <div style={{
+                background: "rgba(99, 102, 241, 0.12)",
+                border: "1px solid rgba(99, 102, 241, 0.3)",
+                borderRadius: "12px",
+                padding: "0.85rem 1.25rem",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "10px"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "1.1rem" }}>👤</span>
+                  <div>
+                    <div style={{ fontSize: "0.9rem", color: "#818cf8", fontWeight: "700" }}>
+                      Filtered for: <span style={{ color: "#ffffff" }}>{selectedStaffFilter}</span> ({filteredAllocations.length} subjects allocated)
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      To reallocate, change the faculty dropdown in the table below and click "Save Allocations".
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <select
+                    className="select-input"
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleBulkReallocate(selectedStaffFilter, e.target.value);
+                        e.target.value = "";
+                      }
+                    }}
+                    style={{ fontSize: "0.8rem", padding: "0.35rem 0.65rem", background: "rgba(0,0,0,0.3)" }}
+                  >
+                    <option value="">🔄 Transfer ALL subjects to...</option>
+                    {staffList.filter(s => !isSameFacultyName(s.name, selectedStaffFilter)).map(s => (
+                      <option key={s._id} value={s.name}>
+                        Transfer all to {s.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: "0.35rem 0.75rem", fontSize: "0.75rem" }}
+                    onClick={() => setSelectedStaffFilter("")}
+                  >
+                    Clear Filter ✕
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Allocations Table */}
             {filteredAllocations.length === 0 ? (
