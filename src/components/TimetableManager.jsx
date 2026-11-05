@@ -229,6 +229,33 @@ export default function TimetableManager() {
     return semType === "Odd" ? "I" : "II";
   };
 
+  // Edit distance calculation for typo tolerance
+  const editDistance = (s1, s2) => {
+    const m = s1.length, n = s2.length;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (s1[i - 1] === s2[j - 1]) dp[i][j] = dp[i - 1][j - 1];
+        else dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[m][n];
+  };
+
+  // Tokenizes a faculty name by stripping prefixes (Mr, Mrs, Dr, etc.) and separating into sorted word tokens
+  const cleanFacTokens = (str) => {
+    if (!str) return [];
+    return String(str)
+      .toLowerCase()
+      .replace(/\b(mr|mrs|ms|dr|prof|head|ta|ap)\b/gi, " ")
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .split(/\s+/)
+      .filter(t => t.length > 0)
+      .sort();
+  };
+
   // Helper to normalize faculty strings by stripping titles and non-alphanumerics
   const cleanFacString = (str) => {
     if (!str) return "";
@@ -239,19 +266,55 @@ export default function TimetableManager() {
       .trim();
   };
 
-  // Fuzzy check for faculty names matching variations like Ravikumar, Mr K.Ravikumar, k.ravikumar
+  // Robust comparison that matches:
+  // 1. Initial before vs after name: "Mrs.S.Priya" vs "Priya S" vs "S. Priya"
+  // 2. Prefixes: "Mr K.Ravikumar" vs "k.ravikumar" vs "Ravikumar"
+  // 3. Typo with same initials: "Mr.S.Balamurgan" vs "Balamurugan"
+  // 4. Protects distinct names like "Mrs.S.Priya" vs "Mrs.S.Haripriya" or "Mrs.S.Priyanka"
   const isSameFacultyName = (nameA, nameB) => {
     if (!nameA || !nameB) return false;
     const a = String(nameA).trim().toLowerCase();
     const b = String(nameB).trim().toLowerCase();
     if (a === b) return true;
-    const cleanA = cleanFacString(a);
-    const cleanB = cleanFacString(b);
-    if (!cleanA || !cleanB) return false;
-    if (cleanA === cleanB) return true;
-    if (cleanA.length >= 4 && cleanB.length >= 4) {
-      if (cleanA.includes(cleanB) || cleanB.includes(cleanA)) return true;
+
+    const tokensA = cleanFacTokens(a);
+    const tokensB = cleanFacTokens(b);
+    if (tokensA.length === 0 || tokensB.length === 0) return false;
+
+    const joinA = tokensA.join("_");
+    const joinB = tokensB.join("_");
+    if (joinA === joinB) return true;
+
+    // Compare core names (tokens with length > 1, i.e. not single-letter initials)
+    const coreA = tokensA.filter(t => t.length > 1);
+    const coreB = tokensB.filter(t => t.length > 1);
+
+    if (coreA.length > 0 && coreB.length > 0) {
+      if (coreA.join("_") === coreB.join("_")) {
+        // If initials also exist on both, ensure they don't clash
+        const initA = tokensA.filter(t => t.length === 1);
+        const initB = tokensB.filter(t => t.length === 1);
+        if (initA.length > 0 && initB.length > 0 && initA.join("") !== initB.join("")) {
+          return false;
+        }
+        return true;
+      }
+
+      // Single core token with minor typo (e.g. balamurgan vs balamurugan)
+      if (coreA.length === 1 && coreB.length === 1) {
+        const ca = coreA[0], cb = coreB[0];
+        const dist = editDistance(ca, cb);
+        if (dist <= 1 && Math.min(ca.length, cb.length) >= 6) {
+          const initA = tokensA.filter(t => t.length === 1);
+          const initB = tokensB.filter(t => t.length === 1);
+          if (initA.length > 0 && initB.length > 0 && initA.join("") !== initB.join("")) {
+            return false;
+          }
+          return true;
+        }
+      }
     }
+
     return false;
   };
 
@@ -1380,16 +1443,67 @@ export default function TimetableManager() {
     }
   };
 
-  // Delete staff
+  // Delete staff (with universal cascade delete across allocations & timetable)
   const handleDeleteStaff = async (id, name) => {
-    if (!window.confirm(`Delete staff member ${name}?`)) return;
+    if (!window.confirm(`Delete staff member ${name}? This will also unassign all their allocated subjects and timetable slots.`)) return;
     try {
-      await API.delete(`/api/timetable/staff/${id}`);
-      showAlert(`Staff ${name} deleted`);
+      setLoading(true);
+      const res = await API.delete(`/api/timetable/staff/${id}`);
+      if (res.data?.classes) {
+        setTimetableSchedule(prev => prev ? { ...prev, classes: res.data.classes } : prev);
+      }
+      if (res.data?.facultySchedules) {
+        setFacultySchedules(res.data.facultySchedules);
+      }
+      if (res.data?.allocations) {
+        setAllocations(res.data.allocations);
+      }
+      showAlert(res.data?.message || `Staff ${name} deleted and unassigned everywhere!`);
       if (editingStaffId === id) handleCancelEditStaff();
-      fetchStaff();
+      if (selectedStaffFilter === name) setSelectedStaffFilter("");
+      await fetchStaff();
+      await fetchSubjectsAndAllocations();
+      await fetchSavedSchedule();
     } catch (err) {
-      showAlert("Failed to delete staff", "error");
+      showAlert(err.response?.data?.error || "Failed to delete staff", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete / Unassign staff directly by name (works from Tab 1 Workload card or allocations)
+  const handleDeleteStaffByName = async (staffName) => {
+    if (!window.confirm(`Are you sure you want to delete ${staffName} and unassign all their subjects across Timetable?`)) return;
+    try {
+      setLoading(true);
+      const matched = staffList.find(s => isSameFacultyName(s.name, staffName));
+      let res;
+      if (matched && matched._id) {
+        res = await API.delete(`/api/timetable/staff/${matched._id}`);
+      } else {
+        res = await API.post("/api/timetable/staff/unassign-name", {
+          name: staffName,
+          department
+        });
+      }
+      if (res.data?.classes) {
+        setTimetableSchedule(prev => prev ? { ...prev, classes: res.data.classes } : prev);
+      }
+      if (res.data?.facultySchedules) {
+        setFacultySchedules(res.data.facultySchedules);
+      }
+      if (res.data?.allocations) {
+        setAllocations(res.data.allocations);
+      }
+      showAlert(res.data?.message || `Staff ${staffName} removed and unassigned everywhere!`);
+      if (selectedStaffFilter === staffName) setSelectedStaffFilter("");
+      await fetchStaff();
+      await fetchSubjectsAndAllocations();
+      await fetchSavedSchedule();
+    } catch (err) {
+      showAlert(err.response?.data?.error || "Failed to delete staff", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -2047,22 +2161,47 @@ export default function TimetableManager() {
                         </div>
                       </div>
 
-                      {/* Status indicator pill */}
-                      <span style={{
-                        fontSize: "0.68rem",
-                        fontWeight: "700",
-                        padding: "3px 8px",
-                        borderRadius: "20px",
-                        background: !isOptimal 
-                          ? "rgba(148, 163, 184, 0.15)" 
-                          : isHeavy 
-                            ? "rgba(239, 68, 68, 0.18)" 
-                            : "rgba(16, 185, 129, 0.18)",
-                        color: !isOptimal ? "#94a3b8" : isHeavy ? "#ef4444" : "#10b981",
-                        border: `1px solid ${!isOptimal ? "#64748b" : isHeavy ? "#ef4444" : "#10b981"}`
-                      }}>
-                        {!isOptimal ? "Unassigned" : isHeavy ? "Heavy" : "Active"}
-                      </span>
+                      {/* Status indicator pill & Delete action */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{
+                          fontSize: "0.68rem",
+                          fontWeight: "700",
+                          padding: "3px 8px",
+                          borderRadius: "20px",
+                          background: !isOptimal 
+                            ? "rgba(148, 163, 184, 0.15)" 
+                            : isHeavy 
+                              ? "rgba(239, 68, 68, 0.18)" 
+                              : "rgba(16, 185, 129, 0.18)",
+                          color: !isOptimal ? "#94a3b8" : isHeavy ? "#ef4444" : "#10b981",
+                          border: `1px solid ${!isOptimal ? "#64748b" : isHeavy ? "#ef4444" : "#10b981"}`
+                        }}>
+                          {!isOptimal ? "Unassigned" : isHeavy ? "Heavy" : "Active"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteStaffByName(fac.name);
+                          }}
+                          style={{
+                            background: "rgba(239, 68, 68, 0.12)",
+                            border: "1px solid rgba(239, 68, 68, 0.3)",
+                            color: "var(--danger)",
+                            borderRadius: "6px",
+                            padding: "3px 6px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "3px",
+                            fontSize: "0.7rem",
+                            transition: "all 0.2s ease"
+                          }}
+                          title={`Delete ${fac.name} & unassign subjects`}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* THEORY, LAB, OTHER COUNT BADGES */}
