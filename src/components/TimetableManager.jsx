@@ -6,6 +6,7 @@ import {
   Printer, Filter, Search, Layers, ChevronRight, UserCheck, X,
   Lock, Unlock, History
 } from "lucide-react";
+import headerLogo from "../assets/logo image.jpg";
 
 export const DEFAULT_PERIOD_TIMINGS = {
   1: "09:10 - 10:05",
@@ -839,6 +840,8 @@ export default function TimetableManager() {
         maxHours: s.maxHoursPerWeek || 18,
         theoryCount: 0,
         labCount: 0,
+        trainingCount: 0,
+        trainingHours: 0,
         otherCount: 0,
         totalHours: 0,
         assignedSubjects: []
@@ -859,6 +862,8 @@ export default function TimetableManager() {
             maxHours: 18,
             theoryCount: 0,
             labCount: 0,
+            trainingCount: 0,
+            trainingHours: 0,
             otherCount: 0,
             totalHours: 0,
             assignedSubjects: []
@@ -866,9 +871,14 @@ export default function TimetableManager() {
         }
 
         const t = (alloc.type || "").toLowerCase();
-        if (t === "theory") {
+        const isTr = alloc.isTraining === true || t.includes("training") || t.includes("trainer") || (alloc.slotPattern && alloc.slotPattern !== "regular");
+
+        if (isTr) {
+          map[facName].trainingCount += 1;
+          map[facName].trainingHours += Number(alloc.hoursPerWeek) || 0;
+        } else if (t === "theory") {
           map[facName].theoryCount += 1;
-        } else if (t.includes("lab")) {
+        } else if (t.includes("lab") || t.includes("project")) {
           map[facName].labCount += 1;
         } else {
           map[facName].otherCount = (map[facName].otherCount || 0) + 1;
@@ -2346,7 +2356,7 @@ export default function TimetableManager() {
                                   const stats = staffWorkloadMap[s.name] || {};
                                   return (
                                     <option key={s._id} value={s.name}>
-                                      {s.name} ({stats.theoryCount || 0}T, {stats.labCount || 0}L, {stats.otherCount || 0}O)
+                                      {s.name} ({stats.theoryCount || 0}T, {stats.labCount || 0}L{stats.trainingCount > 0 ? `, ${stats.trainingCount}Tr` : ""}{stats.otherCount > 0 ? `, ${stats.otherCount}O` : ""})
                                     </option>
                                   );
                                 })}
@@ -2393,7 +2403,7 @@ export default function TimetableManager() {
                                     const stats = staffWorkloadMap[s.name] || {};
                                     return (
                                       <option key={s._id} value={s.name}>
-                                        {s.name} ({stats.theoryCount || 0}T, {stats.labCount || 0}L, {stats.otherCount || 0}O)
+                                        {s.name} ({stats.theoryCount || 0}T, {stats.labCount || 0}L{stats.trainingCount > 0 ? `, ${stats.trainingCount}Tr` : ""}{stats.otherCount > 0 ? `, ${stats.otherCount}O` : ""})
                                       </option>
                                     );
                                   })}
@@ -2488,9 +2498,14 @@ export default function TimetableManager() {
                     >
                       {staffList.map(s => {
                         const stats = staffWorkloadMap[s.name] || {};
+                        const parts = [];
+                        if ((stats.theoryCount || 0) > 0) parts.push(`${stats.theoryCount} Theory`);
+                        if ((stats.labCount || 0) > 0) parts.push(`${stats.labCount} Lab`);
+                        if ((stats.trainingCount || 0) > 0) parts.push(`${stats.trainingCount} Training (${stats.trainingHours}h)`);
+                        const loadStr = parts.length > 0 ? parts.join(", ") : "0 Load";
                         return (
                           <option key={s._id} value={s.name}>
-                            {s.name} - {stats.theoryCount || 0} Theory, {stats.labCount || 0} Lab
+                            {s.name} - {loadStr}
                           </option>
                         );
                       })}
@@ -2771,13 +2786,18 @@ export default function TimetableManager() {
                   <h2 style={{ margin: 0, fontSize: "1.4rem", fontWeight: "800", color: "var(--text-color)" }}>
                     Faculty Routine: {selectedFacultyView}
                   </h2>
-                  <div style={{ display: "flex", gap: "10px", marginTop: "0.35rem" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "0.35rem" }}>
                     <span style={{ fontSize: "0.85rem", color: "#818cf8", fontWeight: "700" }}>
                       📘 Theory: {staffWorkloadMap[selectedFacultyView]?.theoryCount || 0}
                     </span>
                     <span style={{ fontSize: "0.85rem", color: "#c084fc", fontWeight: "700" }}>
                       🔬 Lab: {staffWorkloadMap[selectedFacultyView]?.labCount || 0}
                     </span>
+                    {(staffWorkloadMap[selectedFacultyView]?.trainingCount || 0) > 0 && (
+                      <span style={{ fontSize: "0.85rem", color: "#f59e0b", fontWeight: "700" }}>
+                        🎯 Training: {staffWorkloadMap[selectedFacultyView]?.trainingCount} ({staffWorkloadMap[selectedFacultyView]?.trainingHours}h)
+                      </span>
+                    )}
                     <span style={{ fontSize: "0.85rem", color: "#10b981", fontWeight: "700" }}>
                       ⏱️ Total Workload: {staffWorkloadMap[selectedFacultyView]?.totalHours || 0} Hours/Week
                     </span>
@@ -4787,29 +4807,23 @@ export default function TimetableManager() {
               boxSizing: "border-box"
             }}
           >
-            {/* Header: Logo on left, text centered */}
-            <div style={{ position: "relative", marginBottom: "6px", textAlign: "center", padding: "0 70px", minHeight: "80px" }}>
+            {/* Full-Width Letterhead Header Banner (Exact ParentLetter Style) */}
+            <div style={{ width: "100%", marginBottom: "4px" }}>
               <img 
-                src={letterTemplateData?.headerLogo || "/logo1.png"} 
-                alt="College Logo" 
-                style={{ position: "absolute", left: 0, top: 0, width: "65px", height: "78px", objectFit: "contain" }}
-                onError={e => { e.target.src = "/logo1.png"; }}
+                src={letterTemplateData?.headerLogo || headerLogo} 
+                alt="College Header" 
+                style={{ width: "100%", height: "auto", display: "block" }} 
+                onError={e => { e.target.src = headerLogo; }}
               />
-              <div style={{ fontSize: "14pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.3px", lineHeight: 1.25 }}>
-                MUTHAYAMMAL ENGINEERING COLLEGE, RASIPURAM – 637 408
-              </div>
-              <div style={{ fontSize: "12pt", fontWeight: "900", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
-                (AUTONOMOUS)
-              </div>
-              <div style={{ fontSize: "10.5pt", fontWeight: "900", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
-                DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
-              </div>
-              <div style={{ fontSize: "11.5pt", fontWeight: "900", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
-                CLASS TIME TABLE
-              </div>
-              <div style={{ fontSize: "10.5pt", fontWeight: "900", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginTop: "3px", fontFamily: "Arial, sans-serif" }}>
-                {semesterType.toUpperCase()} SEMESTER - Academic Year [{academicYear}]
-              </div>
+            </div>
+            <div style={{ textAlign: "center", fontSize: "11pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.4px", margin: "4px 0 2px" }}>
+              DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
+            </div>
+            <div style={{ textAlign: "center", fontSize: "12pt", fontWeight: "900", color: "#000000", textDecoration: "underline", fontFamily: "Arial, sans-serif", margin: "2px 0" }}>
+              CLASS TIME TABLE
+            </div>
+            <div style={{ textAlign: "center", fontSize: "10pt", fontWeight: "800", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginBottom: "8px", fontFamily: "Arial, sans-serif" }}>
+              {semesterType.toUpperCase()} SEMESTER - Academic Year [{academicYear}]
             </div>
 
             {/* Subheader: Year/Sem/Sec & HALL NO */}
@@ -5101,27 +5115,27 @@ export default function TimetableManager() {
             }}
           >
             {/* Top Right IQAC Number */}
-            <div style={{ textAlign: "right", fontSize: "10pt", fontWeight: "700", color: "#000000", marginBottom: "8px", fontFamily: "Arial, sans-serif" }}>
+            <div style={{ textAlign: "right", fontSize: "9.5pt", fontWeight: "800", color: "#000000", marginBottom: "4px", fontFamily: "Arial, sans-serif" }}>
               {iqacNumber || "MEC/IQAC/2026 - 27/CSE/006"}
             </div>
 
-            {/* Header: Logo on left, text centered */}
-            <div style={{ position: "relative", marginBottom: "18px", textAlign: "center", padding: "0 60px", minHeight: "75px" }}>
+            {/* Full-Width Letterhead Header Banner (Exact ParentLetter Style) */}
+            <div style={{ width: "100%", marginBottom: "6px" }}>
               <img 
-                src={letterTemplateData?.headerLogo || "/logo1.png"} 
-                alt="College Logo" 
-                style={{ position: "absolute", left: 0, top: 0, width: "65px", height: "78px", objectFit: "contain" }}
-                onError={e => { e.target.src = "/logo1.png"; }}
+                src={letterTemplateData?.headerLogo || headerLogo} 
+                alt="College Header" 
+                style={{ width: "100%", height: "auto", display: "block" }} 
+                onError={e => { e.target.src = headerLogo; }}
               />
-              <div style={{ fontSize: "15pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.3px", lineHeight: 1.2 }}>
-                MUTHAYAMMAL ENGINEERING COLLEGE
-              </div>
-              <div style={{ fontSize: "11.5pt", fontWeight: "800", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
-                (Autonomous)
-              </div>
-              <div style={{ fontSize: "9.5pt", fontWeight: "600", color: "#000000", margin: "2px 0", fontFamily: "Arial, sans-serif" }}>
-                Rasipuram - 637 408, Namakkal Dist., Tamil Nadu, India.
-              </div>
+            </div>
+            <div style={{ textAlign: "center", fontSize: "11pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.4px", margin: "4px 0 2px" }}>
+              DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
+            </div>
+            <div style={{ textAlign: "center", fontSize: "12pt", fontWeight: "900", color: "#000000", textDecoration: "underline", fontFamily: "Arial, sans-serif", margin: "2px 0" }}>
+              FACULTY ROUTINE / INDIVIDUAL TIME TABLE
+            </div>
+            <div style={{ textAlign: "center", fontSize: "10pt", fontWeight: "800", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginBottom: "14px", fontFamily: "Arial, sans-serif" }}>
+              {semesterType.toUpperCase()} SEMESTER - Academic Year [{academicYear}]
             </div>
 
             {/* Staff Workload Summary Table */}
@@ -5140,54 +5154,54 @@ export default function TimetableManager() {
                 const l = labList[i];
                 rows.push({
                   theoryBranch: t ? `B.E/${t.year}/${getRomanSem(t.year, semesterType)}/CSE-${t.section}` : "-",
-                  theoryCourse: t ? `${t.subjectCode}& ${t.subjectName}` : "-",
+                  theoryCourse: t ? `${t.subjectCode} - ${t.subjectName}` : "-",
                   labBranch: l ? `B.E/${l.year}/${getRomanSem(l.year, semesterType)}/CSE-${l.section}` : "-",
-                  labCourse: l ? `${l.subjectCode}& ${l.subjectName}` : "-"
+                  labCourse: l ? `${l.subjectCode} - ${l.subjectName}` : "-"
                 });
               }
 
               return (
-                <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #718096", fontSize: "8.5pt", color: "#000000", fontFamily: "Arial, sans-serif", marginBottom: "22px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", border: "1.5px solid #000000", fontSize: "8.5pt", color: "#000000", fontFamily: "Arial, sans-serif", marginBottom: "20px" }}>
                   <thead>
-                    <tr style={{ background: "#ffffff" }}>
-                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "17%", fontWeight: "800" }}>Name of the Staff</th>
-                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "14%", fontWeight: "800" }}>Year/Sem/Branch</th>
-                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "22%", fontWeight: "800" }}>Theory</th>
-                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "13%", fontWeight: "800" }}>Year/Sem/Branch</th>
-                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "13%", fontWeight: "800" }}>Lab</th>
-                      <th colSpan={3} style={{ border: "1px solid #718096", padding: "3px 4px", textAlign: "center", fontWeight: "800" }}>Workload</th>
-                      <th rowSpan={2} style={{ border: "1px solid #718096", padding: "5px 4px", width: "10%", fontWeight: "800" }}>Signature</th>
+                    <tr style={{ background: "#f8fafc" }}>
+                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "17%", fontWeight: "900" }}>Name of the Staff</th>
+                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "14%", fontWeight: "900" }}>Year/Sem/Branch</th>
+                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "22%", fontWeight: "900" }}>Theory / Training</th>
+                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "13%", fontWeight: "900" }}>Year/Sem/Branch</th>
+                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "13%", fontWeight: "900" }}>Lab</th>
+                      <th colSpan={3} style={{ border: "1.5px solid #000000", padding: "4px 4px", textAlign: "center", fontWeight: "900" }}>Workload</th>
+                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "10%", fontWeight: "900" }}>Signature</th>
                     </tr>
-                    <tr style={{ background: "#ffffff" }}>
-                      <th style={{ border: "1px solid #718096", padding: "3px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "800" }}>Theory</th>
-                      <th style={{ border: "1px solid #718096", padding: "3px 2px", textAlign: "center", fontSize: "7pt", fontWeight: "800" }}>Lab/Sem/Tut/Lib/Pro</th>
-                      <th style={{ border: "1px solid #718096", padding: "3px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "800" }}>Total</th>
+                    <tr style={{ background: "#f8fafc" }}>
+                      <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "900" }}>Theory/Tr</th>
+                      <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7pt", fontWeight: "900" }}>Lab/Sem/Tut/Lib/Pro</th>
+                      <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "900" }}>Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((row, idx) => (
-                      <tr key={idx} style={{ minHeight: "30px" }}>
+                      <tr key={idx} style={{ minHeight: "32px" }}>
                         {idx === 0 && (
-                          <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "6px 5px", fontWeight: "800", verticalAlign: "middle" }}>
+                          <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "6px 5px", fontWeight: "900", verticalAlign: "middle" }}>
                             {selectedFacultyView}
                           </td>
                         )}
-                        <td style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "600" }}>{row.theoryBranch}</td>
-                        <td style={{ border: "1px solid #718096", padding: "5px 6px" }}>{row.theoryCourse}</td>
-                        <td style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "600" }}>{row.labBranch}</td>
-                        <td style={{ border: "1px solid #718096", padding: "5px 6px" }}>{row.labCourse}</td>
+                        <td style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "800" }}>{row.theoryBranch}</td>
+                        <td style={{ border: "1.5px solid #000000", padding: "5px 6px", fontWeight: "800" }}>{row.theoryCourse}</td>
+                        <td style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "800" }}>{row.labBranch}</td>
+                        <td style={{ border: "1.5px solid #000000", padding: "5px 6px", fontWeight: "800" }}>{row.labCourse}</td>
                         {idx === 0 && (
                           <>
-                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "700", verticalAlign: "middle" }}>
+                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
                               {totalTheoryH || "-"}
                             </td>
-                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "700", verticalAlign: "middle" }}>
+                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
                               {totalLabH > 0 ? totalLabH : "-"}
                             </td>
-                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
+                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
                               {totalH}
                             </td>
-                            <td rowSpan={rowCount} style={{ border: "1px solid #718096", padding: "5px 4px", verticalAlign: "middle" }}></td>
+                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", verticalAlign: "middle" }}></td>
                           </>
                         )}
                       </tr>
@@ -5198,14 +5212,14 @@ export default function TimetableManager() {
             })()}
 
             {/* 7-Period Faculty Routine Grid */}
-            <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #718096", fontSize: "9pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", border: "1.5px solid #000000", fontSize: "9pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
               <thead>
-                <tr style={{ background: "#d9e2ec" }}>
-                  <th style={{ border: "1px solid #718096", width: "65px", padding: "7px 4px", textAlign: "center", fontSize: "11pt", fontWeight: "900" }}>↓→</th>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ border: "1.5px solid #000000", width: "65px", padding: "7px 4px", textAlign: "center", fontSize: "11pt", fontWeight: "900" }}>↓→</th>
                   {[1, 2, 3, 4, 5, 6, 7].map(pr => (
-                    <th key={pr} style={{ border: "1px solid #718096", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>
+                    <th key={pr} style={{ border: "1.5px solid #000000", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>
                       {pr}<br/>
-                      <span style={{ fontSize: "7pt", fontWeight: "normal" }}>({periodTimings[pr] || DEFAULT_PERIOD_TIMINGS[pr]})</span>
+                      <span style={{ fontSize: "7pt", fontWeight: "800" }}>({periodTimings[pr] || DEFAULT_PERIOD_TIMINGS[pr]})</span>
                     </th>
                   ))}
                 </tr>
@@ -5215,8 +5229,8 @@ export default function TimetableManager() {
                   const shortDay = ["MON", "TUE", "WED", "THU", "FRI"][dIdx];
                   const daySlots = facultySchedules[selectedFacultyView]?.days?.[day] || [];
                   return (
-                    <tr key={day} style={{ height: "40px" }}>
-                      <td style={{ border: "1px solid #718096", background: "#e9f2df", fontWeight: "900", textAlign: "center", padding: "4px", fontSize: "9pt" }}>
+                    <tr key={day} style={{ height: "42px" }}>
+                      <td style={{ border: "1.5px solid #000000", background: "#f8fafc", fontWeight: "900", textAlign: "center", padding: "4px", fontSize: "9.5pt" }}>
                         {shortDay}
                       </td>
                       {[1, 2, 3, 4, 5, 6, 7].map(period => {
@@ -5224,8 +5238,21 @@ export default function TimetableManager() {
                         const isOccupied = slot && slot.occupied;
                         const formattedClass = isOccupied ? (slot.classKey ? slot.classKey.replace("-", " – ") : "") : "";
                         return (
-                          <td key={period} style={{ border: "1px solid #718096", textAlign: "center", padding: "4px", fontWeight: "800", fontSize: "9.5pt" }}>
-                            {formattedClass}
+                          <td key={period} style={{ border: "1.5px solid #000000", textAlign: "center", padding: "4px", fontWeight: "900", fontSize: "9pt" }}>
+                            {isOccupied ? (
+                              <div>
+                                <div style={{ fontWeight: "900", fontSize: "9.5pt", color: "#000000", lineHeight: 1.2 }}>
+                                  {formattedClass}
+                                </div>
+                                {(slot.shortName || slot.subjectCode) && (
+                                  <div style={{ fontWeight: "800", fontSize: "8pt", color: "#000000", marginTop: "2px" }}>
+                                    {slot.shortName || slot.subjectCode}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{ color: "#000000", fontWeight: "700" }}>-</span>
+                            )}
                           </td>
                         );
                       })}
@@ -5237,8 +5264,8 @@ export default function TimetableManager() {
 
             {/* Bottom Signatures */}
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", padding: "0 10px", fontWeight: "900", fontSize: "10pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
-              <div>Timetable Coordinator</div>
-              <div>HOD</div>
+              <div>{coordinators.timetableIncharge || "TIME TABLE INCHARGE"}</div>
+              <div>{coordinators.hod || "HOD"}</div>
             </div>
           </div>
         </div>
@@ -5257,6 +5284,9 @@ export default function TimetableManager() {
           #official-class-print-area, #official-class-print-area *,
           #official-faculty-print-area, #official-faculty-print-area * {
             visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color: #000000 !important;
           }
           #official-class-print-area, #official-faculty-print-area {
             position: fixed !important;
@@ -5271,6 +5301,13 @@ export default function TimetableManager() {
             display: block !important;
             box-shadow: none !important;
             border: none !important;
+          }
+          #official-class-print-area table, #official-class-print-area th, #official-class-print-area td,
+          #official-faculty-print-area table, #official-faculty-print-area th, #official-faculty-print-area td {
+            border: 1.5px solid #000000 !important;
+            border-color: #000000 !important;
+            color: #000000 !important;
+            font-weight: 800 !important;
           }
           .no-print {
             display: none !important;
