@@ -381,6 +381,7 @@ export default function TimetableManager() {
   const [editingStaffId, setEditingStaffId] = useState(null);
   const [inlineEditingStaffId, setInlineEditingStaffId] = useState(null);
   const [inlineStaffName, setInlineStaffName] = useState("");
+  const [workloadStatusFilter, setWorkloadStatusFilter] = useState("all"); // "all", "active", "unassigned"
   const [isCustomDesignation, setIsCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState("");
 
@@ -2127,15 +2128,41 @@ export default function TimetableManager() {
           
           {/* USER HIGHLIGHT: DYNAMIC STAFF WORKLOAD CARDS */}
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                 <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: "700" }}>
                   Staff Workload Status Overview
                 </h3>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                  (Showing dynamic Theory & Lab counts as you assign)
-                </span>
+
+                {/* Status Toggle Filter: All / Active / 0h Free */}
+                <div style={{ display: "flex", gap: "4px", background: "rgba(0,0,0,0.25)", padding: "3px", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                  <button
+                    type="button"
+                    className={`btn ${workloadStatusFilter === "all" ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => setWorkloadStatusFilter("all")}
+                    style={{ fontSize: "0.72rem", padding: "0.25rem 0.65rem", borderRadius: "6px" }}
+                  >
+                    All ({Object.values(staffWorkloadMap).length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${workloadStatusFilter === "active" ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => setWorkloadStatusFilter("active")}
+                    style={{ fontSize: "0.72rem", padding: "0.25rem 0.65rem", borderRadius: "6px", color: workloadStatusFilter === "active" ? "#ffffff" : "#10b981", fontWeight: "700" }}
+                  >
+                    🟢 Active ({Object.values(staffWorkloadMap).filter(f => f.totalHours > 0 || f.theoryCount > 0 || f.labCount > 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${workloadStatusFilter === "unassigned" ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => setWorkloadStatusFilter("unassigned")}
+                    style={{ fontSize: "0.72rem", padding: "0.25rem 0.65rem", borderRadius: "6px", color: workloadStatusFilter === "unassigned" ? "#ffffff" : "#94a3b8" }}
+                  >
+                    ⚪ Free / 0h ({Object.values(staffWorkloadMap).filter(f => f.totalHours === 0 && f.theoryCount === 0 && f.labCount === 0).length})
+                  </button>
+                </div>
               </div>
+
               {selectedStaffFilter && (
                 <button 
                   className="btn btn-secondary" 
@@ -2156,7 +2183,14 @@ export default function TimetableManager() {
               overflowY: "auto",
               paddingRight: "6px"
             }}>
-              {Object.values(staffWorkloadMap).map(fac => {
+              {Object.values(staffWorkloadMap)
+                .filter(fac => {
+                  const isAct = fac.totalHours > 0 || fac.theoryCount > 0 || fac.labCount > 0;
+                  if (workloadStatusFilter === "active") return isAct;
+                  if (workloadStatusFilter === "unassigned") return !isAct;
+                  return true;
+                })
+                .map(fac => {
                 const isSelected = selectedStaffFilter === fac.name;
                 const isOptimal = fac.theoryCount > 0 || fac.labCount > 0 || (fac.trainingCount || 0) > 0 || fac.totalHours > 0;
                 const isHeavy = fac.totalHours > 18 || (fac.theoryCount >= 3 && fac.labCount >= 2);
