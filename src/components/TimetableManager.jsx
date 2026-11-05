@@ -4744,21 +4744,38 @@ export default function TimetableManager() {
               </span>
             </div>
 
-            {/* Quick Hall No Editor */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>HALL NO:</span>
-              <input 
-                type="text"
-                className="select-input"
-                value={hallNumbers[currentClassSchedule?.classKey] || ""}
-                onChange={e => {
-                  const updated = { ...hallNumbers, [currentClassSchedule?.classKey]: e.target.value };
-                  setHallNumbers(updated);
-                  localStorage.setItem("timetable_hall_numbers", JSON.stringify(updated));
-                }}
-                placeholder="e.g. LH-1"
-                style={{ width: "90px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
-              />
+            {/* Quick Hall No & IQAC Editor */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>HALL NO:</span>
+                <input 
+                  type="text"
+                  className="select-input"
+                  value={hallNumbers[currentClassSchedule?.classKey] || ""}
+                  onChange={e => {
+                    const updated = { ...hallNumbers, [currentClassSchedule?.classKey]: e.target.value };
+                    setHallNumbers(updated);
+                    localStorage.setItem("timetable_hall_numbers", JSON.stringify(updated));
+                  }}
+                  placeholder="e.g. LH-1"
+                  style={{ width: "90px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>IQAC NO:</span>
+                <input 
+                  type="text"
+                  className="select-input"
+                  value={iqacNumber}
+                  onChange={e => {
+                    setIqacNumber(e.target.value);
+                    localStorage.setItem("timetable_iqac_number", e.target.value);
+                  }}
+                  placeholder="MEC/IQAC/..."
+                  style={{ width: "210px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+                />
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: "8px" }}>
@@ -4807,6 +4824,11 @@ export default function TimetableManager() {
               boxSizing: "border-box"
             }}
           >
+            {/* Top Right IQAC Number */}
+            <div style={{ textAlign: "right", fontSize: "9.5pt", fontWeight: "800", color: "#000000", marginBottom: "4px", fontFamily: "Arial, sans-serif" }}>
+              {iqacNumber || "MEC/IQAC/2026 - 27/CSE/006"}
+            </div>
+
             {/* Full-Width Letterhead Header Banner (Exact ParentLetter Style) */}
             <div style={{ width: "100%", marginBottom: "4px" }}>
               <img 
