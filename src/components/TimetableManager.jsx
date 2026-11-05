@@ -172,6 +172,25 @@ export default function TimetableManager() {
     };
   });
 
+  // Printable Academic Year Override (for Print Modals)
+  const [printAcademicYear, setPrintAcademicYear] = useState(() => {
+    try {
+      return localStorage.getItem("timetable_print_academic_year") || "2026-2027";
+    } catch (e) {
+      return "2026-2027";
+    }
+  });
+
+  // Sync printAcademicYear whenever main academicYear changes
+  useEffect(() => {
+    if (academicYear) {
+      setPrintAcademicYear(academicYear);
+      try {
+        localStorage.setItem("timetable_print_academic_year", academicYear);
+      } catch (e) {}
+    }
+  }, [academicYear]);
+
   // Letter Template Header data
   const [letterTemplateData, setLetterTemplateData] = useState(null);
 
@@ -4740,11 +4759,11 @@ export default function TimetableManager() {
                 <span>Official Class Timetable Print Preview</span>
               </h3>
               <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                {currentClassSchedule?.year} Year - Section {currentClassSchedule?.section} | Academic Year {academicYear}
+                {currentClassSchedule?.year} Year - Section {currentClassSchedule?.section} | Academic Year {printAcademicYear || academicYear}
               </span>
             </div>
 
-            {/* Quick Hall No & IQAC Editor */}
+            {/* Quick Hall No, IQAC & Academic Year Editor */}
             <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>HALL NO:</span>
@@ -4774,6 +4793,23 @@ export default function TimetableManager() {
                   }}
                   placeholder="MEC/IQAC/..."
                   style={{ width: "210px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>ACAD YEAR:</span>
+                <input 
+                  type="text"
+                  className="select-input"
+                  value={printAcademicYear}
+                  onChange={e => {
+                    setPrintAcademicYear(e.target.value);
+                    try {
+                      localStorage.setItem("timetable_print_academic_year", e.target.value);
+                    } catch (err) {}
+                  }}
+                  placeholder="e.g. 2026-2027"
+                  style={{ width: "125px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
                 />
               </div>
             </div>
@@ -4845,7 +4881,7 @@ export default function TimetableManager() {
               CLASS TIME TABLE
             </div>
             <div style={{ textAlign: "center", fontSize: "10pt", fontWeight: "800", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginBottom: "8px", fontFamily: "Arial, sans-serif" }}>
-              {semesterType.toUpperCase()} SEMESTER - Academic Year [{academicYear}]
+              {semesterType.toUpperCase()} SEMESTER - Academic Year [{printAcademicYear || academicYear}]
             </div>
 
             {/* Subheader: Year/Sem/Sec & HALL NO */}
@@ -5074,20 +5110,39 @@ export default function TimetableManager() {
               </span>
             </div>
 
-            {/* Quick IQAC Editor */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>IQAC NO:</span>
-              <input 
-                type="text"
-                className="select-input"
-                value={iqacNumber}
-                onChange={e => {
-                  setIqacNumber(e.target.value);
-                  localStorage.setItem("timetable_iqac_number", e.target.value);
-                }}
-                placeholder="MEC/IQAC/..."
-                style={{ width: "210px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
-              />
+            {/* Quick IQAC & Academic Year Editor */}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>IQAC NO:</span>
+                <input 
+                  type="text"
+                  className="select-input"
+                  value={iqacNumber}
+                  onChange={e => {
+                    setIqacNumber(e.target.value);
+                    localStorage.setItem("timetable_iqac_number", e.target.value);
+                  }}
+                  placeholder="MEC/IQAC/..."
+                  style={{ width: "210px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>ACAD YEAR:</span>
+                <input 
+                  type="text"
+                  className="select-input"
+                  value={printAcademicYear}
+                  onChange={e => {
+                    setPrintAcademicYear(e.target.value);
+                    try {
+                      localStorage.setItem("timetable_print_academic_year", e.target.value);
+                    } catch (err) {}
+                  }}
+                  placeholder="e.g. 2026-2027"
+                  style={{ width: "125px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+                />
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: "8px" }}>
@@ -5157,7 +5212,7 @@ export default function TimetableManager() {
               FACULTY ROUTINE / INDIVIDUAL TIME TABLE
             </div>
             <div style={{ textAlign: "center", fontSize: "10pt", fontWeight: "800", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginBottom: "14px", fontFamily: "Arial, sans-serif" }}>
-              {semesterType.toUpperCase()} SEMESTER - Academic Year [{academicYear}]
+              {semesterType.toUpperCase()} SEMESTER - Academic Year [{printAcademicYear || academicYear}]
             </div>
 
             {/* Staff Workload Summary Table */}
