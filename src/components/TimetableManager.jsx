@@ -265,6 +265,7 @@ export default function TimetableManager() {
   // Loading & Alert States
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [syncingFaculty, setSyncingFaculty] = useState(false);
   const [alertMessage, setAlertMessage] = useState(null);
 
   const PRESET_DESIGNATIONS = [
@@ -1002,6 +1003,32 @@ export default function TimetableManager() {
     }));
   };
 
+  // Synchronize Faculty Names in Schedule without regenerating the timetable
+  const handleSyncFacultyToSchedule = async (replacements = null) => {
+    try {
+      setSyncingFaculty(true);
+      const res = await API.post("/api/timetable/schedule/sync-faculty", {
+        department,
+        academicYear,
+        semesterType,
+        facultyNameReplacements: replacements,
+        updatedAllocations: allocations
+      });
+
+      if (res.data?.classes) {
+        setTimetableSchedule(prev => prev ? { ...prev, classes: res.data.classes } : prev);
+        if (res.data.facultySchedules) {
+          setFacultySchedules(res.data.facultySchedules);
+        }
+        showAlert(res.data.message || "Faculty names in schedule synchronized successfully!");
+      }
+    } catch (err) {
+      showAlert("Failed to sync faculty to schedule: " + (err.response?.data?.error || err.message), "error");
+    } finally {
+      setSyncingFaculty(false);
+    }
+  };
+
   // Save Allocations, Year-Sections, Class Advisors, IQAC & Coordinators to DB
   const handleSaveAllocations = async () => {
     try {
@@ -1024,7 +1051,28 @@ export default function TimetableManager() {
       localStorage.setItem("timetable_hall_numbers", JSON.stringify(hallNumbers));
       localStorage.setItem("timetable_coordinators", JSON.stringify(coordinators));
       localStorage.setItem("timetable_period_timings", JSON.stringify(periodTimings));
-      showAlert("Subject Allocations, IQAC Number, Hall Numbers & Coordinators saved successfully!");
+
+      // Auto-sync schedule slots with the updated allocations if schedule exists
+      if (timetableSchedule && timetableSchedule.classes && timetableSchedule.classes.length > 0) {
+        try {
+          const syncRes = await API.post("/api/timetable/schedule/sync-faculty", {
+            department,
+            academicYear,
+            semesterType,
+            updatedAllocations: allocations
+          });
+          if (syncRes.data?.classes) {
+            setTimetableSchedule(prev => prev ? { ...prev, classes: syncRes.data.classes } : prev);
+            if (syncRes.data.facultySchedules) {
+              setFacultySchedules(syncRes.data.facultySchedules);
+            }
+          }
+        } catch (syncErr) {
+          console.log("Could not auto-sync schedule after save allocations:", syncErr);
+        }
+      }
+
+      showAlert("Subject Allocations & Schedule updated successfully!");
     } catch (err) {
       showAlert("Failed to save allocations: " + (err.response?.data?.error || err.message), "error");
     } finally {
@@ -1235,10 +1283,36 @@ export default function TimetableManager() {
         
         // If staff name was updated, update any allocation referencing old name
         if (oldStaff && oldStaff.name !== payload.name) {
-          setAllocations(prev => prev.map(a => ({
+          const updatedAllocations = allocations.map(a => ({
             ...a,
             facultyNames: (a.facultyNames || []).map(f => f === oldStaff.name ? payload.name : f)
-          })));
+          }));
+          setAllocations(updatedAllocations);
+
+          // Save updated allocations to backend
+          try {
+            await API.post("/api/timetable/allocation", {
+              department,
+              academicYear,
+              semesterType,
+              allocations: updatedAllocations,
+              yearSections,
+              classAdvisors,
+              iqacNumber,
+              hallNumbers,
+              coordinators,
+              periodTimings
+            });
+          } catch (allocErr) {
+            console.log("Could not save renamed staff allocation to DB:", allocErr);
+          }
+
+          // Automatically sync existing timetable schedule slots with the renamed faculty!
+          try {
+            await handleSyncFacultyToSchedule({ [oldStaff.name]: payload.name });
+          } catch (syncErr) {
+            console.log("Could not auto-sync renamed staff to schedule:", syncErr);
+          }
         }
         showAlert(`Faculty ${payload.name} updated successfully!`);
         setEditingStaffId(null);
@@ -2637,6 +2711,32 @@ export default function TimetableManager() {
                   <History size={16} />
                   <span>📜 History ({historyList.length})</span>
                 </button>
+
+                {/* Sync Faculty to Schedule Button */}
+                {timetableSchedule && timetableSchedule.classes && timetableSchedule.classes.length > 0 && (
+                  <button 
+                    className="btn"
+                    onClick={() => handleSyncFacultyToSchedule()}
+                    disabled={syncingFaculty || timetableSchedule.isLocked}
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: "7px", 
+                      fontWeight: "700",
+                      padding: "0.5rem 1rem",
+                      borderRadius: "8px",
+                      background: "rgba(99, 102, 241, 0.15)",
+                      color: "#818cf8",
+                      border: "1px solid rgba(99, 102, 241, 0.4)",
+                      cursor: timetableSchedule.isLocked ? "not-allowed" : "pointer",
+                      boxShadow: "0 2px 8px rgba(99, 102, 241, 0.2)"
+                    }}
+                    title="Update all faculty names in the current timetable schedule to match latest Workload Allocation & Faculty Master without changing periods"
+                  >
+                    <RefreshCw size={16} className={syncingFaculty ? "spin-animate" : ""} />
+                    <span>{syncingFaculty ? "Syncing..." : "🔄 Sync Faculty Names"}</span>
+                  </button>
+                )}
 
                 {/* Finalize / Lock Button */}
                 {timetableSchedule && timetableSchedule.classes && timetableSchedule.classes.length > 0 && (
