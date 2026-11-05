@@ -229,10 +229,20 @@ export default function TimetableManager() {
     return semType === "Odd" ? "I" : "II";
   };
 
-  // Helper to format Faculty with Designation and Department
+  // Helper to format Faculty with Designation and Department (with automatic fuzzy resolution for corrected names)
   const formatFacultyInfo = (facName) => {
     if (!facName || facName === "-") return "-";
-    const staff = staffList.find(s => s.name?.trim().toLowerCase() === facName.trim().toLowerCase());
+    let staff = staffList.find(s => s.name?.trim().toLowerCase() === facName.trim().toLowerCase());
+    if (!staff) {
+      // Fuzzy check for minor spelling variations like Balamurgan vs Balamurugan, Dr. prefix, etc.
+      const cleanF = facName.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+      staff = staffList.find(s => {
+        const cleanS = (s.name || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+        return cleanS === cleanF || cleanS.includes(cleanF) || cleanF.includes(cleanS);
+      });
+    }
+
+    const displayName = staff ? staff.name : facName;
     let desig = "AP";
     if (staff && staff.designation) {
       const dLow = staff.designation.toLowerCase();
@@ -243,7 +253,7 @@ export default function TimetableManager() {
       else desig = staff.designation;
     }
     const dept = (staff && staff.department) || department || "CSE";
-    return `${facName}, ${desig}/${dept}`;
+    return `${displayName}, ${desig}/${dept}`;
   };
 
   // Modal state for manual slot editing
@@ -267,6 +277,12 @@ export default function TimetableManager() {
   const [generating, setGenerating] = useState(false);
   const [syncingFaculty, setSyncingFaculty] = useState(false);
   const [alertMessage, setAlertMessage] = useState(null);
+
+  // Global Replace Faculty Name Modal
+  const [showReplaceNameModal, setShowReplaceNameModal] = useState(false);
+  const [replaceFromName, setReplaceFromName] = useState("");
+  const [replaceToName, setReplaceToName] = useState("");
+  const [replacingName, setReplacingName] = useState(false);
 
   const PRESET_DESIGNATIONS = [
     "Assistant Professor",
@@ -1026,6 +1042,119 @@ export default function TimetableManager() {
       showAlert("Failed to sync faculty to schedule: " + (err.response?.data?.error || err.message), "error");
     } finally {
       setSyncingFaculty(false);
+    }
+  };
+
+  // All faculty names currently in allocations or schedule
+  const existingFacultyNamesInSchedule = useMemo(() => {
+    const names = new Set();
+    (allocations || []).forEach(a => {
+      if (a.facultyName && a.facultyName !== "-") names.add(a.facultyName.trim());
+      (a.facultyNames || []).forEach(f => { if (f && f !== "-") names.add(f.trim()); });
+    });
+    (timetableSchedule?.classes || []).forEach(cls => {
+      if (!cls.days) return;
+      Object.keys(cls.days).forEach(d => {
+        (cls.days[d] || []).forEach(slot => {
+          if (!slot || slot.type === "Free" || slot.subjectCode === "FREE") return;
+          if (slot.facultyName && slot.facultyName !== "-") names.add(slot.facultyName.trim());
+          (slot.facultyNames || []).forEach(f => { if (f && f !== "-") names.add(f.trim()); });
+        });
+      });
+    });
+    return Array.from(names).filter(Boolean).sort();
+  }, [allocations, timetableSchedule]);
+
+  // Find & Replace faculty name across all allocations, schedule slots, and staff list
+  const handleReplaceFacultyName = async () => {
+    if (!replaceFromName.trim() || !replaceToName.trim()) {
+      return showAlert("Please provide both Old Name and New Name", "error");
+    }
+    try {
+      setReplacingName(true);
+      const res = await API.post("/api/timetable/staff/replace-name", {
+        department,
+        fromName: replaceFromName.trim(),
+        toName: replaceToName.trim()
+      });
+
+      showAlert(res.data?.message || "Faculty name replaced across timetable successfully!");
+      setShowReplaceNameModal(false);
+      setReplaceFromName("");
+      setReplaceToName("");
+
+      // Update local state if backend returned updated structures
+      if (res.data?.classes) {
+        setTimetableSchedule(prev => prev ? { ...prev, classes: res.data.classes } : prev);
+      }
+      if (res.data?.facultySchedules) {
+        setFacultySchedules(res.data.facultySchedules);
+      }
+      if (res.data?.allocations) {
+        setAllocations(res.data.allocations);
+      }
+
+      await fetchStaff();
+      await fetchSubjectsAndAllocations();
+      await fetchSavedSchedule();
+    } catch (err) {
+      showAlert("Failed to replace faculty name: " + (err.response?.data?.error || err.message), "error");
+    } finally {
+      setReplacingName(false);
+    }
+  };
+
+  // Handle direct inline change of course faculty from Print Preview / Course Table
+  const handleInlineChangeCourseFaculty = async (allocId, newFacName) => {
+    const alloc = allocations.find(a => a.id === allocId);
+    if (!alloc) return;
+    const oldFacName = (alloc.facultyNames && alloc.facultyNames[0]) || alloc.facultyName || "";
+    const updatedAllocations = allocations.map(a => {
+      if (a.id === allocId) {
+        return {
+          ...a,
+          facultyName: newFacName,
+          facultyNames: newFacName ? [newFacName] : []
+        };
+      }
+      return a;
+    });
+    setAllocations(updatedAllocations);
+
+    try {
+      // 1. Save updated allocation to backend
+      await API.post("/api/timetable/allocation", {
+        department,
+        academicYear,
+        semesterType,
+        allocations: updatedAllocations,
+        yearSections,
+        classAdvisors,
+        iqacNumber,
+        hallNumbers,
+        coordinators,
+        periodTimings
+      });
+
+      // 2. Automatically sync timetable schedule slots for this subject / faculty
+      const syncRes = await API.post("/api/timetable/schedule/sync-faculty", {
+        department,
+        academicYear,
+        semesterType,
+        facultyNameReplacements: oldFacName && newFacName ? { [oldFacName]: newFacName } : null,
+        updatedAllocations: updatedAllocations
+      });
+
+      if (syncRes.data?.classes) {
+        setTimetableSchedule(prev => prev ? { ...prev, classes: syncRes.data.classes } : prev);
+        if (syncRes.data.facultySchedules) {
+          setFacultySchedules(syncRes.data.facultySchedules);
+        }
+      }
+
+      showAlert(`Faculty for ${alloc.subjectCode} updated to ${newFacName || "Unassigned"}!`);
+    } catch (err) {
+      showAlert("Failed to update course faculty: " + (err.response?.data?.error || err.message), "error");
     }
   };
 
@@ -2735,6 +2864,36 @@ export default function TimetableManager() {
                   >
                     <RefreshCw size={16} className={syncingFaculty ? "spin-animate" : ""} />
                     <span>{syncingFaculty ? "Syncing..." : "🔄 Sync Faculty Names"}</span>
+                  </button>
+                )}
+
+                {/* Replace Faculty Name Button */}
+                {timetableSchedule && timetableSchedule.classes && timetableSchedule.classes.length > 0 && (
+                  <button 
+                    className="btn"
+                    onClick={() => {
+                      setReplaceFromName("");
+                      setReplaceToName("");
+                      setShowReplaceNameModal(true);
+                    }}
+                    disabled={timetableSchedule.isLocked}
+                    style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: "7px", 
+                      fontWeight: "700",
+                      padding: "0.5rem 1rem",
+                      borderRadius: "8px",
+                      background: "rgba(16, 185, 129, 0.15)",
+                      color: "#34d399",
+                      border: "1px solid rgba(16, 185, 129, 0.4)",
+                      cursor: timetableSchedule.isLocked ? "not-allowed" : "pointer",
+                      boxShadow: "0 2px 8px rgba(16, 185, 129, 0.2)"
+                    }}
+                    title="Find & Replace a faculty name across the entire timetable schedule and allocations"
+                  >
+                    <Edit3 size={16} />
+                    <span>✏️ Fix/Replace Faculty</span>
                   </button>
                 )}
 
@@ -4945,7 +5104,34 @@ export default function TimetableManager() {
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => handleSyncFacultyToSchedule()}
+                disabled={syncingFaculty}
+                title="Synchronize schedule and allocations with latest Faculty Master list"
+                style={{ fontSize: "0.8rem", padding: "0.5rem 0.9rem", display: "flex", alignItems: "center", gap: "5px", background: "rgba(99, 102, 241, 0.15)", color: "#a5b4fc", border: "1px solid rgba(99, 102, 241, 0.4)" }}
+              >
+                <RefreshCw size={14} className={syncingFaculty ? "spin-animate" : ""} />
+                <span>{syncingFaculty ? "Syncing..." : "Sync Staff"}</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setReplaceFromName("");
+                  setReplaceToName("");
+                  setShowReplaceNameModal(true);
+                }}
+                title="Find & Replace a faculty name across the entire timetable"
+                style={{ fontSize: "0.8rem", padding: "0.5rem 0.9rem", display: "flex", alignItems: "center", gap: "5px", background: "rgba(16, 185, 129, 0.15)", color: "#6ee7b7", border: "1px solid rgba(16, 185, 129, 0.4)" }}
+              >
+                <Edit3 size={14} />
+                <span>Fix/Replace Name</span>
+              </button>
+
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -5161,9 +5347,37 @@ export default function TimetableManager() {
                         {a.shortName || a.subjectCode}
                       </td>
                       <td style={{ border: "1px solid #000000", padding: "4px 8px" }}>
-                        {a.facultyNames && a.facultyNames.length > 0
-                          ? a.facultyNames.map(f => formatFacultyInfo(f)).join(", ")
-                          : "-"}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                          <span>
+                            {a.facultyNames && a.facultyNames.length > 0
+                              ? a.facultyNames.map(f => formatFacultyInfo(f)).join(", ")
+                              : "-"}
+                          </span>
+                          <select
+                            className="no-print"
+                            value={(a.facultyNames && a.facultyNames[0]) || a.facultyName || ""}
+                            onChange={e => handleInlineChangeCourseFaculty(a.id, e.target.value)}
+                            style={{
+                              fontSize: "0.72rem",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              border: "1px solid #94a3b8",
+                              background: "#f8fafc",
+                              color: "#0f172a",
+                              fontWeight: "600",
+                              maxWidth: "140px",
+                              cursor: "pointer"
+                            }}
+                            title="Quick change faculty for this course"
+                          >
+                            <option value="">-- Change Staff --</option>
+                            {staffList.map(s => (
+                              <option key={s._id || s.name} value={s.name}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -5172,7 +5386,50 @@ export default function TimetableManager() {
                 <tr>
                   <td colSpan={3} style={{ border: "1px solid #000000", textAlign: "right", padding: "4px 12px", fontWeight: "900" }}>Class Advisor</td>
                   <td style={{ border: "1px solid #000000", padding: "4px 8px", fontWeight: "800" }}>
-                    {classAdvisors[currentClassSchedule?.classKey] ? formatFacultyInfo(classAdvisors[currentClassSchedule?.classKey]) : "-"}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                      <span>
+                        {classAdvisors[currentClassSchedule?.classKey] ? formatFacultyInfo(classAdvisors[currentClassSchedule?.classKey]) : "-"}
+                      </span>
+                      <select
+                        className="no-print"
+                        value={classAdvisors[currentClassSchedule?.classKey] || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const updated = { ...classAdvisors, [currentClassSchedule?.classKey]: val };
+                          setClassAdvisors(updated);
+                          localStorage.setItem("timetable_class_advisors", JSON.stringify(updated));
+                          API.post("/api/timetable/allocation", {
+                            department,
+                            academicYear,
+                            semesterType,
+                            allocations,
+                            yearSections,
+                            classAdvisors: updated,
+                            iqacNumber,
+                            hallNumbers,
+                            coordinators,
+                            periodTimings
+                          }).catch(err => console.log("Advisor save err:", err));
+                        }}
+                        style={{
+                          fontSize: "0.72rem",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          border: "1px solid #94a3b8",
+                          background: "#f8fafc",
+                          color: "#0f172a",
+                          fontWeight: "600",
+                          maxWidth: "140px",
+                          cursor: "pointer"
+                        }}
+                        title="Quick change Class Advisor"
+                      >
+                        <option value="">-- Change Advisor --</option>
+                        {staffList.map(s => (
+                          <option key={s._id || s.name} value={s.name}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </td>
                 </tr>
                 <tr>
@@ -5474,6 +5731,187 @@ export default function TimetableManager() {
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", padding: "0 10px", fontWeight: "900", fontSize: "10pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
               <div>{coordinators.timetableIncharge || "TIME TABLE INCHARGE"}</div>
               <div>{coordinators.hod || "HOD"}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* REPLACE FACULTY NAME MODAL (FIND & REPLACE ACROSS TIMETABLE) */}
+      {/* ============================================================== */}
+      {showReplaceNameModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.78)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 11000,
+          padding: "1rem"
+        }}>
+          <div style={{
+            background: "var(--card-bg, #1e293b)",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "520px",
+            padding: "1.75rem",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            color: "#ffffff"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{
+                  width: "38px",
+                  height: "38px",
+                  borderRadius: "10px",
+                  background: "rgba(16, 185, 129, 0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#34d399"
+                }}>
+                  <Edit3 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700" }}>Fix / Replace Faculty Name</h3>
+                  <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted, #94a3b8)" }}>
+                    Updates faculty name across staff list, allocations, scheduled periods & routines
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowReplaceNameModal(false)}
+                className="btn btn-secondary"
+                style={{ padding: "6px", borderRadius: "8px", border: "none", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Old Faculty Name */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: "700", marginBottom: "6px", color: "#cbd5e1" }}>
+                  Old Faculty Name (in Timetable):
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    className="select-input"
+                    value={replaceFromName}
+                    onChange={e => setReplaceFromName(e.target.value)}
+                    placeholder="e.g. Balamurgan"
+                    list="existing-faculty-names"
+                    style={{ flex: 1, padding: "8px 12px", fontSize: "0.9rem" }}
+                  />
+                  <select
+                    className="select-input"
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) setReplaceFromName(e.target.value);
+                    }}
+                    style={{ width: "140px", fontSize: "0.8rem" }}
+                  >
+                    <option value="">Pick from List...</option>
+                    {existingFacultyNamesInSchedule.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+                <datalist id="existing-faculty-names">
+                  {existingFacultyNamesInSchedule.map(name => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+                <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "3px", display: "block" }}>
+                  Select or type the existing misspelled name to replace
+                </span>
+              </div>
+
+              {/* New Corrected Faculty Name */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: "700", marginBottom: "6px", color: "#cbd5e1" }}>
+                  New / Corrected Faculty Name:
+                </label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    className="select-input"
+                    value={replaceToName}
+                    onChange={e => setReplaceToName(e.target.value)}
+                    placeholder="e.g. Balamurugan"
+                    list="staff-faculty-names"
+                    style={{ flex: 1, padding: "8px 12px", fontSize: "0.9rem" }}
+                  />
+                  <select
+                    className="select-input"
+                    value=""
+                    onChange={e => {
+                      if (e.target.value) setReplaceToName(e.target.value);
+                    }}
+                    style={{ width: "140px", fontSize: "0.8rem" }}
+                  >
+                    <option value="">Pick from Staff...</option>
+                    {staffList.map(s => (
+                      <option key={s._id || s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <datalist id="staff-faculty-names">
+                  {staffList.map(s => (
+                    <option key={s._id || s.name} value={s.name} />
+                  ))}
+                </datalist>
+                <span style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "3px", display: "block" }}>
+                  Select from Faculty Master or type the new corrected name
+                </span>
+              </div>
+
+              <div style={{
+                background: "rgba(59, 130, 246, 0.08)",
+                border: "1px solid rgba(59, 130, 246, 0.2)",
+                borderRadius: "8px",
+                padding: "10px 14px",
+                fontSize: "0.78rem",
+                color: "#93c5fd",
+                lineHeight: 1.4
+              }}>
+                ℹ️ <strong>Instant Safe Replacement:</strong> All schedule periods, training slots, lab hours, and print preview records containing the old name will be automatically updated to the new name without losing any schedule positions.
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "8px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowReplaceNameModal(false)}
+                  disabled={replacingName}
+                  style={{ fontSize: "0.85rem", padding: "8px 16px" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleReplaceFacultyName}
+                  disabled={replacingName || !replaceFromName.trim() || !replaceToName.trim()}
+                  style={{
+                    fontSize: "0.85rem",
+                    padding: "8px 20px",
+                    fontWeight: "700",
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "7px"
+                  }}
+                >
+                  {replacingName && <RefreshCw size={15} className="spin-animate" />}
+                  <span>{replacingName ? "Replacing..." : "Replace Everywhere"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
