@@ -92,13 +92,18 @@ export default function TimetableManager() {
     showAlert(`Academic Year ${cleaned.includes("-") ? cleaned.replace("-", " - ") : cleaned} selected!`);
   };
 
-  // Intake Sections per Year (e.g. II: A, B; III: A, B; IV: A, B, C)
+  // Intake Sections per Year (e.g. I: A, B; II: A, B; III: A, B; IV: A, B, C)
   const [yearSections, setYearSections] = useState(() => {
     try {
       const saved = localStorage.getItem("timetable_year_sections");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!parsed["I"]) parsed["I"] = ["A", "B"];
+        return parsed;
+      }
     } catch (e) {}
     return {
+      "I": ["A", "B"],
       "II": ["A", "B"],
       "III": ["A", "B"],
       "IV": ["A", "B", "C"]
@@ -152,9 +157,10 @@ export default function TimetableManager() {
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     return {
-      "II-A": "LH-1", "II-B": "LH-2", "II-C": "LH-3",
-      "III-A": "LH-4", "III-B": "LH-5", "III-C": "LH-6",
-      "IV-A": "LH-7", "IV-B": "LH-8", "IV-C": "LH-9"
+      "I-A": "LH-1", "I-B": "LH-2",
+      "II-A": "LH-3", "II-B": "LH-4", "II-C": "LH-5",
+      "III-A": "LH-6", "III-B": "LH-7", "III-C": "LH-8",
+      "IV-A": "LH-9", "IV-B": "LH-10", "IV-C": "LH-11"
     };
   });
 
@@ -320,11 +326,11 @@ export default function TimetableManager() {
 
   // Synchronize subjectForm semester when semesterType changes
   useEffect(() => {
-    const validSems = semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8];
+    const validSems = semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
     if (!validSems.includes(Number(subjectForm.semester))) {
       const defaultSem = semesterType === "Odd" 
-        ? (subjectForm.year === "II" ? 3 : (subjectForm.year === "III" ? 5 : 7))
-        : (subjectForm.year === "II" ? 4 : (subjectForm.year === "III" ? 6 : 8));
+        ? (subjectForm.year === "I" ? 1 : (subjectForm.year === "II" ? 3 : (subjectForm.year === "III" ? 5 : 7)))
+        : (subjectForm.year === "I" ? 2 : (subjectForm.year === "II" ? 4 : (subjectForm.year === "III" ? 6 : 8)));
       setSubjectForm(prev => ({ ...prev, semester: defaultSem }));
     }
   }, [semesterType]);
@@ -419,7 +425,7 @@ export default function TimetableManager() {
 
   // Synchronize curriculum subjects with saved staff allocations across all configured sections
   const syncAllocationsWithCurriculum = (masters, existingAllocations, currentSections = yearSections) => {
-    const validSems = semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8];
+    const validSems = semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
     const allocMap = {};
     (existingAllocations || []).forEach(a => {
       if (a && a.subjectCode) {
@@ -469,8 +475,8 @@ export default function TimetableManager() {
       }
     });
 
-    // Sort by Year (II, III, IV), Section (A, B, C), then Subject Code
-    const yearOrder = { "II": 2, "III": 3, "IV": 4 };
+    // Sort by Year (I, II, III, IV), Section (A, B, C), then Subject Code
+    const yearOrder = { "I": 1, "II": 2, "III": 3, "IV": 4 };
     merged.sort((a, b) => {
       const yA = yearOrder[a.year] || 99;
       const yB = yearOrder[b.year] || 99;
@@ -763,6 +769,18 @@ export default function TimetableManager() {
   // Add default curriculums if empty
   const handleLoadSampleSubjects = async () => {
     const sampleCurriculum = semesterType === "Odd" ? [
+      // I Year (Sem 1)
+      {
+        batch: "2025-2029", year: "I", semester: 1, department: "CSE",
+        subjects: [
+          { code: "MA3151", name: "Matrices and Calculus", shortName: "M-I", type: "Theory", hoursPerWeek: 4 },
+          { code: "PH3151", name: "Engineering Physics", shortName: "PHY", type: "Theory", hoursPerWeek: 3 },
+          { code: "CY3151", name: "Engineering Chemistry", shortName: "CHEM", type: "Theory", hoursPerWeek: 3 },
+          { code: "GE3151", name: "Problem Solving and Python Programming", shortName: "PSPP", type: "Theory", hoursPerWeek: 3 },
+          { code: "GE3171", name: "Problem Solving and Python Programming Laboratory", shortName: "Python Lab", type: "Lab", hoursPerWeek: 3 },
+          { code: "BS3171", name: "Physics and Chemistry Laboratory", shortName: "PC Lab", type: "Lab", hoursPerWeek: 3 }
+        ]
+      },
       // II Year (Sem 3)
       {
         batch: "2024-2028", year: "II", semester: 3, department: "CSE",
@@ -798,6 +816,17 @@ export default function TimetableManager() {
         ]
       }
     ] : [
+      // I Year (Sem 2)
+      {
+        batch: "2025-2029", year: "I", semester: 2, department: "CSE",
+        subjects: [
+          { code: "MA3251", name: "Statistics and Numerical Methods", shortName: "SNM", type: "Theory", hoursPerWeek: 4 },
+          { code: "PH3256", name: "Physics for Information Science", shortName: "PIS", type: "Theory", hoursPerWeek: 3 },
+          { code: "BE3251", name: "Basic Electrical and Electronics Engineering", shortName: "BEEE", type: "Theory", hoursPerWeek: 3 },
+          { code: "CS3251", name: "Programming in C", shortName: "C Prog", type: "Theory", hoursPerWeek: 3 },
+          { code: "CS3271", name: "Programming in C Laboratory", shortName: "C Lab", type: "Lab", hoursPerWeek: 3 }
+        ]
+      },
       // II Year (Sem 4)
       {
         batch: "2024-2028", year: "II", semester: 4, department: "CSE",
@@ -837,7 +866,7 @@ export default function TimetableManager() {
       for (const cur of sampleCurriculum) {
         await API.post("/api/timetable/subjects", cur);
       }
-      showAlert(`Sample curriculum loaded for ${semesterType} Semester (II, III, and IV Years)!`);
+      showAlert(`Sample curriculum loaded for ${semesterType} Semester (I, II, III, and IV Years)!`);
       await fetchSubjectsAndAllocations();
     } catch (err) {
       showAlert("Error loading sample subjects", "error");
@@ -868,7 +897,7 @@ export default function TimetableManager() {
     });
 
     // Tally from allocations
-    const validSems = semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8];
+    const validSems = semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
     allocations.forEach(alloc => {
       if (alloc.semester && !validSems.includes(Number(alloc.semester))) return;
       const facs = alloc.facultyNames || [];
@@ -1365,7 +1394,7 @@ export default function TimetableManager() {
         );
 
         const targetBatch = subjectForm.batch || existingDoc?.batch || (
-          subjectForm.year === "II" ? "2024-2028" : (subjectForm.year === "III" ? "2023-2027" : "2022-2026")
+          subjectForm.year === "I" ? "2025-2029" : (subjectForm.year === "II" ? "2024-2028" : (subjectForm.year === "III" ? "2023-2027" : "2022-2026"))
         );
 
         const isMoved = existingDoc && (existingDoc.year !== subjectForm.year || existingDoc.semester !== Number(subjectForm.semester));
@@ -1478,7 +1507,7 @@ export default function TimetableManager() {
       } else {
         // Adding brand new subject
         const targetBatch = subjectForm.batch || (
-          subjectForm.year === "II" ? "2024-2028" : (subjectForm.year === "III" ? "2023-2027" : "2022-2026")
+          subjectForm.year === "I" ? "2025-2029" : (subjectForm.year === "II" ? "2024-2028" : (subjectForm.year === "III" ? "2023-2027" : "2022-2026"))
         );
 
         const existingDoc = subjectMasters.find(
@@ -1573,8 +1602,8 @@ export default function TimetableManager() {
 
   // Counts of available subjects per year (filtered by sectionFilter)
   const yearCounts = useMemo(() => {
-    const validSems = semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8];
-    const counts = { All: 0, II: 0, III: 0, IV: 0 };
+    const validSems = semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
+    const counts = { All: 0, I: 0, II: 0, III: 0, IV: 0 };
     allocations.forEach(a => {
       if (a.semester && !validSems.includes(Number(a.semester))) return;
       if (sectionFilter === "All" || a.section === sectionFilter) {
@@ -1589,7 +1618,7 @@ export default function TimetableManager() {
 
   // Counts of available subjects per section (for current yearFilter)
   const sectionCounts = useMemo(() => {
-    const validSems = semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8];
+    const validSems = semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
     const counts = { All: 0 };
     allocations.forEach(a => {
       if (a.semester && !validSems.includes(Number(a.semester))) return;
@@ -1601,9 +1630,9 @@ export default function TimetableManager() {
     return counts;
   }, [allocations, yearFilter, semesterType]);
 
-  // Filtered allocations based on Year Filter (All, II, III, IV) and Section Filter (All, A, B, C)
+  // Filtered allocations based on Year Filter (All, I, II, III, IV) and Section Filter (All, A, B, C)
   const filteredAllocations = useMemo(() => {
-    const validSems = semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8];
+    const validSems = semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
     return allocations.filter(item => {
       const matchSem = item.semester ? validSems.includes(Number(item.semester)) : true;
       const matchYear = yearFilter === "All" || item.year === yearFilter;
@@ -2007,7 +2036,7 @@ export default function TimetableManager() {
                 <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
                   {/* Year Filter Buttons with Subject Counts */}
                   <div style={{ display: "flex", gap: "6px", background: "rgba(0,0,0,0.2)", padding: "3px", borderRadius: "8px" }}>
-                    {["All", "II", "III", "IV"].map(y => {
+                    {["All", "I", "II", "III", "IV"].map(y => {
                       const count = yearCounts[y] || 0;
                       return (
                         <button 
@@ -2201,8 +2230,8 @@ export default function TimetableManager() {
                               fontSize: "0.8rem",
                               padding: "2px 8px",
                               borderRadius: "6px",
-                              background: item.year === "II" ? "rgba(59, 130, 246, 0.15)" : item.year === "III" ? "rgba(168, 85, 247, 0.15)" : "rgba(16, 185, 129, 0.15)",
-                              color: item.year === "II" ? "#60a5fa" : item.year === "III" ? "#c084fc" : "#34d399"
+                              background: item.year === "I" ? "rgba(14, 165, 233, 0.15)" : item.year === "II" ? "rgba(59, 130, 246, 0.15)" : item.year === "III" ? "rgba(168, 85, 247, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                              color: item.year === "I" ? "#38bdf8" : item.year === "II" ? "#60a5fa" : item.year === "III" ? "#c084fc" : "#34d399"
                             }}>
                               {item.year} Year
                             </span>
@@ -2946,6 +2975,7 @@ export default function TimetableManager() {
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.2rem" }}>
               {[
+                { key: "I", label: "I Year", sem: semesterType === "Odd" ? "Semester 1" : "Semester 2", color: "#38bdf8" },
                 { key: "II", label: "II Year", sem: semesterType === "Odd" ? "Semester 3" : "Semester 4", color: "#60a5fa" },
                 { key: "III", label: "III Year", sem: semesterType === "Odd" ? "Semester 5" : "Semester 6", color: "#c084fc" },
                 { key: "IV", label: "IV Year (Final)", sem: semesterType === "Odd" ? "Semester 7" : "Semester 8", color: "#f59e0b" }
@@ -3285,7 +3315,7 @@ export default function TimetableManager() {
                   Enter room/hall for each section to appear on top-right of Class Timetable:
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "8px", maxHeight: "150px", overflowY: "auto", paddingRight: "4px" }}>
-                  {["II", "III", "IV"].flatMap(yr => ((yearSections && yearSections[yr]) || ["A", "B"]).map(s => {
+                  {["I", "II", "III", "IV"].flatMap(yr => ((yearSections && yearSections[yr]) || ["A", "B"]).map(s => {
                     const ck = `${yr}-${s}`;
                     return (
                       <div key={ck} style={{ background: "rgba(0,0,0,0.25)", padding: "4px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -3603,13 +3633,14 @@ export default function TimetableManager() {
                     onChange={e => {
                       const y = e.target.value;
                       const defaultSem = semesterType === "Odd" 
-                        ? (y === "II" ? 3 : (y === "III" ? 5 : 7))
-                        : (y === "II" ? 4 : (y === "III" ? 6 : 8));
-                      const defaultBatch = y === "II" ? "2024-2028" : (y === "III" ? "2023-2027" : "2022-2026");
+                        ? (y === "I" ? 1 : (y === "II" ? 3 : (y === "III" ? 5 : 7)))
+                        : (y === "I" ? 2 : (y === "II" ? 4 : (y === "III" ? 6 : 8)));
+                      const defaultBatch = y === "I" ? "2025-2029" : (y === "II" ? "2024-2028" : (y === "III" ? "2023-2027" : "2022-2026"));
                       setSubjectForm({ ...subjectForm, year: y, semester: defaultSem, batch: defaultBatch });
                     }}
                     style={{ fontSize: "0.85rem" }}
                   >
+                    <option value="I">I Year</option>
                     <option value="II">II Year</option>
                     <option value="III">III Year</option>
                     <option value="IV">Final Year</option>
@@ -3624,7 +3655,7 @@ export default function TimetableManager() {
                     onChange={e => setSubjectForm({ ...subjectForm, semester: Number(e.target.value) })}
                     style={{ fontSize: "0.85rem" }}
                   >
-                    {(semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8]).map(s => (
+                    {(semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8]).map(s => (
                       <option key={s} value={s}>Sem {s} ({semesterType} Sem)</option>
                     ))}
                   </select>
@@ -3945,7 +3976,7 @@ export default function TimetableManager() {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
                 <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "#818cf8" }}>
-                  📚 {semesterType} Semester Subjects (Sem {semesterType === "Odd" ? "3, 5, 7" : "4, 6, 8"}):
+                  📚 {semesterType} Semester Subjects (Sem {semesterType === "Odd" ? "1, 3, 5, 7" : "2, 4, 6, 8"}):
                 </span>
                 <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                   💡 Click on any subject chip below to <strong>Edit & Change</strong> it
@@ -3954,7 +3985,7 @@ export default function TimetableManager() {
 
               <div style={{ maxHeight: "360px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px" }}>
                 {(() => {
-                  const validSems = semesterType === "Odd" ? [3, 5, 7] : [4, 6, 8];
+                  const validSems = semesterType === "Odd" ? [1, 3, 5, 7] : [2, 4, 6, 8];
                   const currentSemesterMasters = subjectMasters.filter(sm => validSems.includes(Number(sm.semester)));
 
                   if (currentSemesterMasters.length === 0) {
