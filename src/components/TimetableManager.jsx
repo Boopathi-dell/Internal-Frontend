@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import API from "../api";
 import { 
   Calendar, Clock, Users, BookOpen, Sparkles, CheckCircle2, 
@@ -314,7 +314,10 @@ export default function TimetableManager() {
     "NPTEL / Online Course"
   ];
 
+  const staffFormRef = useRef(null);
   const [editingStaffId, setEditingStaffId] = useState(null);
+  const [inlineEditingStaffId, setInlineEditingStaffId] = useState(null);
+  const [inlineStaffName, setInlineStaffName] = useState("");
   const [isCustomDesignation, setIsCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState("");
 
@@ -983,6 +986,14 @@ export default function TimetableManager() {
     return map;
   }, [staffList, allocations, department, semesterType]);
 
+  // Robust fuzzy lookup for faculty workload stats (handles prefixes like Mr, Mrs, Dr, S., etc.)
+  const getFacultyStats = (name) => {
+    if (!name) return {};
+    if (staffWorkloadMap[name]) return staffWorkloadMap[name];
+    const matchedKey = Object.keys(staffWorkloadMap).find(k => isSameFacultyName(k, name));
+    return matchedKey ? staffWorkloadMap[matchedKey] : {};
+  };
+
   // Handle Faculty Assignment Change for a Subject
   const handleAssignFaculty = (allocId, facultyName, isMulti = false) => {
     setAllocations(prev => prev.map(item => {
@@ -1240,6 +1251,7 @@ export default function TimetableManager() {
   // Start editing a staff member
   const handleStartEditStaff = (staff) => {
     setEditingStaffId(staff._id);
+    setInlineEditingStaffId(null);
     const isPreset = PRESET_DESIGNATIONS.includes(staff.designation);
     setIsCustomDesignation(!isPreset);
     setCustomDesignationText(!isPreset ? staff.designation : "");
@@ -1252,6 +1264,9 @@ export default function TimetableManager() {
       maxTheory: staff.maxTheory || 2,
       maxLab: staff.maxLab || 2
     });
+    setTimeout(() => {
+      staffFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
   };
 
   const handleCancelEditStaff = () => {
@@ -1267,6 +1282,42 @@ export default function TimetableManager() {
       maxTheory: 2,
       maxLab: 2
     });
+  };
+
+  // Quick inline rename directly in table
+  const handleSaveInlineStaff = async (staff) => {
+    if (!inlineStaffName.trim()) return showAlert("Faculty name cannot be empty", "error");
+    const newName = inlineStaffName.trim();
+    if (newName === staff.name) {
+      setInlineEditingStaffId(null);
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await API.put(`/api/timetable/staff/${staff._id}`, {
+        name: newName,
+        designation: staff.designation,
+        department: staff.department || department
+      });
+      if (res.data?.classes) {
+        setTimetableSchedule(prev => prev ? { ...prev, classes: res.data.classes } : prev);
+      }
+      if (res.data?.facultySchedules) {
+        setFacultySchedules(res.data.facultySchedules);
+      }
+      if (res.data?.allocations) {
+        setAllocations(res.data.allocations);
+      }
+      setInlineEditingStaffId(null);
+      showAlert(res.data?.message || `Faculty renamed to ${newName} everywhere!`);
+      await fetchStaff();
+      await fetchSubjectsAndAllocations();
+      await fetchSavedSchedule();
+    } catch (err) {
+      showAlert(err.response?.data?.error || "Failed to update faculty name", "error");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Add or Update staff
@@ -1966,7 +2017,7 @@ export default function TimetableManager() {
             }}>
               {Object.values(staffWorkloadMap).map(fac => {
                 const isSelected = selectedStaffFilter === fac.name;
-                const isOptimal = fac.theoryCount > 0 || fac.labCount > 0;
+                const isOptimal = fac.theoryCount > 0 || fac.labCount > 0 || (fac.trainingCount || 0) > 0 || fac.totalHours > 0;
                 const isHeavy = fac.totalHours > 18 || (fac.theoryCount >= 3 && fac.labCount >= 2);
 
                 return (
@@ -2044,10 +2095,10 @@ export default function TimetableManager() {
 
                       <div style={{ flex: 1, textAlign: "center", borderRight: "1px solid rgba(255,255,255,0.1)" }}>
                         <div style={{ fontSize: "0.65rem", color: "#f59e0b", fontWeight: "700", textTransform: "uppercase" }}>
-                          🚀 Others
+                          {(fac.trainingCount || 0) > 0 ? "🎯 Train" : "🚀 Others"}
                         </div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: "800", color: fac.otherCount > 0 ? "#f59e0b" : "var(--text-muted)" }}>
-                          {fac.otherCount || 0}
+                        <div style={{ fontSize: "1.05rem", fontWeight: "800", color: ((fac.trainingCount || 0) > 0 || (fac.otherCount || 0) > 0) ? "#f59e0b" : "var(--text-muted)" }}>
+                          {(fac.trainingCount || 0) > 0 ? fac.trainingCount : (fac.otherCount || 0)}
                         </div>
                       </div>
 
@@ -2899,18 +2950,18 @@ export default function TimetableManager() {
                   </h2>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "0.35rem" }}>
                     <span style={{ fontSize: "0.85rem", color: "#818cf8", fontWeight: "700" }}>
-                      📘 Theory: {staffWorkloadMap[selectedFacultyView]?.theoryCount || 0}
+                      📘 Theory: {getFacultyStats(selectedFacultyView)?.theoryCount || 0}
                     </span>
                     <span style={{ fontSize: "0.85rem", color: "#c084fc", fontWeight: "700" }}>
-                      🔬 Lab: {staffWorkloadMap[selectedFacultyView]?.labCount || 0}
+                      🔬 Lab: {getFacultyStats(selectedFacultyView)?.labCount || 0}
                     </span>
-                    {(staffWorkloadMap[selectedFacultyView]?.trainingCount || 0) > 0 && (
+                    {(getFacultyStats(selectedFacultyView)?.trainingCount || 0) > 0 && (
                       <span style={{ fontSize: "0.85rem", color: "#f59e0b", fontWeight: "700" }}>
-                        🎯 Training: {staffWorkloadMap[selectedFacultyView]?.trainingCount} ({staffWorkloadMap[selectedFacultyView]?.trainingHours}h)
+                        🎯 Training: {getFacultyStats(selectedFacultyView)?.trainingCount} ({getFacultyStats(selectedFacultyView)?.trainingHours}h)
                       </span>
                     )}
                     <span style={{ fontSize: "0.85rem", color: "#10b981", fontWeight: "700" }}>
-                      ⏱️ Total Workload: {staffWorkloadMap[selectedFacultyView]?.totalHours || 0} Hours/Week
+                      ⏱️ Total Workload: {getFacultyStats(selectedFacultyView)?.totalHours || 0} Hours/Week
                     </span>
                   </div>
                 </div>
@@ -2937,7 +2988,8 @@ export default function TimetableManager() {
                   </thead>
                   <tbody>
                     {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(day => {
-                      const facRoutine = facultySchedules[selectedFacultyView]?.days[day] || [];
+                      const matchedFacKey = facultySchedules && (facultySchedules[selectedFacultyView] ? selectedFacultyView : Object.keys(facultySchedules).find(k => isSameFacultyName(k, selectedFacultyView)));
+                      const facRoutine = (matchedFacKey && facultySchedules[matchedFacKey]?.days?.[day]) || [];
 
                       return (
                         <tr key={day}>
@@ -3420,7 +3472,7 @@ export default function TimetableManager() {
             </div>
 
             {/* Add / Edit Staff Form */}
-            <form onSubmit={handleSaveStaff} style={{ 
+            <form ref={staffFormRef} onSubmit={handleSaveStaff} style={{ 
               display: "flex", 
               flexDirection: "column", 
               gap: "10px", 
@@ -3557,10 +3609,80 @@ export default function TimetableManager() {
                 </thead>
                 <tbody>
                   {staffList.map(s => (
-                    <tr key={s._id} style={{ background: editingStaffId === s._id ? "rgba(99, 102, 241, 0.1)" : undefined }}>
+                    <tr key={s._id} style={{ background: (editingStaffId === s._id || inlineEditingStaffId === s._id) ? "rgba(99, 102, 241, 0.1)" : undefined }}>
                       <td>
-                        <div style={{ fontWeight: "700" }}>{s.name}</div>
-                        {s.staffCode && <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Code: {s.staffCode}</div>}
+                        {inlineEditingStaffId === s._id ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <input 
+                              type="text" 
+                              className="text-input" 
+                              value={inlineStaffName} 
+                              onChange={e => setInlineStaffName(e.target.value)}
+                              style={{ fontSize: "0.85rem", padding: "4px 8px", width: "100%", borderColor: "#6366f1" }}
+                              autoFocus
+                              onKeyDown={e => {
+                                if (e.key === "Enter") handleSaveInlineStaff(s);
+                                if (e.key === "Escape") setInlineEditingStaffId(null);
+                              }}
+                            />
+                            <button
+                              onClick={() => handleSaveInlineStaff(s)}
+                              disabled={loading}
+                              style={{
+                                background: "#10b981",
+                                color: "#fff",
+                                border: "none",
+                                borderRadius: "6px",
+                                padding: "4px 8px",
+                                cursor: "pointer",
+                                fontSize: "0.75rem",
+                                fontWeight: "600"
+                              }}
+                              title="Save name everywhere"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setInlineEditingStaffId(null)}
+                              style={{
+                                background: "rgba(255,255,255,0.1)",
+                                color: "var(--text-muted)",
+                                border: "none",
+                                borderRadius: "6px",
+                                padding: "4px 8px",
+                                cursor: "pointer",
+                                fontSize: "0.75rem"
+                              }}
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <div>
+                            <div style={{ fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span>{s.name}</span>
+                              <button
+                                onClick={() => {
+                                  setInlineEditingStaffId(s._id);
+                                  setInlineStaffName(s.name);
+                                }}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  color: "var(--text-muted)",
+                                  cursor: "pointer",
+                                  padding: "2px",
+                                  opacity: 0.6
+                                }}
+                                title="Quick rename faculty"
+                              >
+                                <Edit3 size={12} />
+                              </button>
+                            </div>
+                            {s.staffCode && <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Code: {s.staffCode}</div>}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <span style={{
