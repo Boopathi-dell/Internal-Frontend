@@ -236,11 +236,29 @@ export default function TimetableManager() {
   const [tempTimings, setTempTimings] = useState(DEFAULT_PERIOD_TIMINGS);
   const [savingTimings, setSavingTimings] = useState(false);
 
+  // Normalizes year representations ("2", "II", "II Year" -> "II", "3", "III", "III Year" -> "III", "4", "IV", "IV Year" -> "IV")
+  const normalizeYear = (yr) => {
+    if (!yr) return "";
+    const s = String(yr).trim().toUpperCase();
+    if (s === "4" || s === "IV" || s.startsWith("IV") || s.includes("FINAL")) return "IV";
+    if (s === "3" || s === "III" || s.startsWith("III") || s.includes("THIRD")) return "III";
+    if (s === "2" || s === "II" || s.startsWith("II") || s.includes("SECOND")) return "II";
+    if (s === "1" || s === "I" || s.startsWith("I") || s.includes("FIRST")) return "I";
+    return s;
+  };
+
+  // Strict year equality check to prevent "III".includes("II") substring false matches!
+  const isSameYear = (yrA, yrB) => {
+    if (!yrA || !yrB) return false;
+    return normalizeYear(yrA) === normalizeYear(yrB);
+  };
+
   // Roman Numeral Semester Helper
   const getRomanSem = (year, semType) => {
-    if (year === "II") return semType === "Odd" ? "III" : "IV";
-    if (year === "III") return semType === "Odd" ? "V" : "VI";
-    if (year === "IV") return semType === "Odd" ? "VII" : "VIII";
+    const ny = normalizeYear(year);
+    if (ny === "II") return semType === "Odd" ? "III" : "IV";
+    if (ny === "III") return semType === "Odd" ? "V" : "VI";
+    if (ny === "IV") return semType === "Odd" ? "VII" : "VIII";
     return semType === "Odd" ? "I" : "II";
   };
 
@@ -5646,10 +5664,19 @@ export default function TimetableManager() {
           >
             {classesToPrint.map((cls, cIdx) => {
               const clsAllocs = allocations.filter(a => {
-                const yrMatch = String(a.year).toLowerCase().includes(String(cls.year).toLowerCase()) ||
-                                String(cls.year).toLowerCase().includes(String(a.year).toLowerCase());
+                const yrMatch = isSameYear(a.year, cls.year);
                 const secMatch = !a.section || a.section === "All" || a.section === cls.section;
                 return yrMatch && secMatch;
+              });
+
+              // Deduplicate subjects by subjectCode so each course code appears strictly once
+              const seenCodes = new Set();
+              const uniqueClsAllocs = clsAllocs.filter(a => {
+                const code = (a.subjectCode || a.code || "").trim().toUpperCase();
+                if (!code) return true;
+                if (seenCodes.has(code)) return false;
+                seenCodes.add(code);
+                return true;
               });
 
               return (
@@ -5827,7 +5854,7 @@ export default function TimetableManager() {
                       </tr>
                     </thead>
                     <tbody>
-                      {clsAllocs.map((a, idx) => (
+                      {uniqueClsAllocs.map((a, idx) => (
                         <tr key={idx}>
                           <td style={{ border: "1px solid #000000", textAlign: "center", padding: "4px" }}>{idx + 1}</td>
                           <td style={{ border: "1px solid #000000", padding: "4px 8px", fontWeight: "600" }}>
