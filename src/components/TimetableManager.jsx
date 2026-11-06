@@ -205,6 +205,7 @@ export default function TimetableManager() {
   const [showClassPrintModal, setShowClassPrintModal] = useState(false);
   const [printClassSelection, setPrintClassSelection] = useState("CURRENT"); // "ALL" or specific classKey or "CURRENT"
   const [showFacultyPrintModal, setShowFacultyPrintModal] = useState(false);
+  const [printFacultySelection, setPrintFacultySelection] = useState("CURRENT"); // "ALL_ACTIVE", "ALL_STAFF", specific faculty name or "CURRENT"
 
   // Sync body class for clean multi-page printing
   useEffect(() => {
@@ -1965,6 +1966,39 @@ export default function TimetableManager() {
     return currentClassSchedule ? [currentClassSchedule] : all;
   }, [timetableSchedule, printClassSelection, currentClassSchedule]);
 
+  // Active staff list with allocated workload or scheduled periods
+  const activeStaffList = useMemo(() => {
+    return staffList.filter(s => {
+      const stats = staffWorkloadMap[s.name];
+      if (stats && (stats.totalHours > 0 || (stats.assignedSubjects && stats.assignedSubjects.length > 0))) return true;
+      const matchedFacKey = facultySchedules && (facultySchedules[s.name] ? s.name : Object.keys(facultySchedules).find(k => isSameFacultyName(k, s.name)));
+      const sched = matchedFacKey ? facultySchedules[matchedFacKey] : null;
+      if (sched && sched.days) {
+        const hasSlots = Object.values(sched.days).some(dayArr => Array.isArray(dayArr) && dayArr.some(sl => sl.occupied));
+        if (hasSlots) return true;
+      }
+      return false;
+    });
+  }, [staffList, staffWorkloadMap, facultySchedules]);
+
+  // Selected faculty routines to print in bulk (Select All Active / All Staff) or single format
+  const facultyListToPrint = useMemo(() => {
+    if (printFacultySelection === "ALL_ACTIVE") {
+      const activeNames = activeStaffList.map(s => s.name);
+      return activeNames.length > 0 ? activeNames : (staffList.length > 0 ? staffList.map(s => s.name) : []);
+    }
+    if (printFacultySelection === "ALL_STAFF") {
+      return staffList.map(s => s.name);
+    }
+    if (printFacultySelection && printFacultySelection !== "CURRENT") {
+      return [printFacultySelection];
+    }
+    if (selectedFacultyView) {
+      return [selectedFacultyView];
+    }
+    return staffList.length > 0 ? [staffList[0].name] : [];
+  }, [printFacultySelection, activeStaffList, staffList, selectedFacultyView]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       {/* Alert Banner */}
@@ -3052,24 +3086,57 @@ export default function TimetableManager() {
                     </button>
                   </div>
                 ) : (
-                  <button 
-                    className="btn btn-primary"
-                    onClick={() => setShowFacultyPrintModal(true)}
-                    style={{ 
-                      display: "flex", 
-                      alignItems: "center", 
-                      gap: "7px", 
-                      background: "linear-gradient(135deg, #059669, #10b981)", 
-                      color: "#ffffff", 
-                      fontWeight: "700",
-                      padding: "0.5rem 1.1rem",
-                      borderRadius: "8px",
-                      boxShadow: "0 4px 14px rgba(16, 185, 129, 0.35)"
-                    }}
-                  >
-                    <Printer size={16} />
-                    <span>🖨️ Print / Download Faculty Routine (Official Format)</span>
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <button 
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setPrintFacultySelection(selectedFacultyView || "CURRENT");
+                        setShowFacultyPrintModal(true);
+                      }}
+                      style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "7px", 
+                        background: "linear-gradient(135deg, #4f46e5, #06b6d4)", 
+                        color: "#ffffff", 
+                        fontWeight: "700",
+                        padding: "0.5rem 1.1rem",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 14px rgba(79, 70, 229, 0.35)",
+                        border: "none",
+                        cursor: "pointer"
+                      }}
+                      title="Print current selected faculty routine"
+                    >
+                      <Printer size={16} />
+                      <span>🖨️ Print Faculty Routine</span>
+                    </button>
+
+                    <button 
+                      className="btn"
+                      onClick={() => {
+                        setPrintFacultySelection("ALL_ACTIVE");
+                        setShowFacultyPrintModal(true);
+                      }}
+                      style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "7px", 
+                        background: "linear-gradient(135deg, #059669, #10b981)", 
+                        color: "#ffffff", 
+                        fontWeight: "700",
+                        padding: "0.5rem 1.1rem",
+                        borderRadius: "8px",
+                        boxShadow: "0 4px 14px rgba(16, 185, 129, 0.35)",
+                        border: "none",
+                        cursor: "pointer"
+                      }}
+                      title="Select and Print ALL faculty routines together in a single official multi-page PDF"
+                    >
+                      <Printer size={16} />
+                      <span>🌟 Print ALL Faculty Routines ({activeStaffList.length || staffList.length})</span>
+                    </button>
+                  </div>
                 )}
 
                 {/* Period Timings Config Button */}
@@ -5778,12 +5845,56 @@ export default function TimetableManager() {
                 <span>Official Faculty Timetable Print Preview</span>
               </h3>
               <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
-                Staff: <strong style={{ color: "#34d399" }}>{selectedFacultyView}</strong> | IQAC: {iqacNumber}
+                {printFacultySelection === "ALL_ACTIVE"
+                  ? `🌟 All Active Faculty (${facultyListToPrint.length} Staff Members - Multi-Page PDF) | IQAC: ${iqacNumber}`
+                  : printFacultySelection === "ALL_STAFF"
+                  ? `📋 All Registered Faculty (${facultyListToPrint.length} Staff Members - Multi-Page PDF) | IQAC: ${iqacNumber}`
+                  : `Staff: ${facultyListToPrint[0] || selectedFacultyView} | IQAC: ${iqacNumber}`}
               </span>
             </div>
 
-            {/* Quick IQAC & Academic Year Editor */}
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            {/* Quick Select & Target Editor */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>PRINT TARGET:</span>
+                <select
+                  className="select-input"
+                  value={printFacultySelection}
+                  onChange={e => setPrintFacultySelection(e.target.value)}
+                  style={{ padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700", minWidth: "175px" }}
+                >
+                  <option value="ALL_ACTIVE">🌟 All Active Faculty ({activeStaffList.length})</option>
+                  <option value="ALL_STAFF">📋 All Registered Staff ({staffList.length})</option>
+                  <optgroup label="Single Faculty Member">
+                    {staffList.map(s => {
+                      const load = staffWorkloadMap[s.name]?.totalHours;
+                      return (
+                        <option key={s._id || s.name} value={s.name}>
+                          {s.name} {load ? `(${load}h)` : "(0h)"}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setPrintFacultySelection(printFacultySelection === "ALL_ACTIVE" ? (selectedFacultyView || "CURRENT") : "ALL_ACTIVE")}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    fontSize: "0.75rem",
+                    fontWeight: "800",
+                    cursor: "pointer",
+                    border: printFacultySelection === "ALL_ACTIVE" ? "1px solid #10b981" : "1px solid rgba(255, 255, 255, 0.2)",
+                    background: printFacultySelection === "ALL_ACTIVE" ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.08)",
+                    color: printFacultySelection === "ALL_ACTIVE" ? "#34d399" : "#cbd5e1"
+                  }}
+                  title="Toggle Select All Active / Single Faculty"
+                >
+                  {printFacultySelection === "ALL_ACTIVE" ? "✓ All Selected" : "⚡ Select All"}
+                </button>
+              </div>
+
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                 <span style={{ fontSize: "0.75rem", fontWeight: "700", color: "#cbd5e1" }}>IQAC NO:</span>
                 <input 
@@ -5795,7 +5906,7 @@ export default function TimetableManager() {
                     localStorage.setItem("timetable_iqac_number", e.target.value);
                   }}
                   placeholder="MEC/IQAC/..."
-                  style={{ width: "210px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+                  style={{ width: "190px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
                 />
               </div>
 
@@ -5812,7 +5923,7 @@ export default function TimetableManager() {
                     } catch (err) {}
                   }}
                   placeholder="e.g. 2026-2027"
-                  style={{ width: "125px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
+                  style={{ width: "115px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
                 />
               </div>
             </div>
@@ -5843,59 +5954,35 @@ export default function TimetableManager() {
                 }}
               >
                 <Printer size={16} />
-                <span>Print / Save as PDF</span>
+                <span>
+                  {facultyListToPrint.length > 1
+                    ? `Print All Faculty (${facultyListToPrint.length} Pages)`
+                    : "Print / Save as PDF"}
+                </span>
               </button>
             </div>
           </div>
 
-          {/* Printable White Sheet (Exact Image 2 Layout) */}
+          {/* Printable White Sheets Area (Single or Multi-Page Bulk Printing) */}
           <div 
             id="official-faculty-print-area"
             style={{
               width: "100%",
               maxWidth: "850px",
-              background: "#ffffff",
-              color: "#000000",
-              padding: "24px 30px",
-              borderRadius: "4px",
-              boxShadow: "0 12px 35px rgba(0,0,0,0.6)",
-              fontFamily: "Arial, sans-serif",
               boxSizing: "border-box"
             }}
           >
-            {/* Top Right IQAC Number */}
-            <div style={{ textAlign: "right", fontSize: "9.5pt", fontWeight: "800", color: "#000000", marginBottom: "4px", fontFamily: "Arial, sans-serif" }}>
-              {iqacNumber || "MEC/IQAC/2026 - 27/CSE/006"}
-            </div>
-
-            {/* Full-Width Letterhead Header Banner (Exact ParentLetter Style) */}
-            <div style={{ width: "100%", marginBottom: "6px" }}>
-              <img 
-                src={letterTemplateData?.headerLogo || headerLogo} 
-                alt="College Header" 
-                style={{ width: "100%", height: "auto", display: "block" }} 
-                onError={e => { e.target.src = headerLogo; }}
-              />
-            </div>
-            <div style={{ textAlign: "center", fontSize: "11pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.4px", margin: "4px 0 2px" }}>
-              DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
-            </div>
-            <div style={{ textAlign: "center", fontSize: "12pt", fontWeight: "900", color: "#000000", textDecoration: "underline", fontFamily: "Arial, sans-serif", margin: "2px 0" }}>
-              FACULTY ROUTINE / INDIVIDUAL TIME TABLE
-            </div>
-            <div style={{ textAlign: "center", fontSize: "10pt", fontWeight: "800", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginBottom: "14px", fontFamily: "Arial, sans-serif" }}>
-              {semesterType.toUpperCase()} SEMESTER - Academic Year [{printAcademicYear || academicYear}]
-            </div>
-
-            {/* Staff Workload Summary Table */}
-            {(() => {
-              const facAllocs = allocations.filter(a => a.facultyNames && a.facultyNames.includes(selectedFacultyView));
+            {facultyListToPrint.map((facName, fIdx) => {
+              const facAllocs = allocations.filter(a => a.facultyNames && a.facultyNames.some(fn => isSameFacultyName(fn, facName)));
               const theoryList = facAllocs.filter(a => !(a.type || "").toLowerCase().includes("lab"));
               const labList = facAllocs.filter(a => (a.type || "").toLowerCase().includes("lab"));
               const rowCount = Math.max(theoryList.length, labList.length, 1);
               const totalTheoryH = theoryList.reduce((s, a) => s + (Number(a.hoursPerWeek) || 0), 0);
               const totalLabH = labList.reduce((s, a) => s + (Number(a.hoursPerWeek) || 0), 0);
               const totalH = totalTheoryH + totalLabH;
+
+              const matchedFacKey = facultySchedules && (facultySchedules[facName] ? facName : Object.keys(facultySchedules).find(k => isSameFacultyName(k, facName)));
+              const facScheduleObj = matchedFacKey ? facultySchedules[matchedFacKey] : null;
 
               const rows = [];
               for (let i = 0; i < rowCount; i++) {
@@ -5910,115 +5997,157 @@ export default function TimetableManager() {
               }
 
               return (
-                <table style={{ width: "100%", borderCollapse: "collapse", border: "1.5px solid #000000", fontSize: "8.5pt", color: "#000000", fontFamily: "Arial, sans-serif", marginBottom: "20px" }}>
-                  <thead>
-                    <tr style={{ background: "#f8fafc" }}>
-                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "17%", fontWeight: "900" }}>Name of the Staff</th>
-                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "14%", fontWeight: "900" }}>Year/Sem/Branch</th>
-                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "22%", fontWeight: "900" }}>Theory / Training</th>
-                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "13%", fontWeight: "900" }}>Year/Sem/Branch</th>
-                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "13%", fontWeight: "900" }}>Lab</th>
-                      <th colSpan={3} style={{ border: "1.5px solid #000000", padding: "4px 4px", textAlign: "center", fontWeight: "900" }}>Workload</th>
-                      <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "10%", fontWeight: "900" }}>Signature</th>
-                    </tr>
-                    <tr style={{ background: "#f8fafc" }}>
-                      <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "900" }}>Theory/Tr</th>
-                      <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7pt", fontWeight: "900" }}>Lab/Sem/Tut/Lib/Pro</th>
-                      <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "900" }}>Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, idx) => (
-                      <tr key={idx} style={{ minHeight: "32px" }}>
-                        {idx === 0 && (
-                          <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "6px 5px", fontWeight: "900", verticalAlign: "middle" }}>
-                            {selectedFacultyView}
-                          </td>
-                        )}
-                        <td style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "800" }}>{row.theoryBranch}</td>
-                        <td style={{ border: "1.5px solid #000000", padding: "5px 6px", fontWeight: "800" }}>{row.theoryCourse}</td>
-                        <td style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "800" }}>{row.labBranch}</td>
-                        <td style={{ border: "1.5px solid #000000", padding: "5px 6px", fontWeight: "800" }}>{row.labCourse}</td>
-                        {idx === 0 && (
-                          <>
-                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
-                              {totalTheoryH || "-"}
-                            </td>
-                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
-                              {totalLabH > 0 ? totalLabH : "-"}
-                            </td>
-                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
-                              {totalH}
-                            </td>
-                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", verticalAlign: "middle" }}></td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              );
-            })()}
+                <div 
+                  key={facName || fIdx}
+                  className="faculty-print-sheet"
+                  style={{
+                    width: "100%",
+                    maxWidth: "850px",
+                    background: "#ffffff",
+                    color: "#000000",
+                    padding: "24px 30px",
+                    borderRadius: "4px",
+                    boxShadow: "0 12px 35px rgba(0,0,0,0.6)",
+                    fontFamily: "Arial, sans-serif",
+                    boxSizing: "border-box",
+                    marginBottom: "24px"
+                  }}
+                >
+                  {/* Top Right IQAC Number */}
+                  <div style={{ textAlign: "right", fontSize: "9.5pt", fontWeight: "800", color: "#000000", marginBottom: "4px", fontFamily: "Arial, sans-serif" }}>
+                    {iqacNumber || "MEC/IQAC/2026 - 27/CSE/006"}
+                  </div>
 
-            {/* 7-Period Faculty Routine Grid */}
-            <table style={{ width: "100%", borderCollapse: "collapse", border: "1.5px solid #000000", fontSize: "9pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  <th style={{ border: "1.5px solid #000000", width: "65px", padding: "7px 4px", textAlign: "center", fontSize: "11pt", fontWeight: "900" }}>↓→</th>
-                  {[1, 2, 3, 4, 5, 6, 7].map(pr => (
-                    <th key={pr} style={{ border: "1.5px solid #000000", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>
-                      {pr}<br/>
-                      <span style={{ fontSize: "7pt", fontWeight: "800" }}>({periodTimings[pr] || DEFAULT_PERIOD_TIMINGS[pr]})</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day, dIdx) => {
-                  const shortDay = ["MON", "TUE", "WED", "THU", "FRI"][dIdx];
-                  const daySlots = facultySchedules[selectedFacultyView]?.days?.[day] || [];
-                  return (
-                    <tr key={day} style={{ height: "42px" }}>
-                      <td style={{ border: "1.5px solid #000000", background: "#f8fafc", fontWeight: "900", textAlign: "center", padding: "4px", fontSize: "9.5pt" }}>
-                        {shortDay}
-                      </td>
-                      {[1, 2, 3, 4, 5, 6, 7].map(period => {
-                        const slot = daySlots.find(s => s.period === period);
-                        const isOccupied = slot && slot.occupied;
-                        const formattedClass = isOccupied ? (slot.classKey ? slot.classKey.replace("-", " – ") : "") : "";
+                  {/* Full-Width Letterhead Header Banner (Exact ParentLetter Style) */}
+                  <div style={{ width: "100%", marginBottom: "6px" }}>
+                    <img 
+                      src={letterTemplateData?.headerLogo || headerLogo} 
+                      alt="College Header" 
+                      style={{ width: "100%", height: "auto", display: "block" }} 
+                      onError={e => { e.target.src = headerLogo; }}
+                    />
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: "11pt", fontWeight: "900", color: "#000000", fontFamily: "Arial, sans-serif", letterSpacing: "0.4px", margin: "4px 0 2px" }}>
+                    DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: "12pt", fontWeight: "900", color: "#000000", textDecoration: "underline", fontFamily: "Arial, sans-serif", margin: "2px 0" }}>
+                    FACULTY ROUTINE / INDIVIDUAL TIME TABLE
+                  </div>
+                  <div style={{ textAlign: "center", fontSize: "10pt", fontWeight: "800", fontStyle: "italic", textDecoration: "underline", color: "#000000", marginBottom: "14px", fontFamily: "Arial, sans-serif" }}>
+                    {semesterType.toUpperCase()} SEMESTER - Academic Year [{printAcademicYear || academicYear}]
+                  </div>
+
+                  {/* Staff Workload Summary Table */}
+                  <table style={{ width: "100%", borderCollapse: "collapse", border: "1.5px solid #000000", fontSize: "8.5pt", color: "#000000", fontFamily: "Arial, sans-serif", marginBottom: "20px" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc" }}>
+                        <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "17%", fontWeight: "900" }}>Name of the Staff</th>
+                        <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "14%", fontWeight: "900" }}>Year/Sem/Branch</th>
+                        <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "22%", fontWeight: "900" }}>Theory / Training</th>
+                        <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "13%", fontWeight: "900" }}>Year/Sem/Branch</th>
+                        <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "13%", fontWeight: "900" }}>Lab</th>
+                        <th colSpan={3} style={{ border: "1.5px solid #000000", padding: "4px 4px", textAlign: "center", fontWeight: "900" }}>Workload</th>
+                        <th rowSpan={2} style={{ border: "1.5px solid #000000", padding: "6px 4px", width: "10%", fontWeight: "900" }}>Signature</th>
+                      </tr>
+                      <tr style={{ background: "#f8fafc" }}>
+                        <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "900" }}>Theory/Tr</th>
+                        <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7pt", fontWeight: "900" }}>Lab/Sem/Tut/Lib/Pro</th>
+                        <th style={{ border: "1.5px solid #000000", padding: "4px 2px", textAlign: "center", fontSize: "7.5pt", fontWeight: "900" }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, idx) => (
+                        <tr key={idx} style={{ minHeight: "32px" }}>
+                          {idx === 0 && (
+                            <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "6px 5px", fontWeight: "900", verticalAlign: "middle" }}>
+                              {facName}
+                            </td>
+                          )}
+                          <td style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "800" }}>{row.theoryBranch}</td>
+                          <td style={{ border: "1.5px solid #000000", padding: "5px 6px", fontWeight: "800" }}>{row.theoryCourse}</td>
+                          <td style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "800" }}>{row.labBranch}</td>
+                          <td style={{ border: "1.5px solid #000000", padding: "5px 6px", fontWeight: "800" }}>{row.labCourse}</td>
+                          {idx === 0 && (
+                            <>
+                              <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
+                                {totalTheoryH || "-"}
+                              </td>
+                              <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
+                                {totalLabH > 0 ? totalLabH : "-"}
+                              </td>
+                              <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", textAlign: "center", fontWeight: "900", verticalAlign: "middle" }}>
+                                {totalH}
+                              </td>
+                              <td rowSpan={rowCount} style={{ border: "1.5px solid #000000", padding: "5px 4px", verticalAlign: "middle" }}></td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  {/* 7-Period Faculty Routine Grid */}
+                  <table style={{ width: "100%", borderCollapse: "collapse", border: "1.5px solid #000000", fontSize: "9pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc" }}>
+                        <th style={{ border: "1.5px solid #000000", width: "65px", padding: "7px 4px", textAlign: "center", fontSize: "11pt", fontWeight: "900" }}>↓→</th>
+                        {[1, 2, 3, 4, 5, 6, 7].map(pr => (
+                          <th key={pr} style={{ border: "1.5px solid #000000", padding: "5px 2px", textAlign: "center", fontWeight: "900" }}>
+                            {pr}<br/>
+                            <span style={{ fontSize: "7pt", fontWeight: "800" }}>({periodTimings[pr] || DEFAULT_PERIOD_TIMINGS[pr]})</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day, dIdx) => {
+                        const shortDay = ["MON", "TUE", "WED", "THU", "FRI"][dIdx];
+                        const daySlots = (facScheduleObj && facScheduleObj.days && facScheduleObj.days[day]) || [];
                         return (
-                          <td key={period} style={{ border: "1.5px solid #000000", textAlign: "center", padding: "4px", fontWeight: "900", fontSize: "9pt" }}>
-                            {isOccupied ? (
-                              <div>
-                                <div style={{ fontWeight: "900", fontSize: "9.5pt", color: "#000000", lineHeight: 1.2 }}>
-                                  {formattedClass}
-                                </div>
-                                {(slot.shortName || slot.subjectCode) && (
-                                  <div style={{ fontWeight: "800", fontSize: "8pt", color: "#000000", marginTop: "2px" }}>
-                                    {slot.shortName || slot.subjectCode}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <span style={{ color: "#000000", fontWeight: "700" }}>-</span>
-                            )}
-                          </td>
+                          <tr key={day} style={{ height: "42px" }}>
+                            <td style={{ border: "1.5px solid #000000", background: "#f8fafc", fontWeight: "900", textAlign: "center", padding: "4px", fontSize: "9.5pt" }}>
+                              {shortDay}
+                            </td>
+                            {[1, 2, 3, 4, 5, 6, 7].map(period => {
+                              const slot = daySlots.find(s => s.period === period);
+                              const isOccupied = slot && slot.occupied;
+                              const formattedClass = isOccupied ? (slot.classKey ? slot.classKey.replace("-", " – ") : "") : "";
+                              return (
+                                <td key={period} style={{ border: "1.5px solid #000000", textAlign: "center", padding: "4px", fontWeight: "900", fontSize: "9pt" }}>
+                                  {isOccupied ? (
+                                    <div>
+                                      <div style={{ fontWeight: "900", fontSize: "9.5pt", color: "#000000", lineHeight: 1.2 }}>
+                                        {formattedClass}
+                                      </div>
+                                      {(slot.shortName || slot.subjectCode) && (
+                                        <div style={{ fontWeight: "800", fontSize: "8pt", color: "#000000", marginTop: "2px" }}>
+                                          {slot.shortName || slot.subjectCode}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ color: "#000000", fontWeight: "700" }}>-</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
                         );
                       })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </tbody>
+                  </table>
 
-            {/* Bottom Signatures */}
-            <div 
-              className="faculty-print-signatures"
-              style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", padding: "0 10px", fontWeight: "900", fontSize: "10pt", color: "#000000", fontFamily: "Arial, sans-serif" }}
-            >
-              <div>{coordinators.timetableIncharge || "TIME TABLE INCHARGE"}</div>
-              <div>{coordinators.hod || "HOD"}</div>
-            </div>
+                  {/* Bottom Signatures */}
+                  <div 
+                    className="faculty-print-signatures"
+                    style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", padding: "0 10px", fontWeight: "900", fontSize: "10pt", color: "#000000", fontFamily: "Arial, sans-serif" }}
+                  >
+                    <div>{coordinators.timetableIncharge || "TIME TABLE INCHARGE"}</div>
+                    <div>{coordinators.hod || "HOD"}</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>,
         document.body
@@ -6102,8 +6231,9 @@ export default function TimetableManager() {
             color: #000000 !important;
           }
 
-          /* Each Class Sheet on its own individual A4 page */
-          .class-print-sheet {
+          /* Each Class & Faculty Sheet on its own individual A4 page */
+          .class-print-sheet,
+          .faculty-print-sheet {
             display: block !important;
             position: relative !important;
             page-break-before: auto !important;
@@ -6122,25 +6252,18 @@ export default function TimetableManager() {
             height: auto !important;
           }
 
-          /* Break after every class except the last one */
-          .class-print-sheet:not(:last-child) {
+          /* Break after every sheet except the last one */
+          .class-print-sheet:not(:last-child),
+          .faculty-print-sheet:not(:last-child) {
             page-break-after: always !important;
             break-after: page !important;
           }
 
-          .class-print-sheet:last-child {
+          .class-print-sheet:last-child,
+          .faculty-print-sheet:last-child {
             page-break-after: auto !important;
             break-after: auto !important;
             margin-bottom: 0 !important;
-          }
-
-          /* Faculty Routine single page */
-          #official-faculty-print-area {
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border-radius: 0 !important;
           }
 
           .class-print-signatures,
@@ -6157,7 +6280,8 @@ export default function TimetableManager() {
             font-weight: 800 !important;
           }
 
-          #official-class-print-area table {
+          #official-class-print-area table,
+          #official-faculty-print-area table {
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
