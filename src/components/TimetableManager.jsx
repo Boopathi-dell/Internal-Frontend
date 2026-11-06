@@ -230,17 +230,6 @@ export default function TimetableManager() {
     return semType === "Odd" ? "I" : "II";
   };
 
-  // Selected classes to print in bulk (Select All) or single format
-  const classesToPrint = useMemo(() => {
-    const all = timetableSchedule?.classes || [];
-    if (printClassSelection === "ALL") return all;
-    if (printClassSelection && printClassSelection !== "CURRENT") {
-      const match = all.filter(c => c.classKey === printClassSelection);
-      if (match.length > 0) return match;
-    }
-    return currentClassSchedule ? [currentClassSchedule] : all;
-  }, [timetableSchedule, printClassSelection, currentClassSchedule]);
-
   // Edit distance calculation for typo tolerance
   const editDistance = (s1, s2) => {
     const m = s1.length, n = s2.length;
@@ -1951,6 +1940,17 @@ export default function TimetableManager() {
     if (!timetableSchedule || !timetableSchedule.classes) return null;
     return timetableSchedule.classes.find(c => c.classKey === selectedClassKey) || timetableSchedule.classes[0];
   }, [timetableSchedule, selectedClassKey]);
+
+  // Selected classes to print in bulk (Select All) or single format
+  const classesToPrint = useMemo(() => {
+    const all = timetableSchedule?.classes || [];
+    if (printClassSelection === "ALL") return all;
+    if (printClassSelection && printClassSelection !== "CURRENT") {
+      const match = all.filter(c => c.classKey === printClassSelection);
+      if (match.length > 0) return match;
+    }
+    return currentClassSchedule ? [currentClassSchedule] : all;
+  }, [timetableSchedule, printClassSelection, currentClassSchedule]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
