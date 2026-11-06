@@ -756,6 +756,9 @@ export default function TimetableManager() {
           setPeriodTimings(res.data.periodTimings);
           localStorage.setItem("timetable_period_timings", JSON.stringify(res.data.periodTimings));
         }
+        if (res.data.facultySchedules) {
+          setFacultySchedules(res.data.facultySchedules);
+        }
         if (!selectedClassKey && res.data.classes[0]) {
           setSelectedClassKey(res.data.classes[0].classKey);
         }
@@ -1108,6 +1111,61 @@ export default function TimetableManager() {
     const matchedKey = Object.keys(staffWorkloadMap).find(k => isSameFacultyName(k, name));
     return matchedKey ? staffWorkloadMap[matchedKey] : {};
   };
+
+  // Dynamic slot retriever for faculty routines: checks cached facultySchedules first,
+  // and always falls back to searching timetableSchedule.classes dynamically so it's NEVER blank!
+  const getFacultySlot = useCallback((facName, day, period) => {
+    if (!facName) {
+      return {
+        period,
+        time: periodTimings[period] || DEFAULT_PERIOD_TIMINGS[period],
+        occupied: false,
+        type: "Free"
+      };
+    }
+
+    // 1. Check cached facultySchedules if populated
+    const matchedFacKey = facultySchedules && (facultySchedules[facName] ? facName : Object.keys(facultySchedules).find(k => isSameFacultyName(k, facName)));
+    const facObj = matchedFacKey ? facultySchedules[matchedFacKey] : null;
+    const cachedSlots = facObj?.days?.[day];
+    const cachedSlot = cachedSlots && cachedSlots.find(s => s.period === period);
+    if (cachedSlot && cachedSlot.occupied) {
+      return cachedSlot;
+    }
+
+    // 2. Check timetableSchedule.classes dynamically across all classes
+    if (timetableSchedule?.classes) {
+      for (const cls of timetableSchedule.classes) {
+        const daySlots = cls.days?.[day] || [];
+        const slot = daySlots.find(s => s.period === period);
+        if (slot && slot.type !== "Free" && slot.subjectCode !== "FREE") {
+          const facList = slot.facultyNames && slot.facultyNames.length > 0 ? slot.facultyNames : (slot.facultyName ? [slot.facultyName] : []);
+          if (facList.some(fn => isSameFacultyName(fn, facName))) {
+            return {
+              period,
+              time: slot.time || periodTimings[period] || DEFAULT_PERIOD_TIMINGS[period],
+              occupied: true,
+              classKey: cls.classKey,
+              subjectCode: slot.subjectCode,
+              subjectName: slot.subjectName,
+              shortName: slot.shortName || slot.subjectCode,
+              type: slot.type || "Theory",
+              isTraining: slot.isTraining,
+              difficulty: slot.difficulty,
+              room: slot.room
+            };
+          }
+        }
+      }
+    }
+
+    return {
+      period,
+      time: periodTimings[period] || DEFAULT_PERIOD_TIMINGS[period],
+      occupied: false,
+      type: "Free"
+    };
+  }, [facultySchedules, timetableSchedule, periodTimings]);
 
   // Handle Faculty Assignment Change for a Subject
   const handleAssignFaculty = (allocId, facultyName, isMulti = false) => {
@@ -1977,9 +2035,23 @@ export default function TimetableManager() {
         const hasSlots = Object.values(sched.days).some(dayArr => Array.isArray(dayArr) && dayArr.some(sl => sl.occupied));
         if (hasSlots) return true;
       }
+      if (timetableSchedule?.classes) {
+        for (const cls of timetableSchedule.classes) {
+          for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]) {
+            const slots = cls.days?.[day] || [];
+            if (slots.some(sl => {
+              if (!sl || sl.type === "Free" || sl.subjectCode === "FREE") return false;
+              const fList = sl.facultyNames && sl.facultyNames.length > 0 ? sl.facultyNames : (sl.facultyName ? [sl.facultyName] : []);
+              return fList.some(fn => isSameFacultyName(fn, s.name));
+            })) {
+              return true;
+            }
+          }
+        }
+      }
       return false;
     });
-  }, [staffList, staffWorkloadMap, facultySchedules]);
+  }, [staffList, staffWorkloadMap, facultySchedules, timetableSchedule]);
 
   // Selected faculty routines to print in bulk (Select All Active / All Staff) or single format
   const facultyListToPrint = useMemo(() => {
@@ -3436,21 +3508,19 @@ export default function TimetableManager() {
                   </thead>
                   <tbody>
                     {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(day => {
-                      const matchedFacKey = facultySchedules && (facultySchedules[selectedFacultyView] ? selectedFacultyView : Object.keys(facultySchedules).find(k => isSameFacultyName(k, selectedFacultyView)));
-                      const facRoutine = (matchedFacKey && facultySchedules[matchedFacKey]?.days?.[day]) || [];
-
                       return (
                         <tr key={day}>
                           <td style={{ fontWeight: "800", color: "#818cf8", textAlign: "center", background: "rgba(99, 102, 241, 0.05)" }}>
                             {day}
                           </td>
-                          {facRoutine.map((slot, sIdx) => {
-                            const isBusy = slot.occupied;
-                            const isLab = slot.type === "Lab";
+                          {[1, 2, 3, 4, 5, 6, 7].map(p => {
+                            const slot = getFacultySlot(selectedFacultyView, day, p);
+                            const isBusy = slot && slot.occupied;
+                            const isLab = (slot?.type || "").toLowerCase().includes("lab");
 
                             return (
                               <td 
-                                key={sIdx}
+                                key={p}
                                 style={{
                                   padding: "8px",
                                   textAlign: "center",
@@ -3486,11 +3556,18 @@ export default function TimetableManager() {
                                       {slot.classKey}
                                     </div>
                                     <div style={{ fontWeight: "700", fontSize: "0.85rem", color: "var(--text-color)" }}>
-                                      {slot.shortName || slot.subjectName}
+                                      {slot.shortName || slot.subjectCode || slot.subjectName}
+                                      {slot.isTraining && <span title="External Trainer Continuous Block Session" style={{ marginLeft: "4px", fontSize: "0.72rem" }}>🎯</span>}
+                                      {slot.difficulty === "Tough" && <span title="Tough / Problematic Subject" style={{ marginLeft: "4px", fontSize: "0.72rem" }}>🔥</span>}
                                     </div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
                                       {slot.type}
                                     </div>
+                                    {slot.room && (
+                                      <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", opacity: 0.8, marginTop: "2px" }}>
+                                        {slot.room}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </td>
@@ -6102,14 +6179,13 @@ export default function TimetableManager() {
                     <tbody>
                       {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((day, dIdx) => {
                         const shortDay = ["MON", "TUE", "WED", "THU", "FRI"][dIdx];
-                        const daySlots = (facScheduleObj && facScheduleObj.days && facScheduleObj.days[day]) || [];
                         return (
                           <tr key={day} style={{ height: "42px" }}>
                             <td style={{ border: "1.5px solid #000000", background: "#f8fafc", fontWeight: "900", textAlign: "center", padding: "4px", fontSize: "9.5pt" }}>
                               {shortDay}
                             </td>
                             {[1, 2, 3, 4, 5, 6, 7].map(period => {
-                              const slot = daySlots.find(s => s.period === period);
+                              const slot = getFacultySlot(facName, day, period);
                               const isOccupied = slot && slot.occupied;
                               const formattedClass = isOccupied ? (slot.classKey ? slot.classKey.replace("-", " – ") : "") : "";
                               return (
