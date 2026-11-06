@@ -795,6 +795,42 @@ export default function TimetableManager() {
     }
   };
 
+  // Check if active timetable has any FREE periods
+  const hasAnyFreeSlots = useMemo(() => {
+    if (!timetableSchedule?.classes) return false;
+    return timetableSchedule.classes.some(cls =>
+      ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].some(day =>
+        (cls.days?.[day] || []).some(s => s && (s.type === "Free" || s.subjectCode === "FREE" || s.shortName === "FREE"))
+      )
+    );
+  }, [timetableSchedule]);
+
+  // Auto-Fill all FREE periods in the current timetable schedule
+  const handleAutoFillFreeSlots = async () => {
+    if (timetableSchedule?.isLocked) {
+      return showAlert("Timetable is locked! Unlock it before editing or filling slots.", "error");
+    }
+    try {
+      setLoading(true);
+      const res = await API.post("/api/timetable/schedule/fill-free", {
+        department,
+        academicYear,
+        semesterType
+      });
+      if (res.data?.success && res.data?.schedule) {
+        setTimetableSchedule(res.data.schedule);
+        if (res.data.schedule.facultySchedules) {
+          setFacultySchedules(res.data.schedule.facultySchedules);
+        }
+        showAlert("✨ All Free periods filled with conflict-free subjects!", "success");
+      }
+    } catch (err) {
+      showAlert("Error filling free slots: " + (err.response?.data?.error || err.message), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 6. Restore Historical Version
   const handleRestoreVersion = async (versionId) => {
     if (!window.confirm("Are you sure you want to restore this historical version as the active timetable?")) return;
@@ -3015,6 +3051,31 @@ export default function TimetableManager() {
                   <History size={16} />
                   <span>📜 History ({historyList.length})</span>
                 </button>
+
+                {/* Auto-Fill Free Slots Button (Visible whenever FREE slots exist) */}
+                {hasAnyFreeSlots && !timetableSchedule?.isLocked && (
+                  <button 
+                    className="btn"
+                    onClick={handleAutoFillFreeSlots}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "7px",
+                      background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                      color: "#ffffff",
+                      border: "none",
+                      fontWeight: "700",
+                      padding: "0.5rem 1.1rem",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      boxShadow: "0 4px 14px rgba(99, 102, 241, 0.35)"
+                    }}
+                    title="Automatically replace all FREE slots with conflict-free revision/curriculum hours"
+                  >
+                    <Sparkles size={16} />
+                    <span>✨ Auto-Fill Free Slots</span>
+                  </button>
+                )}
 
                 {/* Finalize / Lock Button */}
                 {timetableSchedule && timetableSchedule.classes && timetableSchedule.classes.length > 0 && (
