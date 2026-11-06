@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import API from "../api";
 import { 
   Calendar, Clock, Users, BookOpen, Sparkles, CheckCircle2, 
@@ -204,6 +205,18 @@ export default function TimetableManager() {
   const [showClassPrintModal, setShowClassPrintModal] = useState(false);
   const [printClassSelection, setPrintClassSelection] = useState("CURRENT"); // "ALL" or specific classKey or "CURRENT"
   const [showFacultyPrintModal, setShowFacultyPrintModal] = useState(false);
+
+  // Sync body class for clean multi-page printing
+  useEffect(() => {
+    if (showClassPrintModal || showFacultyPrintModal) {
+      document.body.classList.add("modal-print-open");
+    } else {
+      document.body.classList.remove("modal-print-open");
+    }
+    return () => {
+      document.body.classList.remove("modal-print-open");
+    };
+  }, [showClassPrintModal, showFacultyPrintModal]);
 
   // Version History & Lock Modals/States
   const [historyList, setHistoryList] = useState([]);
@@ -5308,19 +5321,22 @@ export default function TimetableManager() {
       {/* ============================================================== */}
       {/* PRINT MODAL 1: OFFICIAL CLASS TIME TABLE (IMAGE 1 FORMAT)      */}
       {/* ============================================================== */}
-      {showClassPrintModal && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(10, 15, 29, 0.88)",
-          backdropFilter: "blur(8px)",
-          zIndex: 10000,
-          overflowY: "auto",
-          padding: "1.5rem 1rem",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center"
-        }}>
+      {showClassPrintModal && createPortal(
+        <div 
+          className="class-print-modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(10, 15, 29, 0.88)",
+            backdropFilter: "blur(8px)",
+            zIndex: 10000,
+            overflowY: "auto",
+            padding: "1.5rem 1rem",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center"
+          }}
+        >
           {/* Top Control Bar (Hidden during print) */}
           <div className="no-print" style={{
             width: "100%",
@@ -5706,7 +5722,10 @@ export default function TimetableManager() {
                   </table>
 
                   {/* Bottom Signatures */}
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "35px", padding: "0 10px", fontWeight: "900", fontSize: "9.5pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+                  <div 
+                    className="class-print-signatures"
+                    style={{ display: "flex", justifyContent: "space-between", marginTop: "35px", padding: "0 10px", fontWeight: "900", fontSize: "9.5pt", color: "#000000", fontFamily: "Arial, sans-serif" }}
+                  >
                     <div>{coordinators.timetableIncharge || "TIME TABLE INCHARGE"}</div>
                     <div>{coordinators.hod || "HOD"}</div>
                   </div>
@@ -5714,25 +5733,29 @@ export default function TimetableManager() {
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ============================================================== */}
       {/* PRINT MODAL 2: OFFICIAL FACULTY ROUTINE (IMAGE 2 FORMAT)       */}
       {/* ============================================================== */}
-      {showFacultyPrintModal && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(10, 15, 29, 0.88)",
-          backdropFilter: "blur(8px)",
-          zIndex: 10000,
-          overflowY: "auto",
-          padding: "1.5rem 1rem",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center"
-        }}>
+      {showFacultyPrintModal && createPortal(
+        <div 
+          className="faculty-print-modal-overlay"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(10, 15, 29, 0.88)",
+            backdropFilter: "blur(8px)",
+            zIndex: 10000,
+            overflowY: "auto",
+            padding: "1.5rem 1rem",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center"
+          }}
+        >
           {/* Top Control Bar (Hidden during print) */}
           <div className="no-print" style={{
             width: "100%",
@@ -5989,12 +6012,16 @@ export default function TimetableManager() {
             </table>
 
             {/* Bottom Signatures */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", padding: "0 10px", fontWeight: "900", fontSize: "10pt", color: "#000000", fontFamily: "Arial, sans-serif" }}>
+            <div 
+              className="faculty-print-signatures"
+              style={{ display: "flex", justifyContent: "space-between", marginTop: "40px", padding: "0 10px", fontWeight: "900", fontSize: "10pt", color: "#000000", fontFamily: "Arial, sans-serif" }}
+            >
               <div>{coordinators.timetableIncharge || "TIME TABLE INCHARGE"}</div>
               <div>{coordinators.hod || "HOD"}</div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Global CSS for Print Optimization */}
@@ -6004,60 +6031,124 @@ export default function TimetableManager() {
             size: A4 portrait;
             margin: 8mm 10mm;
           }
-          body * {
-            visibility: hidden !important;
-          }
-          #official-class-print-area, #official-class-print-area *,
-          #official-faculty-print-area, #official-faculty-print-area * {
-            visibility: visible !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+
+          /* Reset root and document */
+          html, body {
+            width: 100% !important;
+            height: auto !important;
+            min-height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
             color: #000000 !important;
+            overflow: visible !important;
           }
-          #official-class-print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+
+          /* When modal is open, hide the main app in background */
+          body.modal-print-open #root,
+          body:has(.class-print-modal-overlay) #root,
+          body:has(.faculty-print-modal-overlay) #root {
+            display: none !important;
+          }
+
+          /* Hide control bars, buttons, and elements with .no-print */
+          .no-print,
+          button {
+            display: none !important;
+          }
+
+          /* Reset modal backdrop so it flows in normal document flow */
+          .class-print-modal-overlay,
+          .faculty-print-modal-overlay {
+            position: static !important;
+            inset: auto !important;
+            overflow: visible !important;
+            background: transparent !important;
+            backdrop-filter: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            box-shadow: none !important;
+            z-index: auto !important;
+          }
+
+          /* Printable Containers */
+          #official-class-print-area,
+          #official-faculty-print-area {
+            position: static !important;
+            left: auto !important;
+            top: auto !important;
+            display: block !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
             background: transparent !important;
-            display: block !important;
             box-shadow: none !important;
             border: none !important;
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color: #000000 !important;
           }
+
+          #official-class-print-area *,
+          #official-faculty-print-area * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color: #000000 !important;
+          }
+
+          /* Each Class Sheet on its own individual A4 page */
           .class-print-sheet {
-            page-break-after: always !important;
-            break-after: page !important;
-            margin: 0 0 20px 0 !important;
-            padding: 18px 24px !important;
+            display: block !important;
+            position: relative !important;
+            page-break-before: auto !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin: 0 !important;
+            padding: 0 !important;
             box-shadow: none !important;
             border: none !important;
+            border-radius: 0 !important;
             background: #ffffff !important;
             color: #000000 !important;
             box-sizing: border-box !important;
             width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
           }
+
+          /* Break after every class except the last one */
+          .class-print-sheet:not(:last-child) {
+            page-break-after: always !important;
+            break-after: page !important;
+          }
+
           .class-print-sheet:last-child {
-            page-break-after: avoid !important;
-            break-after: avoid !important;
+            page-break-after: auto !important;
+            break-after: auto !important;
             margin-bottom: 0 !important;
           }
+
+          /* Faculty Routine single page */
           #official-faculty-print-area {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: #ffffff !important;
-            color: #000000 !important;
-            display: block !important;
-            box-shadow: none !important;
-            border: none !important;
+            border-radius: 0 !important;
           }
+
+          .class-print-signatures,
+          .faculty-print-signatures {
+            margin-top: 25px !important;
+          }
+
+          /* Clean border lines */
           #official-class-print-area table, #official-class-print-area th, #official-class-print-area td,
           #official-faculty-print-area table, #official-faculty-print-area th, #official-faculty-print-area td {
             border: 1.5px solid #000000 !important;
@@ -6065,8 +6156,10 @@ export default function TimetableManager() {
             color: #000000 !important;
             font-weight: 800 !important;
           }
-          .no-print {
-            display: none !important;
+
+          #official-class-print-area table {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
