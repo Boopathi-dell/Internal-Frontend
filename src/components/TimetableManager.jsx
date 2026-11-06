@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import API from "../api";
 import { 
@@ -1146,16 +1146,16 @@ export default function TimetableManager() {
     const matchedFacKey = facultySchedules && (facultySchedules[facName] ? facName : Object.keys(facultySchedules).find(k => isSameFacultyName(k, facName)));
     const facObj = matchedFacKey ? facultySchedules[matchedFacKey] : null;
     const cachedSlots = facObj?.days?.[day];
-    const cachedSlot = cachedSlots && cachedSlots.find(s => s.period === period);
+    const cachedSlot = Array.isArray(cachedSlots) ? cachedSlots.find(s => s && s.period === period) : null;
     if (cachedSlot && cachedSlot.occupied) {
       return cachedSlot;
     }
 
     // 2. Check timetableSchedule.classes dynamically across all classes
-    if (timetableSchedule?.classes) {
+    if (timetableSchedule?.classes && Array.isArray(timetableSchedule.classes)) {
       for (const cls of timetableSchedule.classes) {
-        const daySlots = cls.days?.[day] || [];
-        const slot = daySlots.find(s => s.period === period);
+        const daySlots = cls.days?.[day];
+        const slot = Array.isArray(daySlots) ? daySlots.find(s => s && s.period === period) : null;
         if (slot && slot.type !== "Free" && slot.subjectCode !== "FREE") {
           const facList = slot.facultyNames && slot.facultyNames.length > 0 ? slot.facultyNames : (slot.facultyName ? [slot.facultyName] : []);
           if (facList.some(fn => isSameFacultyName(fn, facName))) {
@@ -2044,20 +2044,22 @@ export default function TimetableManager() {
 
   // Active staff list with allocated workload or scheduled periods
   const activeStaffList = useMemo(() => {
+    if (!Array.isArray(staffList)) return [];
     return staffList.filter(s => {
+      if (!s) return false;
       const stats = staffWorkloadMap[s.name];
       if (stats && (stats.totalHours > 0 || (stats.assignedSubjects && stats.assignedSubjects.length > 0))) return true;
       const matchedFacKey = facultySchedules && (facultySchedules[s.name] ? s.name : Object.keys(facultySchedules).find(k => isSameFacultyName(k, s.name)));
       const sched = matchedFacKey ? facultySchedules[matchedFacKey] : null;
-      if (sched && sched.days) {
-        const hasSlots = Object.values(sched.days).some(dayArr => Array.isArray(dayArr) && dayArr.some(sl => sl.occupied));
+      if (sched && sched.days && typeof sched.days === "object") {
+        const hasSlots = Object.values(sched.days).some(dayArr => Array.isArray(dayArr) && dayArr.some(sl => sl && sl.occupied));
         if (hasSlots) return true;
       }
-      if (timetableSchedule?.classes) {
+      if (timetableSchedule?.classes && Array.isArray(timetableSchedule.classes)) {
         for (const cls of timetableSchedule.classes) {
           for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]) {
-            const slots = cls.days?.[day] || [];
-            if (slots.some(sl => {
+            const slots = cls.days?.[day];
+            if (Array.isArray(slots) && slots.some(sl => {
               if (!sl || sl.type === "Free" || sl.subjectCode === "FREE") return false;
               const fList = sl.facultyNames && sl.facultyNames.length > 0 ? sl.facultyNames : (sl.facultyName ? [sl.facultyName] : []);
               return fList.some(fn => isSameFacultyName(fn, s.name));
