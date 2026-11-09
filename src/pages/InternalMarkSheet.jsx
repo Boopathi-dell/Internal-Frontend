@@ -43,8 +43,9 @@ export default function InternalMarkSheet() {
     iqacRef: "MEC/IQAC/2026-27/COE/022",
     date: new Date().toLocaleDateString("en-GB").replace(/\//g, "."),
     semesterSession: "EVEN SEM APRIL - 2027",
-    pageSplitMode: "2pages", // "2pages" (default: Strict 2 Pages Balanced), "1page", "30", "25"
-    tableWidthMode: "autoFit", // "autoFit" (default: Auto-Fit Content Snug), "full" (100% Stretch)
+    pageSplitMode: "2pages", // "2pages" (default: Strict 2 Pages MEC format), "1page", "30", "25"
+    padTo60: true, // Pad blank rows to 60 to match official MEC 2-page print grid (Image 1 & 2)
+    tableWidthMode: "full", // "full" (100% Stretch - standard MEC landscape), "autoFit"
     nameColWidth: "auto" // "auto" (default: Auto-Fit to student names), "160px", "200px", "240px"
   });
 
@@ -228,36 +229,190 @@ export default function InternalMarkSheet() {
   // Normalize string for fuzzy match
   const normStr = (str) => (str || "").toLowerCase().replace(/[\s\-_]/g, "");
 
+  // Normalize exam name specifically so CIA 1, CIA 2, CIA 3 and UT 1..5 never cross-collide
+  const normalizeExam = (name) => {
+    if (!name) return "";
+    let s = String(name).toLowerCase().replace(/[\s\-_]/g, "");
+    s = s.replace(/unittest/g, "ut");
+    s = s.replace(/modelexam(ination)?/g, "cia3");
+    s = s.replace(/cia-?iii/g, "cia3").replace(/cia-?3/g, "cia3");
+    s = s.replace(/cia-?ii/g, "cia2").replace(/cia-?2/g, "cia2");
+    s = s.replace(/cia-?i/g, "cia1").replace(/cia-?1/g, "cia1");
+    s = s.replace(/ut-?v/g, "ut5").replace(/ut-?5/g, "ut5");
+    s = s.replace(/ut-?iv/g, "ut4").replace(/ut-?4/g, "ut4");
+    s = s.replace(/ut-?iii/g, "ut3").replace(/ut-?3/g, "ut3");
+    s = s.replace(/ut-?ii/g, "ut2").replace(/ut-?2/g, "ut2");
+    s = s.replace(/ut-?i/g, "ut1").replace(/ut-?1/g, "ut1");
+    s = s.replace(/seminar/g, "sm");
+    return s;
+  };
+
+  const isExamMatch = (targetExam, classExam) => {
+    if (!targetExam || !classExam) return false;
+    const n1 = normalizeExam(targetExam);
+    const n2 = normalizeExam(classExam);
+    if (n1 === n2) return true;
+    if (n1 === "cia3" && (n2.includes("model") || n2 === "cia3")) return true;
+    if (n2 === "cia3" && (n1.includes("model") || n1 === "cia3")) return true;
+    return false;
+  };
+
   // Flexible exam mark finder
   const findExamMarkForStudent = (student, examName, targetSubj, allClassesForSection) => {
-    if (!examName) return 0;
+    if (!examName) return "";
     const cleanTarget = normStr(targetSubj);
-    const cleanExam = normStr(examName);
 
-    // Look for classes matching this exam
     for (const cls of allClassesForSection) {
-      if (normStr(cls.examName) === cleanExam || (cleanExam.includes("cia") && normStr(cls.examName).includes("cia"))) {
-        // Find subject index
+      if (isExamMatch(examName, cls.examName)) {
         let subjIdx = -1;
         if (cls.subjects && Array.isArray(cls.subjects)) {
-          subjIdx = cls.subjects.findIndex(s => normStr(s) === cleanTarget);
+          subjIdx = cls.subjects.findIndex(s => {
+            const c = normStr(s);
+            return c === cleanTarget || c.includes(cleanTarget) || cleanTarget.includes(c);
+          });
         }
         if (subjIdx === -1 && cls.courseDetails && Array.isArray(cls.courseDetails)) {
-          subjIdx = cls.courseDetails.findIndex(cd => 
-            normStr(cd.courseCode) === cleanTarget || normStr(cd.courseName) === cleanTarget
-          );
+          subjIdx = cls.courseDetails.findIndex(cd => {
+            const cCode = normStr(cd.courseCode);
+            const cName = normStr(cd.courseName);
+            return cCode === cleanTarget || cleanTarget.includes(cCode) || cCode.includes(cleanTarget) ||
+                   cName === cleanTarget || cleanTarget.includes(cName) || cName.includes(cleanTarget);
+          });
         }
 
         if (subjIdx !== -1 && cls.students) {
           const stObj = cls.students.find(s => s.regNo === student.regNo);
           if (stObj && stObj.marks && stObj.marks.length > subjIdx) {
             const val = stObj.marks[subjIdx];
-            return val !== "" && val !== undefined ? val : 0;
+            if (val !== "" && val !== undefined && val !== null) {
+              return val;
+            }
           }
         }
       }
     }
-    return 0;
+    return "";
+  };
+
+  // Clean title & max mark extractor
+  const parseHeading = (headingStr) => {
+    const match = headingStr.match(/\((.*?)\)/);
+    if (match) {
+      const title = headingStr.replace(/\(.*?\)/, "").trim();
+      const maxMark = match[1].trim();
+      return { title, maxMark };
+    }
+    return { title: headingStr, maxMark: "" };
+  };
+
+  // Default official MEC 17-column layout (Images 1 & 2)
+  const defaultMecColumns = [
+    { colKey: "ut1", heading: "UT-1 (30)", title: "UT-1", maxMark: "30", type: "exam", examName: "Unit Test - I" },
+    { colKey: "ut2", heading: "UT-2 (30)", title: "UT-2", maxMark: "30", type: "exam", examName: "Unit Test - II" },
+    { colKey: "cia1", heading: "CIA1 (50)", title: "CIA1", maxMark: "50", type: "exam", examName: "CIA - I" },
+    { colKey: "im1", heading: "IM (10)", title: "IM", maxMark: "10", type: "formula", formulaType: "im1" },
+    { colKey: "ut3", heading: "UT-3 (30)", title: "UT-3", maxMark: "30", type: "exam", examName: "Unit Test - III" },
+    { colKey: "ut4", heading: "UT-4 (30)", title: "UT-4", maxMark: "30", type: "exam", examName: "Unit Test - IV" },
+    { colKey: "cia2", heading: "CIA2 (50)", title: "CIA2", maxMark: "50", type: "exam", examName: "CIA - II" },
+    { colKey: "im2", heading: "IM (10)", title: "IM", maxMark: "10", type: "formula", formulaType: "im2" },
+    { colKey: "ut5", heading: "UT-5 (30)", title: "UT-5", maxMark: "30", type: "exam", examName: "Unit Test - V" },
+    { colKey: "cia3", heading: "CIA3 (100)", title: "CIA3", maxMark: "100", type: "exam", examName: "Model Exam" },
+    { colKey: "im3", heading: "IM (10)", title: "IM", maxMark: "10", type: "formula", formulaType: "im3" },
+    { colKey: "sm", heading: "SM (5)", title: "SM", maxMark: "5", type: "exam", examName: "Seminar" },
+    { colKey: "mkc", heading: "MKC (5)", title: "MKC", maxMark: "5", type: "exam", examName: "MKC" },
+    { colKey: "total", heading: "TOTAL (40)", title: "TOTAL", maxMark: "40", type: "formula", formulaType: "total" }
+  ];
+
+  // Helper to get active columns with unique keys
+  const getColumnsWithKeys = (cols) => {
+    let imIndex = 0;
+    return cols.map((c, i) => {
+      let key = c.colKey || c.key;
+      const headingLower = (c.heading || "").toLowerCase();
+      if (!key) {
+        if (headingLower.includes("ut-1") || headingLower.includes("ut 1") || headingLower.includes("ut1")) key = "ut1";
+        else if (headingLower.includes("ut-2") || headingLower.includes("ut 2") || headingLower.includes("ut2")) key = "ut2";
+        else if (headingLower.includes("ut-3") || headingLower.includes("ut 3") || headingLower.includes("ut3")) key = "ut3";
+        else if (headingLower.includes("ut-4") || headingLower.includes("ut 4") || headingLower.includes("ut4")) key = "ut4";
+        else if (headingLower.includes("ut-5") || headingLower.includes("ut 5") || headingLower.includes("ut5")) key = "ut5";
+        else if (headingLower.includes("cia1") || headingLower.includes("cia 1") || headingLower.includes("cia-1") || headingLower.includes("cia-i")) key = "cia1";
+        else if (headingLower.includes("cia2") || headingLower.includes("cia 2") || headingLower.includes("cia-2") || headingLower.includes("cia-ii")) key = "cia2";
+        else if (headingLower.includes("cia3") || headingLower.includes("cia 3") || headingLower.includes("cia-3") || headingLower.includes("cia-iii") || headingLower.includes("model")) key = "cia3";
+        else if (headingLower.startsWith("im") || headingLower.includes("internal")) {
+          imIndex += 1;
+          key = `im${imIndex}`;
+        } else if (headingLower.includes("total")) {
+          key = "total";
+        } else if (headingLower.includes("sm") || headingLower.includes("seminar")) {
+          key = "sm";
+        } else if (headingLower.includes("mkc")) {
+          key = "mkc";
+        } else {
+          key = `col_${i}`;
+        }
+      }
+      const parsed = parseHeading(c.heading || "");
+      return {
+        ...c,
+        colKey: key,
+        title: c.title || parsed.title,
+        maxMark: c.maxMark || parsed.maxMark
+      };
+    });
+  };
+
+  // Helper to evaluate row formulas (im1, im2, im3, total)
+  const evaluateRowFormulas = (row, cols) => {
+    // 1. Calculate IM1: ((UT1 + UT2 + CIA1) / 110) * 10
+    const ut1 = parseNum(row.ut1 ?? row["UT-1 (30)"]);
+    const ut2 = parseNum(row.ut2 ?? row["UT-2 (30)"]);
+    const cia1 = parseNum(row.cia1 ?? row["CIA1 (50)"]);
+    const im1 = Math.round(((ut1 + ut2 + cia1) / 110) * 10);
+    row.im1 = im1;
+
+    // 2. Calculate IM2: ((UT3 + UT4 + CIA2) / 110) * 10
+    const ut3 = parseNum(row.ut3 ?? row["UT-3 (30)"]);
+    const ut4 = parseNum(row.ut4 ?? row["UT-4 (30)"]);
+    const cia2 = parseNum(row.cia2 ?? row["CIA2 (50)"]);
+    const im2 = Math.round(((ut3 + ut4 + cia2) / 110) * 10);
+    row.im2 = im2;
+
+    // 3. Calculate IM3: ((UT5 + CIA3) / 130) * 10
+    const ut5 = parseNum(row.ut5 ?? row["UT-5 (30)"]);
+    const cia3 = parseNum(row.cia3 ?? row["CIA3 (100)"]);
+    const im3 = Math.round(((ut5 + cia3) / 130) * 10);
+    row.im3 = im3;
+
+    // 4. Calculate TOTAL: IM1 + IM2 + IM3 + SM + MKC (max 40)
+    const sm = parseNum(row.sm ?? row["SM (5)"]);
+    const mkc = parseNum(row.mkc ?? row["MKC (5)"]);
+    const total = Math.min(40, Math.round(im1 + im2 + im3 + sm + mkc));
+    row.total = total;
+
+    // For any custom template columns
+    cols.forEach(col => {
+      if (col.type === "formula" || col.type === "calculation") {
+        if (!["im1", "im2", "im3", "total"].includes(col.colKey) && col.formula) {
+          try {
+            let f = col.formula;
+            cols.forEach(inner => {
+              const val = parseNum(row[inner.colKey] ?? row[inner.heading]);
+              f = f.split(`#[${inner.heading}]`).join(val);
+              f = f.split(`#[${inner.colKey}]`).join(val);
+            });
+            const res = new Function(`return ${f}`)();
+            row[col.colKey] = isNaN(res) ? 0 : Math.round(res);
+          } catch (e) {
+            row[col.colKey] = 0;
+          }
+        }
+        if (col.heading) {
+          row[col.heading] = row[col.colKey];
+        }
+      }
+    });
+
+    return row;
   };
 
   // Process and calculate student marks based on the current template
@@ -316,51 +471,25 @@ export default function InternalMarkSheet() {
         }
       });
 
-      // 3. Fallback Columns if no template exists: Default MEC 17-column structure
-      const defaultMecColumns = [
-        { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I" },
-        { heading: "UT-2 (30)", type: "exam", examName: "Unit Test - II" },
-        { heading: "CIA1 (50)", type: "exam", examName: "CIA - I" },
-        { heading: "IM (10)", type: "formula", formula: "(#[UT-1 (30)] + #[UT-2 (30)] + #[CIA1 (50)]) / 110 * 10" },
-        { heading: "UT-3 (30)", type: "exam", examName: "Unit Test - III" },
-        { heading: "UT-4 (30)", type: "exam", examName: "Unit Test - IV" },
-        { heading: "CIA2 (50)", type: "exam", examName: "CIA - II" },
-        { heading: "IM (10)", type: "formula", formula: "(#[UT-3 (30)] + #[UT-4 (30)] + #[CIA2 (50)]) / 110 * 10" },
-        { heading: "UT-5 (30)", type: "exam", examName: "Unit Test - V" },
-        { heading: "CIA3 (100)", type: "exam", examName: "Model Exam" },
-        { heading: "IM (10)", type: "formula", formula: "(#[UT-5 (30)] + #[CIA3 (100)]) / 130 * 10" },
-        { heading: "SM (5)", type: "exam", examName: "Seminar" },
-        { heading: "MKC (5)", type: "exam", examName: "MKC" },
-        { heading: "TOTAL (40)", type: "formula", formula: "#[IM (10)] + #[IM (10)] + #[IM (10)] + #[SM (5)] + #[MKC (5)]" }
-      ];
-
-      // Use strictly active template's columns if available
-      const columnsToUse = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
+      const rawCols = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
         ? activeTemplate.columns
         : defaultMecColumns;
+      const columnsToUse = getColumnsWithKeys(rawCols);
 
-      // 4. Calculate marks for every student against columnsToUse
+      // 3. Calculate marks for every student against columnsToUse
       const evaluatedStudents = Object.values(studentMap).map(student => {
         const row = { ...student };
 
         columnsToUse.forEach(col => {
           if (col.type === "exam") {
             const mark = findExamMarkForStudent(student, col.examName, targetSubject, allClassesForSection);
+            row[col.colKey] = mark;
             row[col.heading] = mark;
-          } else if (col.type === "formula" || col.type === "calculation") {
-            try {
-              let f = col.formula || "0";
-              columnsToUse.forEach(inner => {
-                const val = parseNum(row[inner.heading]);
-                f = f.split(`#[${inner.heading}]`).join(val);
-              });
-              const res = new Function(`return ${f}`)();
-              row[col.heading] = isNaN(res) ? 0 : Math.round(res);
-            } catch (e) {
-              row[col.heading] = 0;
-            }
           }
         });
+
+        // Evaluate formulas with unique keys
+        evaluateRowFormulas(row, columnsToUse);
 
         return row;
       });
@@ -394,31 +523,18 @@ export default function InternalMarkSheet() {
   ]);
 
   // Handle cell edit on screen
-  const handleCellEdit = (studentIndex, colHeading, value) => {
+  const handleCellEdit = (studentIndex, colKeyOrHeading, value) => {
     setStudentsData(prev => {
+      if (!prev[studentIndex]) return prev;
       const updated = [...prev];
-      const row = { ...updated[studentIndex], [colHeading]: value };
+      const row = { ...updated[studentIndex], [colKeyOrHeading]: value };
 
-      const columnsToUse = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
+      const rawCols = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
         ? activeTemplate.columns
-        : [];
+        : defaultMecColumns;
+      const columnsToUse = getColumnsWithKeys(rawCols);
 
-      // Re-evaluate formulas for this row
-      columnsToUse.forEach(col => {
-        if (col.type === "formula" || col.type === "calculation") {
-          try {
-            let f = col.formula || "0";
-            columnsToUse.forEach(inner => {
-              const val = parseNum(row[inner.heading]);
-              f = f.split(`#[${inner.heading}]`).join(val);
-            });
-            const res = new Function(`return ${f}`)();
-            row[col.heading] = isNaN(res) ? 0 : Math.round(res);
-          } catch (e) {
-            row[col.heading] = 0;
-          }
-        }
-      });
+      evaluateRowFormulas(row, columnsToUse);
 
       updated[studentIndex] = row;
       return updated;
@@ -432,154 +548,174 @@ export default function InternalMarkSheet() {
     return found ? `${found.code} - ${found.name}` : (formData.selectedSubject || "Course");
   };
 
-  // Columns definition helper
+  // Columns definition helper (with unique colKeys)
   const currentColumns = useMemo(() => {
-    if (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0) {
-      return activeTemplate.columns;
-    }
-    return [
-      { heading: "UT-1 (30)", type: "exam" },
-      { heading: "UT-2 (30)", type: "exam" },
-      { heading: "CIA1 (50)", type: "exam" },
-      { heading: "IM (10)", type: "formula" },
-      { heading: "UT-3 (30)", type: "exam" },
-      { heading: "UT-4 (30)", type: "exam" },
-      { heading: "CIA2 (50)", type: "exam" },
-      { heading: "IM (10)", type: "formula" },
-      { heading: "UT-5 (30)", type: "exam" },
-      { heading: "CIA3 (100)", type: "exam" },
-      { heading: "IM (10)", type: "formula" },
-      { heading: "SM (5)", type: "exam" },
-      { heading: "MKC (5)", type: "exam" },
-      { heading: "TOTAL (40)", type: "formula" }
-    ];
+    const rawCols = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
+      ? activeTemplate.columns
+      : defaultMecColumns;
+    return getColumnsWithKeys(rawCols);
   }, [activeTemplate]);
 
   // Visible Columns (Filters out hidden columns while calculations still run for all columns in background)
   const visibleColumns = useMemo(() => {
-    return currentColumns.filter(c => !userHiddenColumns.includes(c.heading));
+    return currentColumns.filter(c => !userHiddenColumns.includes(c.heading) && !userHiddenColumns.includes(c.colKey));
   }, [currentColumns, userHiddenColumns]);
 
   // Check if visible columns have subheaders (like "(50)")
   const hasSubHeaders = useMemo(() => {
-    return visibleColumns.some(c => c.heading && c.heading.includes("(") && c.heading.includes(")"));
+    return visibleColumns.some(c => c.maxMark || (c.heading && c.heading.includes("(") && c.heading.includes(")")));
   }, [visibleColumns]);
 
-  // Clean title & max mark extractor
-  const parseHeading = (headingStr) => {
-    const match = headingStr.match(/\((.*?)\)/);
-    if (match) {
-      const title = headingStr.replace(/\(.*?\)/, "").trim();
-      const maxMark = match[1].trim();
-      return { title, maxMark };
-    }
-    return { title: headingStr, maxMark: "" };
-  };
-
-  // Multi-page chunking: Strict 2 Pages (Balanced) or user-selected mode
+  // Multi-page chunking: Strict 2 Pages (MEC Official Format: Page 1 = 28, Page 2 = 32 / remaining)
   const studentPages = useMemo(() => {
-    if (studentsData.length === 0) {
+    let baseList = [...studentsData];
+
+    // If padTo60 is true (MEC official 2-page print grid as shown in user's Excel images)
+    if (formData.padTo60) {
+      const targetCount = Math.max(60, baseList.length);
+      const rawCols = currentColumns;
+      while (baseList.length < targetCount) {
+        const dummySno = baseList.length + 1;
+        const placeholderRow = {
+          isPlaceholder: true,
+          sNo: dummySno,
+          regNo: "",
+          name: "",
+          ut1: "", ut2: "", cia1: "", im1: 0,
+          ut3: "", ut4: "", cia2: "", im2: 0,
+          ut5: "", cia3: "", im3: 0,
+          sm: "", mkc: "", total: 0
+        };
+        rawCols.forEach(c => {
+          if (["im1", "im2", "im3", "total"].includes(c.colKey)) {
+            placeholderRow[c.colKey] = 0;
+            placeholderRow[c.heading] = 0;
+          } else {
+            placeholderRow[c.colKey] = "";
+            placeholderRow[c.heading] = "";
+          }
+        });
+        baseList.push(placeholderRow);
+      }
+    }
+
+    if (baseList.length === 0) {
       return [[]];
     }
 
     const mode = formData.pageSplitMode || "2pages";
 
-    // Strict 2 Pages (Balanced): Guarantees max 2 pages for any class size!
+    // Strict 2 Pages (MEC Official Format): Page 1 has exactly 28 rows, Page 2 has rows 29 to 60 (or end)
     if (mode === "2pages") {
-      // If student count <= 22, it fits comfortably on 1 single sheet
-      if (studentsData.length <= 22) {
-        return [studentsData];
+      if (baseList.length <= 28 && !formData.padTo60) {
+        return [baseList];
       }
-      // Above 22 students: Divide into exactly 2 balanced pages
-      const half = Math.ceil(studentsData.length / 2);
       return [
-        studentsData.slice(0, half),
-        studentsData.slice(half)
+        baseList.slice(0, 28),
+        baseList.slice(28)
       ];
     }
 
     // Single continuous sheet (All students on 1 page)
     if (mode === "1page") {
-      return [studentsData];
+      return [baseList];
     }
 
     // Fixed rows per page (e.g. 25, 30, 35)
-    const chunkSize = parseInt(mode) || 30;
+    const chunkSize = parseInt(mode) || 28;
     const pages = [];
-    for (let i = 0; i < studentsData.length; i += chunkSize) {
-      pages.push(studentsData.slice(i, i + chunkSize));
+    for (let i = 0; i < baseList.length; i += chunkSize) {
+      pages.push(baseList.slice(i, i + chunkSize));
     }
     return pages;
-  }, [studentsData, formData.pageSplitMode]);
+  }, [studentsData, formData.pageSplitMode, formData.padTo60, currentColumns]);
 
   const handlePrint = () => {
     window.print();
   };
 
-  // Export to Excel (.xlsx) matching exact template columns
+  // Export to Excel (.xlsx) matching exact template columns (Images 1 & 2)
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
     const rows = [];
 
-    // Header info rows
-    rows.push(["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", formData.iqacRef]);
-    rows.push(["MUTHAYAMMAL ENGINEERING COLLEGE (AUTONOMOUS)"]);
-    rows.push(["Rasipuram - 637 408, Namakkal (Dt.), Tamil Nadu, India."]);
-    rows.push([]);
-    rows.push([
-      `Dept: ${formData.department}`, 
-      "", 
-      `Year/Sem/Sec: ${formData.year} / ${formData.semester} / ${formData.section}`, 
-      "", 
-      "", 
-      formData.semesterSession, 
-      "", 
-      "", 
-      "", 
-      "", 
-      `Date: ${formData.date}`
-    ]);
-    rows.push([`Course Code / Name : ${getDisplaySubject()}`]);
+    // Header info rows matching Image 1 & 2
+    // Row 1: IQAC Reference Code on the top right
+    const refRow = new Array(17).fill("");
+    refRow[16] = formData.iqacRef;
+    rows.push(refRow);
+
+    // Row 2: College Name
+    const collegeRow = new Array(17).fill("");
+    collegeRow[3] = "MUTHAYAMMAL ENGINEERING COLLEGE (AUTONOMOUS)";
+    rows.push(collegeRow);
+
+    // Row 3: Address
+    const addressRow = new Array(17).fill("");
+    addressRow[3] = "Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.";
+    rows.push(addressRow);
     rows.push([]);
 
-    // Table Header 1
+    // Row 4: Metadata Line 1
+    const meta1Row = new Array(17).fill("");
+    meta1Row[0] = `Dept: ${formData.department}`;
+    meta1Row[2] = `Year/Sem/Sec: ${formData.year}/${formData.semester}/${formData.section}`;
+    meta1Row[6] = formData.semesterSession;
+    meta1Row[14] = `Date: ${formData.date}`;
+    rows.push(meta1Row);
+
+    // Row 5: Metadata Line 2
+    const meta2Row = new Array(17).fill("");
+    meta2Row[0] = `Course Code/ Name : ${getDisplaySubject()}`;
+    rows.push(meta2Row);
+    rows.push([]);
+
+    // Table Header Row 1
     const row1 = ["S.No", "Reg.No.", "Name"];
+    // Table Header Row 2 (Max Marks)
     const row2 = ["", "", ""];
 
     visibleColumns.forEach(c => {
-      const { title, maxMark } = parseHeading(c.heading);
-      row1.push(title);
-      row2.push(maxMark);
+      row1.push(c.title);
+      row2.push(c.maxMark);
     });
 
     rows.push(row1);
     if (hasSubHeaders) rows.push(row2);
 
     // Student Data Rows
-    studentsData.forEach((st, idx) => {
+    const listToExport = formData.padTo60 ? studentPages.flat() : studentsData;
+    listToExport.forEach((st, idx) => {
+      const sNo = st.sNo || idx + 1;
       const stRow = [
-        idx + 1,
-        st.regNo,
-        st.name
+        sNo,
+        st.regNo || "",
+        st.name || ""
       ];
       visibleColumns.forEach(c => {
-        stRow.push(st[c.heading] !== undefined ? st[c.heading] : 0);
+        const isFormula = c.type === "formula" || c.type === "calculation" || ["im1", "im2", "im3", "total"].includes(c.colKey);
+        const val = st[c.colKey] !== undefined ? st[c.colKey] : st[c.heading];
+        if (isFormula) {
+          stRow.push(val !== undefined && val !== null && val !== "" ? val : 0);
+        } else {
+          stRow.push(val !== undefined && val !== null ? val : "");
+        }
       });
       rows.push(stRow);
     });
 
-    // Signature Block
+    // Signature Block (matching Image 1)
     rows.push([]);
     rows.push([]);
-    rows.push([
-      "Course Faculty", "", "", 
-      "Year Co-ordinator", "", "", 
-      "HoD"
-    ]);
+    const sigRow = new Array(17).fill("");
+    sigRow[1] = "Course Faculty";
+    sigRow[7] = "Year Co-ordinator";
+    sigRow[15] = "HoD";
+    rows.push(sigRow);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Internal Marks");
-    const filename = `Internal_Mark_Sheet_Reg${formData.regulation}_${formData.department}_${formData.year}_Sem${formData.semester}.xlsx`;
+    const filename = `Internal_Mark_Sheet_${formData.department}_${formData.year}_Sem${formData.semester}_Sec${formData.section}.xlsx`;
     XLSX.writeFile(wb, filename);
   };
 
@@ -599,6 +735,15 @@ export default function InternalMarkSheet() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              onClick={() => setFormData(prev => ({ ...prev, padTo60: !prev.padTo60 }))}
+              className={`btn ${formData.padTo60 ? "btn-primary" : "btn-secondary"}`}
+              style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", padding: "0.65rem 1.2rem", borderRadius: "10px" }}
+              title="Toggle 60-row official MEC grid padding"
+            >
+              <Check size={18} /> {formData.padTo60 ? "Official 60-Row Grid (Active)" : "Enrolled Students Only"}
+            </button>
+
             <button
               onClick={() => setShowColumnManager(!showColumnManager)}
               className={`btn ${userHiddenColumns.length > 0 ? "btn-warning" : "btn-secondary"}`}
@@ -1023,7 +1168,6 @@ export default function InternalMarkSheet() {
           Loading student marks for Regulation {formData.regulation}...
         </div>
       )}
-
       {/* PRINT STYLES - ROBUST MULTI-PAGE LAYOUT WITHOUT EMPTY PAGES */}
       <style>{`
         @media screen {
@@ -1037,12 +1181,16 @@ export default function InternalMarkSheet() {
             background: #ffffff;
             color: #000000;
             width: 100%;
-            max-width: 1400px;
-            padding: 25px 30px;
+            max-width: 1350px;
+            border: 1.5px solid #000000;
+            padding: 20px 24px;
             box-shadow: 0 10px 35px rgba(0,0,0,0.15);
-            border-radius: 8px;
+            border-radius: 4px;
             font-family: "Times New Roman", Times, serif;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
           }
           .editable-cell-input {
             width: 100%;
@@ -1085,21 +1233,25 @@ export default function InternalMarkSheet() {
             padding: 0 !important;
           }
           .print-sheet {
-            display: block !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            box-sizing: border-box !important;
             width: 100% !important;
             max-width: 100% !important;
-            box-shadow: none !important;
-            border: none !important;
+            height: 198mm !important;
+            max-height: 200mm !important;
+            border: 1.5px solid #000000 !important;
             border-radius: 0 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            height: auto !important;
-            min-height: 0 !important;
+            padding: 5mm 8mm 4mm 8mm !important;
+            margin: 0 auto !important;
+            box-shadow: none !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             page-break-after: always !important;
             break-after: page !important;
-            overflow: visible !important;
+            overflow: hidden !important;
+            background: #ffffff !important;
           }
           .print-sheet:last-child {
             page-break-after: auto !important;
@@ -1120,7 +1272,7 @@ export default function InternalMarkSheet() {
             height: 44px !important;
           }
           .print-bottom-block {
-            margin-top: 6px !important;
+            margin-top: 4px !important;
             margin-bottom: 0 !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -1130,27 +1282,36 @@ export default function InternalMarkSheet() {
             font-size: 11px !important;
           }
           .print-signatures {
-            margin-bottom: 4px !important;
+            margin-bottom: 2px !important;
             font-size: 10px !important;
           }
           .mec-official-table tr {
-            height: 15px !important;
+            height: 16px !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
           .mec-official-table th, .mec-official-table td {
-            padding: 1px 3px !important;
-            font-size: 9px !important;
-            line-height: 1.1 !important;
+            border: 1px solid #000000 !important;
+            padding: 0 2px !important;
+            font-size: 9.5px !important;
+            line-height: 1.15 !important;
           }
-          .mec-official-table.auto-fit-table {
-            width: auto !important;
-            max-width: 100% !important;
-            margin: 0 auto !important;
+          .mec-official-table th {
+            font-size: 10px !important;
+          }
+          .mec-official-table th.col-sno, .mec-official-table td.col-sno {
+            width: 30px !important;
+          }
+          .mec-official-table th.col-reg, .mec-official-table td.col-reg {
+            width: 85px !important;
           }
           .mec-official-table th.col-name, .mec-official-table td.col-name {
-            max-width: 200px !important;
-            padding: 1px 6px !important;
+            width: 170px !important;
+            max-width: 190px !important;
+            padding-left: 4px !important;
+          }
+          .mec-official-table th.col-mark, .mec-official-table td.col-mark {
+            width: auto !important;
           }
           .table-responsive-wrapper {
             overflow: visible !important;
@@ -1158,16 +1319,15 @@ export default function InternalMarkSheet() {
         }
 
         .mec-official-table {
+          width: 100%;
           border-collapse: collapse;
           font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
           font-size: 11px;
           color: #000000;
+          table-layout: fixed;
         }
         .mec-official-table.auto-fit-table {
-          width: auto !important;
-          max-width: 100% !important;
-          margin: 0 auto !important;
-          table-layout: auto !important;
+          width: 100% !important;
         }
         .mec-official-table.full-width-table {
           width: 100% !important;
@@ -1181,43 +1341,33 @@ export default function InternalMarkSheet() {
           background: #ffffff;
           font-family: "Times New Roman", Times, serif;
           font-size: 11px;
+          text-align: center;
         }
         .mec-official-table th.col-sno, .mec-official-table td.col-sno {
-          width: 1%;
-          min-width: 34px;
-          max-width: 42px;
-          white-space: nowrap;
+          width: 34px;
           text-align: center;
-          padding: 2.5px 4px;
+          padding: 2px 2px;
         }
         .mec-official-table th.col-reg, .mec-official-table td.col-reg {
-          width: 1%;
-          min-width: 95px;
-          max-width: 110px;
-          white-space: nowrap;
+          width: 95px;
           text-align: center;
-          padding: 2.5px 6px;
+          padding: 2px 4px;
         }
         .mec-official-table th.col-name, .mec-official-table td.col-name {
-          width: auto;
-          min-width: 140px;
-          max-width: 240px;
+          width: 180px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
           text-align: left;
-          padding: 2.5px 8px;
+          padding: 2px 6px;
         }
         .mec-official-table th.col-mark, .mec-official-table td.col-mark {
-          width: 1%;
-          min-width: 40px;
-          white-space: nowrap;
           text-align: center;
-          padding: 2.5px 5px;
+          padding: 2px 2px;
         }
       `}</style>
 
-      {/* RENDER PAGES (EACH CHUNK WITH FULL CONSISTENT HEADER & LAYOUT) */}
+      {/* RENDER PAGES (PAGE 1 HAS FULL HEADER, PAGE 2 HAS ONLY COURSE CODE/NAME & SIGNATURES) */}
       {!loading && (
         <div className="print-container">
           {studentPages.map((pageStudents, pageIndex) => {
@@ -1229,188 +1379,193 @@ export default function InternalMarkSheet() {
             return (
               <div key={pageIndex} className="print-sheet">
                 <div>
-                  {/* TOP HEADER BLOCK - UNIFORM ACROSS ALL PAGES */}
-                  {/* Top Right Reference Code */}
-                  <div style={{ textAlign: "right", fontSize: "11px", fontWeight: "bold", fontFamily: "Arial, sans-serif", marginBottom: "4px" }}>
-                    {formData.iqacRef}
-                  </div>
-
-                  {/* HEADER BANNER / LOGO BLOCK */}
-                  {headerImage ? (
-                    <div style={{ textAlign: "center", marginBottom: "6px" }}>
-                      <img 
-                        src={headerImage} 
-                        alt="College Header Banner" 
-                        className="header-banner-img"
-                        style={{ maxHeight: "75px", width: "100%", objectFit: "contain" }} 
-                      />
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: "6px" }}>
-                      <div style={{ position: "absolute", left: "0", top: "0" }}>
-                        <img 
-                          src="/logo1.png" 
-                          alt="MEC Logo" 
-                          className="mec-crest-logo"
-                          style={{ height: "55px", width: "auto", objectFit: "contain" }}
-                          onError={(e) => { e.target.style.display = "none"; }}
-                        />
+                  {/* TOP HEADER: PAGE 1 HAS FULL BANNER, PAGE 2 HAS ONLY COURSE CODE/NAME (Image 1 & 2) */}
+                  {pageIndex === 0 ? (
+                    <div>
+                      {/* Top Right Reference Code */}
+                      <div style={{ textAlign: "right", fontSize: "10.5px", fontWeight: "bold", fontFamily: "Arial, sans-serif", marginBottom: "3px" }}>
+                        {formData.iqacRef}
                       </div>
 
-                      <div style={{ textAlign: "center" }}>
-                        <h2 style={{ fontSize: "20px", fontWeight: "bold", margin: "0", letterSpacing: "0.5px", fontFamily: '"Times New Roman", Times, serif' }}>
-                          MUTHAYAMMAL ENGINEERING COLLEGE
-                        </h2>
-                        <div style={{ fontSize: "13px", fontWeight: "bold", margin: "2px 0 1px 0" }}>
-                          (Autonomous)
+                      {/* Header Banner / Logo */}
+                      {headerImage ? (
+                        <div style={{ textAlign: "center", marginBottom: "4px" }}>
+                          <img 
+                            src={headerImage} 
+                            alt="College Header Banner" 
+                            className="header-banner-img"
+                            style={{ maxHeight: "60px", width: "100%", objectFit: "contain" }} 
+                          />
                         </div>
-                        <div style={{ fontSize: "11px", margin: 0 }}>
-                          Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: "4px" }}>
+                          <div style={{ position: "absolute", left: "0", top: "0" }}>
+                            <img 
+                              src="/logo1.png" 
+                              alt="MEC Logo" 
+                              className="mec-crest-logo"
+                              style={{ height: "46px", width: "auto", objectFit: "contain" }}
+                              onError={(e) => { e.target.style.display = "none"; }}
+                            />
+                          </div>
+
+                          <div style={{ textAlign: "center" }}>
+                            <h2 style={{ fontSize: "17px", fontWeight: "bold", margin: "0", letterSpacing: "0.5px", fontFamily: '"Times New Roman", Times, serif', textTransform: "uppercase" }}>
+                              MUTHAYAMMAL ENGINEERING COLLEGE
+                            </h2>
+                            <div style={{ fontSize: "12px", fontWeight: "bold", margin: "1px 0" }}>
+                              (Autonomous)
+                            </div>
+                            <div style={{ fontSize: "10px", margin: 0 }}>
+                              Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.
+                            </div>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Metadata Row 1 */}
+                      <div className="print-metadata-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", fontWeight: "bold", margin: "4px 0 2px 0", fontFamily: '"Times New Roman", Times, serif' }}>
+                        <div style={{ flex: "0 0 140px" }}>Dept: {formData.department}</div>
+                        <div style={{ flex: "0 0 190px" }}>Year/Sem/Sec: {formData.year} / {formData.semester} / {formData.section}</div>
+                        <div style={{ flex: "1", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
+                        <div style={{ flex: "0 0 130px", textAlign: "right" }}>Date: {formData.date}</div>
+                      </div>
+
+                      {/* Metadata Row 2 */}
+                      <div style={{ fontSize: "11px", fontWeight: "bold", margin: "2px 0 4px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left" }}>
+                        Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    /* PAGE 2 HEADER: ONLY COURSE CODE/NAME (Image 1) */
+                    <div>
+                      <div style={{ fontSize: "11px", fontWeight: "bold", margin: "0 0 4px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left" }}>
+                        Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
                       </div>
                     </div>
                   )}
 
-                  {/* Metadata Row 1 */}
-                  <div className="print-metadata-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", fontWeight: "bold", margin: "6px 0 4px 0", fontFamily: '"Times New Roman", Times, serif' }}>
-                    <div style={{ flex: "0 0 160px" }}>Dept: {formData.department}</div>
-                    <div style={{ flex: "0 0 200px" }}>Year/Sem/Sec: {formData.year} / {formData.semester} / {formData.section}</div>
-                    <div style={{ flex: "1", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
-                    <div style={{ flex: "0 0 140px", textAlign: "right" }}>Date: {formData.date}</div>
-                  </div>
-
-                  {/* TABLE WRAPPER - SUPPORTS AUTO-FIT CONTENT WIDTH OR FULL WIDTH */}
-                  <div className="table-responsive-wrapper" style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: formData.tableWidthMode === "autoFit" ? "center" : "stretch",
-                    width: "100%",
-                    overflowX: "auto"
-                  }}>
-                    <div style={{
-                      width: formData.tableWidthMode === "autoFit" ? "fit-content" : "100%",
-                      minWidth: formData.tableWidthMode === "autoFit" ? "min(100%, 750px)" : "100%",
-                      maxWidth: "100%"
-                    }}>
-                      {/* Metadata Row 2 (Course Code / Name - Automatically Populated & Printed) */}
-                      <div style={{ fontSize: "12px", fontWeight: "bold", margin: "2px 0 6px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left" }}>
-                        Course Code / Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
-                      </div>
-
-                      {/* DYNAMIC TEMPLATE TABLE */}
-                      <table className={`mec-official-table ${formData.tableWidthMode === "autoFit" ? "auto-fit-table" : "full-width-table"}`}>
-                        <thead>
-                          {/* HEADER ROW 1 */}
-                          <tr>
-                            <th rowSpan={hasSubHeaders ? 2 : 1} className="col-sno">S.No</th>
-                            <th rowSpan={hasSubHeaders ? 2 : 1} className="col-reg">Reg.No.</th>
-                            <th 
-                              rowSpan={hasSubHeaders ? 2 : 1} 
-                              className="col-name"
-                              style={{
-                                width: formData.nameColWidth === "auto" ? "auto" : formData.nameColWidth,
-                                minWidth: formData.nameColWidth === "auto" ? "140px" : formData.nameColWidth,
-                                maxWidth: formData.nameColWidth === "auto" ? "240px" : formData.nameColWidth
-                              }}
-                            >
-                              Name
+                  {/* TABLE WRAPPER */}
+                  <div className="table-responsive-wrapper" style={{ width: "100%", overflowX: "auto" }}>
+                    <table className="mec-official-table">
+                      <thead>
+                        {/* HEADER ROW 1 */}
+                        <tr>
+                          <th rowSpan={hasSubHeaders ? 2 : 1} className="col-sno">S.No</th>
+                          <th rowSpan={hasSubHeaders ? 2 : 1} className="col-reg">Reg.No.</th>
+                          <th 
+                            rowSpan={hasSubHeaders ? 2 : 1} 
+                            className="col-name"
+                            style={{
+                              width: formData.nameColWidth === "auto" ? "180px" : formData.nameColWidth,
+                              maxWidth: formData.nameColWidth === "auto" ? "220px" : formData.nameColWidth
+                            }}
+                          >
+                            Name
+                          </th>
+                          {visibleColumns.map((col, idx) => (
+                            <th key={idx} className="col-mark">
+                              {col.title}
                             </th>
-                            {visibleColumns.map((col, idx) => {
-                              const { title } = parseHeading(col.heading);
-                              return (
-                                <th key={idx} className="col-mark">
-                                  {title}
-                                </th>
-                              );
-                            })}
-                          </tr>
+                          ))}
+                        </tr>
 
-                          {/* HEADER ROW 2 (MAX MARKS ROW IF APPLICABLE) */}
-                          {hasSubHeaders && (
-                            <tr>
-                              {visibleColumns.map((col, idx) => {
-                                const { maxMark } = parseHeading(col.heading);
+                        {/* HEADER ROW 2 (MAX MARKS ROW) */}
+                        {hasSubHeaders && (
+                          <tr>
+                            {visibleColumns.map((col, idx) => (
+                              <th key={idx} className="col-mark">
+                                {col.maxMark}
+                              </th>
+                            ))}
+                          </tr>
+                        )}
+                      </thead>
+
+                      <tbody>
+                        {pageStudents.map((st, i) => {
+                          const sNo = st.sNo || (startSno + i);
+                          const globalIndex = startSno - 1 + i;
+
+                          return (
+                            <tr key={st.regNo || i} style={{ height: "18px" }}>
+                              <td className="col-sno">{sNo}</td>
+                              <td className="col-reg">{st.regNo || ""}</td>
+                              <td 
+                                className="col-name name-col" 
+                                title={st.name}
+                                style={{
+                                  width: formData.nameColWidth === "auto" ? "180px" : formData.nameColWidth,
+                                  maxWidth: formData.nameColWidth === "auto" ? "220px" : formData.nameColWidth
+                                }}
+                              >
+                                {st.name || ""}
+                              </td>
+
+                              {visibleColumns.map((col, colIdx) => {
+                                const isFormula = col.type === "formula" || col.type === "calculation" || ["im1", "im2", "im3", "total"].includes(col.colKey);
+                                const rawVal = st[col.colKey] !== undefined ? st[col.colKey] : st[col.heading];
+
+                                let displayVal = "";
+                                if (isFormula) {
+                                  displayVal = (rawVal !== undefined && rawVal !== null && rawVal !== "") ? rawVal : 0;
+                                } else {
+                                  displayVal = (rawVal !== undefined && rawVal !== null) ? rawVal : "";
+                                }
+
                                 return (
-                                  <th key={idx} className="col-mark">
-                                    {maxMark}
-                                  </th>
+                                  <td 
+                                    key={colIdx} 
+                                    className="col-mark"
+                                    style={{ fontWeight: isFormula ? "bold" : "normal" }}
+                                  >
+                                    {isEditingMarks && !isFormula && !st.isPlaceholder ? (
+                                      <input 
+                                        className="editable-cell-input" 
+                                        value={displayVal} 
+                                        onChange={e => handleCellEdit(globalIndex, col.colKey, e.target.value)} 
+                                      />
+                                    ) : (
+                                      displayVal
+                                    )}
+                                  </td>
                                 );
                               })}
                             </tr>
-                          )}
-                        </thead>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
 
-                        <tbody>
-                          {pageStudents.map((st, i) => {
-                            const sNo = startSno + i;
-                            const globalIndex = startSno - 1 + i;
-
-                            return (
-                              <tr key={st.regNo || i} style={{ height: "19px" }}>
-                                <td className="col-sno">{sNo}</td>
-                                <td className="col-reg">{st.regNo || ""}</td>
-                                <td 
-                                  className="col-name name-col" 
-                                  title={st.name}
-                                  style={{
-                                    width: formData.nameColWidth === "auto" ? "auto" : formData.nameColWidth,
-                                    minWidth: formData.nameColWidth === "auto" ? "140px" : formData.nameColWidth,
-                                    maxWidth: formData.nameColWidth === "auto" ? "240px" : formData.nameColWidth
-                                  }}
-                                >
-                                  {st.name || ""}
-                                </td>
-
-                                {visibleColumns.map((col, colIdx) => {
-                                  const val = st[col.heading];
-                                  const isFormula = col.type === "formula" || col.type === "calculation";
-
-                                  return (
-                                    <td 
-                                      key={colIdx} 
-                                      className="col-mark"
-                                      style={{ fontWeight: isFormula ? "bold" : "normal" }}
-                                    >
-                                      {isEditingMarks && !isFormula ? (
-                                        <input 
-                                          className="editable-cell-input" 
-                                          value={val !== undefined ? val : ""} 
-                                          onChange={e => handleCellEdit(globalIndex, col.heading, e.target.value)} 
-                                        />
-                                      ) : (
-                                        val !== undefined ? val : ""
-                                      )}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-
-                      {/* BOTTOM SIGNATURE BLOCK (APPEARS ON FINAL PAGE) */}
-                      <div className="print-bottom-block" style={{ marginTop: "10px" }}>
-                        {isLastPage ? (
-                          <div className="print-signatures" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", padding: "0 15px", fontWeight: "bold", fontSize: "11px", fontFamily: '"Times New Roman", Times, serif', marginBottom: "8px" }}>
-                            <div style={{ textAlign: "center", minWidth: "120px" }}>
-                              <div>Course Faculty</div>
-                            </div>
-                            <div style={{ textAlign: "center", minWidth: "140px" }}>
-                              <div>Year Co-ordinator</div>
-                            </div>
-                            <div style={{ textAlign: "center", minWidth: "120px" }}>
-                              <div>HoD</div>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {/* Centered Page Footer */}
-                        <div style={{ textAlign: "center", fontSize: "11px", fontFamily: '"Times New Roman", Times, serif' }}>
-                          Page {pageNum} of {totalPages}
-                        </div>
+                {/* BOTTOM BLOCK: SIGNATURES ONLY ON LAST PAGE, FOOTER ON ALL */}
+                <div className="print-bottom-block">
+                  {isLastPage ? (
+                    <div className="print-signatures" style={{ 
+                      display: "flex", 
+                      justifyContent: "space-between", 
+                      alignItems: "flex-end", 
+                      padding: "16px 20px 4px 20px", 
+                      fontWeight: "bold", 
+                      fontSize: "11px", 
+                      fontFamily: '"Times New Roman", Times, serif' 
+                    }}>
+                      <div style={{ textAlign: "center", minWidth: "120px" }}>
+                        <div>Course Faculty</div>
+                      </div>
+                      <div style={{ textAlign: "center", minWidth: "140px" }}>
+                        <div>Year Co-ordinator</div>
+                      </div>
+                      <div style={{ textAlign: "center", minWidth: "100px" }}>
+                        <div>HoD</div>
                       </div>
                     </div>
+                  ) : null}
+
+                  {/* Centered Page Footer */}
+                  <div style={{ textAlign: "center", fontSize: "10.5px", fontFamily: '"Times New Roman", Times, serif', marginTop: isLastPage ? "2px" : "8px" }}>
+                    Page {pageNum} of {totalPages}
                   </div>
                 </div>
               </div>
@@ -1420,13 +1575,13 @@ export default function InternalMarkSheet() {
       )}
 
       {/* EMPTY STATE */}
-      {!loading && studentsData.length === 0 && (
+      {!loading && studentsData.length === 0 && !formData.padTo60 && (
         <div className="no-print" style={{ textAlign: "center", padding: "3rem", background: "var(--bg-secondary)", borderRadius: "16px", border: "1px dashed var(--border-color)", marginTop: "1rem" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "1.1rem", margin: "0 0 0.5rem 0" }}>
             No students found for {formData.department} {formData.year}/{formData.semester}/{formData.section}.
           </p>
           <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0 }}>
-            Ensure either a Student Roster or Exam marks have been uploaded in the system for this class.
+            Ensure either a Student Roster or Exam marks have been uploaded in the system for this class, or turn on "Pad to 60 Rows".
           </p>
         </div>
       )}
