@@ -109,6 +109,23 @@ export default function AdminPanel() {
   const [bulkStartTime, setBulkStartTime] = useState("");
   const [bulkEndTime, setBulkEndTime] = useState("");
 
+  // Persistent refs to eliminate stale closure bugs during async network calls
+  const formDataRef = useRef(formData);
+  const classesRef = useRef(classes);
+  const rostersRef = useRef(rosters);
+
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
+
+  useEffect(() => {
+    classesRef.current = classes;
+  }, [classes]);
+
+  useEffect(() => {
+    rostersRef.current = rosters;
+  }, [rosters]);
+
   // Recycle bin states
   const [recycleClasses, setRecycleClasses] = useState([]);
   const [selectedRecycleClasses, setSelectedRecycleClasses] = useState([]);
@@ -271,21 +288,28 @@ export default function AdminPanel() {
   };
 
   useEffect(() => {
-    loadClasses();
+    loadClasses(true);
     loadRosters();
     loadUsers();
     loadActivities();
   }, []);
 
-  const loadClasses = async () => {
+  const loadClasses = async (shouldSyncForm = false) => {
     try {
       const rostersRes = await API.get("/api/rosters");
       setRosters(rostersRes.data);
+      rostersRef.current = rostersRes.data;
       
       const res = await API.get("/api/classes");
       setClasses(res.data);
-      // Pass rostersRes.data to checkAndLoadExistingLocal since state might not have updated yet
-      checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, formData.examName, res.data, undefined, undefined, rostersRes.data);
+      classesRef.current = res.data;
+
+      // Only sync the form on initial mount or when explicitly requested,
+      // using the latest active formDataRef so background refetches never revert user selections!
+      if (shouldSyncForm) {
+        const cur = formDataRef.current || formData;
+        checkAndLoadExistingLocal(cur.year, cur.semester, cur.section, cur.examName, res.data, cur.programme, cur.department, rostersRes.data);
+      }
     } catch (err) { console.error(err); }
   };
 
@@ -1046,10 +1070,11 @@ export default function AdminPanel() {
     else if (y === "III" && !["V", "VI"].includes(s)) validatedSem = "V";
     else if (y === "IV" && !["VII", "VIII"].includes(s)) validatedSem = "VII";
 
-    const list = allClasses || classes;
-    const currentRosters = providedRosters || rosters;
-    const currentProg = prog !== undefined ? prog : formData.programme;
-    const currentDept = dept !== undefined ? dept : formData.department;
+    const list = allClasses || (classesRef && classesRef.current ? classesRef.current : classes);
+    const currentRosters = providedRosters || (rostersRef && rostersRef.current ? rostersRef.current : rosters);
+    const curForm = (formDataRef && formDataRef.current) || formData;
+    const currentProg = prog !== undefined ? prog : curForm.programme;
+    const currentDept = dept !== undefined ? dept : curForm.department;
     const targetName = buildClassName(y, validatedSem, sec, exam, currentProg, currentDept);
     const found = list.find(c => c.className === targetName);
     if (found) {
@@ -1179,7 +1204,7 @@ export default function AdminPanel() {
 
   const handleManualClassSelectLocal = (name, allClasses) => {
     if (!name) return;
-    const list = allClasses || classes;
+    const list = allClasses || (classesRef && classesRef.current ? classesRef.current : classes);
     const cls = list.find(c => c.className === name);
     if (cls) {
       setFormData({
@@ -1449,11 +1474,11 @@ export default function AdminPanel() {
         eseGradingSystem: formData.eseGradingSystem
       };
       await API.post("/api/classes", payload);
-      alert("Class saved successfully!");
       setSelectedClassId(generatedName);
       setAutoLoadedFrom("");
       setCourseAutoLoadedFrom("");
-      loadClasses();
+      await loadClasses(false);
+      alert("Class saved successfully!");
     } catch (err) {
       alert("Failed to save: " + err.message);
     }
