@@ -132,6 +132,16 @@ export default function AdminPanel() {
   const [recycleSearchQuery, setRecycleSearchQuery] = useState("");
   const [loadingRecycle, setLoadingRecycle] = useState(false);
 
+  // Bulk Clone Modal states (Option 1)
+  const [showBulkCloneModal, setShowBulkCloneModal] = useState(false);
+  const [cloneTargetExamsForSource, setCloneTargetExamsForSource] = useState(["CIA - II", "CIA - III"]);
+  const [cloneTargetSections, setCloneTargetSections] = useState(["B", "C"]);
+  const [cloneSectionExams, setCloneSectionExams] = useState(["CIA - I", "CIA - II", "CIA - III"]);
+  const [cloneFacultyMaps, setCloneFacultyMaps] = useState({});
+  const [cloneLoading, setCloneLoading] = useState(false);
+  const [cloneStaffList, setCloneStaffList] = useState([]);
+  const [cloneTimetableAllocations, setCloneTimetableAllocations] = useState([]);
+
   // Security settings states
   const [securityForm, setSecurityForm] = useState({ code: "", question: "", answer: "" });
   const [securityLoading, setSecurityLoading] = useState(false);
@@ -1484,6 +1494,167 @@ export default function AdminPanel() {
     }
   };
 
+  // ── OPTION 1: BULK CLONE & GENERATE ACROSS SECTIONS & EXAMS ──
+  const openBulkCloneModal = async () => {
+    if (courseDetails.length === 0) {
+      alert("Please add at least 1 course entry to this class before cloning.");
+      return;
+    }
+
+    const curYear = formData.year;
+    const curSem = formData.semester;
+    const curSec = formData.section;
+    const curDept = formData.department || "CSE";
+    const curExam = formData.examName;
+
+    // Available other exams for source section
+    const allExams = ["CIA - I", "CIA - II", "CIA - III", "ESE"];
+    const otherExams = allExams.filter(ex => ex !== curExam);
+    setCloneTargetExamsForSource(otherExams.filter(ex => ex.startsWith("CIA")));
+
+    // Detect sections from Master Roster for this cohort or fallback to ["A", "B", "C", "D", "E"]
+    const matchingRosterSections = (rosters || [])
+      .filter(r => r.year === curYear && String(r.semester) === String(curSem) && (r.department || "CSE") === curDept)
+      .map(r => r.section);
+    
+    const candidateSections = Array.from(new Set([...matchingRosterSections, "A", "B", "C", "D", "E"]))
+      .filter(s => s && s !== curSec)
+      .sort();
+
+    // Default target sections to whatever other sections exist in roster (or ["B", "C"])
+    const defaultSections = candidateSections.length > 0 ? candidateSections.slice(0, 3) : ["B", "C"];
+    setCloneTargetSections(defaultSections);
+    setCloneSectionExams(["CIA - I", "CIA - II", "CIA - III"]);
+
+    // Fetch staff and timetable allocations in parallel
+    try {
+      const [staffRes, allocRes] = await Promise.all([
+        API.get(`/api/timetable/staff?department=${curDept}`),
+        API.get(`/api/timetable/allocation?department=${curDept}`)
+      ]);
+      const staff = staffRes.data || [];
+      const allocs = allocRes.data?.allocations || [];
+      setCloneStaffList(staff);
+      setCloneTimetableAllocations(allocs);
+
+      // Pre-fill faculty maps for candidate sections from timetable allocations if available
+      const initialFacultyMaps = {};
+      candidateSections.forEach(sec => {
+        initialFacultyMaps[sec] = {};
+        courseDetails.forEach(cd => {
+          const matchedAlloc = allocs.find(a => 
+            a.section === sec &&
+            String(a.year).toUpperCase() === String(curYear).toUpperCase() &&
+            (a.subjectCode === cd.courseCode || a.shortName === cd.shortName || (a.subjectName && cd.courseName && a.subjectName.toLowerCase() === cd.courseName.toLowerCase()))
+          );
+          if (matchedAlloc && matchedAlloc.facultyNames && matchedAlloc.facultyNames.length > 0) {
+            initialFacultyMaps[sec][cd.courseCode] = matchedAlloc.facultyNames[0];
+          } else {
+            initialFacultyMaps[sec][cd.courseCode] = cd.facultyName || "";
+          }
+        });
+      });
+      setCloneFacultyMaps(initialFacultyMaps);
+    } catch (err) {
+      console.warn("Could not load timetable staff/allocations:", err);
+      // Fallback: copy current faculty to all sections
+      const initialFacultyMaps = {};
+      candidateSections.forEach(sec => {
+        initialFacultyMaps[sec] = {};
+        courseDetails.forEach(cd => {
+          initialFacultyMaps[sec][cd.courseCode] = cd.facultyName || "";
+        });
+      });
+      setCloneFacultyMaps(initialFacultyMaps);
+    }
+
+    setShowBulkCloneModal(true);
+  };
+
+  const handleAutoFillFromTimetable = () => {
+    if (!cloneTimetableAllocations || cloneTimetableAllocations.length === 0) {
+      alert("No timetable allocations found for this department.");
+      return;
+    }
+    const updated = { ...cloneFacultyMaps };
+    let matchCount = 0;
+    cloneTargetSections.forEach(sec => {
+      if (!updated[sec]) updated[sec] = {};
+      courseDetails.forEach(cd => {
+        const matchedAlloc = cloneTimetableAllocations.find(a => 
+          a.section === sec &&
+          String(a.year).toUpperCase() === String(formData.year).toUpperCase() &&
+          (a.subjectCode === cd.courseCode || a.shortName === cd.shortName || (a.subjectName && cd.courseName && a.subjectName.toLowerCase() === cd.courseName.toLowerCase()))
+        );
+        if (matchedAlloc && matchedAlloc.facultyNames && matchedAlloc.facultyNames.length > 0) {
+          updated[sec][cd.courseCode] = matchedAlloc.facultyNames[0];
+          matchCount++;
+        }
+      });
+    });
+    setCloneFacultyMaps(updated);
+    alert(`⚡ Auto-filled ${matchCount} faculty assignment(s) from Timetable Allocator!`);
+  };
+
+  const handleCopySourceFacultyToAll = () => {
+    const updated = { ...cloneFacultyMaps };
+    cloneTargetSections.forEach(sec => {
+      if (!updated[sec]) updated[sec] = {};
+      courseDetails.forEach(cd => {
+        updated[sec][cd.courseCode] = cd.facultyName || "";
+      });
+    });
+    setCloneFacultyMaps(updated);
+  };
+
+  const handleClearAllFaculty = () => {
+    const updated = { ...cloneFacultyMaps };
+    cloneTargetSections.forEach(sec => {
+      if (!updated[sec]) updated[sec] = {};
+      courseDetails.forEach(cd => {
+        updated[sec][cd.courseCode] = "";
+      });
+    });
+    setCloneFacultyMaps(updated);
+  };
+
+  const handleExecuteBulkClone = async () => {
+    setCloneLoading(true);
+    try {
+      const payload = {
+        source: {
+          programme: formData.programme,
+          department: formData.department,
+          year: formData.year,
+          semester: formData.semester,
+          section: formData.section,
+          examName: formData.examName,
+          courseDetails,
+          students,
+          targetPassPercentage: targetPassPercentage,
+          date: formData.date,
+          eseGradingSystem: formData.eseGradingSystem
+        },
+        targetExamsForSource: cloneTargetExamsForSource,
+        targetSections: cloneTargetSections.map(sec => ({
+          section: sec,
+          exams: cloneSectionExams,
+          facultyMap: cloneFacultyMaps[sec] || {}
+        }))
+      };
+
+      const res = await API.post("/api/classes/bulk-clone", payload);
+      alert(`🎉 ${res.data.message || "Bulk clone completed successfully!"}`);
+      setShowBulkCloneModal(false);
+      await loadClasses(false);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to clone classes: " + (err.response?.data?.error || err.message));
+    } finally {
+      setCloneLoading(false);
+    }
+  };
+
   const handleSaveRoster = async () => {
     try {
       const cohortName = `${formData.programme}-${formData.department} - ${formData.year}/${formData.semester}/${formData.section}`;
@@ -2519,7 +2690,39 @@ export default function AdminPanel() {
                 Auto-sync Course Details &amp; Report Date to all other sections in this Year &amp; Sem
               </label>
             </div>
-            <button className="btn btn-primary" style={{ width: "100%", marginTop: "1rem", padding: "1rem" }} onClick={handleSave}>🚀 Save & Synchronize Class Setup</button>
+            <div style={{ display: "flex", gap: "10px", marginTop: "1rem", flexWrap: "wrap" }}>
+              <button 
+                className="btn btn-primary" 
+                style={{ flex: 1, minWidth: "220px", padding: "0.9rem 1.25rem", fontSize: "0.95rem", fontWeight: "600" }} 
+                onClick={handleSave}
+              >
+                🚀 Save Class Setup
+              </button>
+              <button 
+                type="button"
+                className="btn" 
+                style={{ 
+                  padding: "0.9rem 1.25rem", 
+                  fontSize: "0.95rem", 
+                  fontWeight: "700",
+                  background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  boxShadow: "0 4px 15px rgba(124, 58, 237, 0.35)",
+                  transition: "all 0.2s ease"
+                }} 
+                onClick={openBulkCloneModal}
+                title="Replicate this setup across CIA I, II, III and other Sections (B, C, D, E) in 1 click"
+              >
+                ⚡ Bulk Clone to Other Sections &amp; Exams
+              </button>
+            </div>
           </div>
 
           <div className="glass-card" style={{ padding: "2rem" }}>
@@ -5190,6 +5393,418 @@ export default function AdminPanel() {
 
         </div>
         </>
+      )}
+
+      {/* ── BULK CLONE & GENERATE MODAL (OPTION 1) ── */}
+      {showBulkCloneModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.75)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 99999,
+          padding: "1rem"
+        }}>
+          <div style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "960px",
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7)",
+            overflow: "hidden"
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: "1.25rem 1.75rem",
+              borderBottom: "1px solid var(--border-color)",
+              background: "linear-gradient(135deg, rgba(79, 70, 229, 0.12) 0%, rgba(219, 39, 119, 0.12) 100%)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "1.5rem" }}>⚡</span>
+                  <h2 style={{ margin: 0, fontSize: "1.25rem", color: "var(--text-primary)", fontWeight: "700" }}>
+                    Bulk Clone &amp; Multi-Class Generator
+                  </h2>
+                </div>
+                <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
+                  Source: <strong style={{ color: "var(--primary)" }}>{formData.programme}-{formData.department} • {formData.year} Year / Sem {formData.semester} / Sec {formData.section} ({formData.examName})</strong>
+                  &nbsp;•&nbsp; <span>{courseDetails.length} Courses</span>
+                  &nbsp;•&nbsp; <span>{students.length} Students</span>
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowBulkCloneModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  fontSize: "1.5rem",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: "8px",
+                  lineHeight: 1
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div style={{ padding: "1.5rem 1.75rem", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+
+              {/* STEP 1: Other exams for Current Section */}
+              <div style={{
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "12px",
+                padding: "1.25rem"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "6px" }}>
+                  <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>1️⃣</span> Generate Other Exams for Section <strong>{formData.section}</strong>
+                  </h4>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Same Students &amp; Faculty • Auto-Sets Pass Marks</span>
+                </div>
+                <p style={{ margin: "0 0 0.75rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  Select which other evaluation models should be created for this section:
+                </p>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  {["CIA - I", "CIA - II", "CIA - III", "ESE"].filter(ex => ex !== formData.examName).map(ex => {
+                    const isChecked = cloneTargetExamsForSource.includes(ex);
+                    const passNote = (ex === "CIA - I" || ex === "CIA - II") ? "Pass 25 / Max 50" : "Pass 50 / Max 100";
+                    return (
+                      <label 
+                        key={ex} 
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "8px 14px",
+                          borderRadius: "8px",
+                          background: isChecked ? "rgba(99, 102, 241, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                          border: `1px solid ${isChecked ? "var(--primary)" : "var(--border-color)"}`,
+                          cursor: "pointer",
+                          userSelect: "none",
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        <input 
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => {
+                            if (e.target.checked) setCloneTargetExamsForSource([...cloneTargetExamsForSource, ex]);
+                            else setCloneTargetExamsForSource(cloneTargetExamsForSource.filter(x => x !== ex));
+                          }}
+                          style={{ cursor: "pointer" }}
+                        />
+                        <strong>{ex}</strong>
+                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>({passNote})</span>
+                      </label>
+                    );
+                  })}
+                  {["CIA - I", "CIA - II", "CIA - III", "ESE"].filter(ex => ex !== formData.examName).length === 0 && (
+                    <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>All exams already set up for this section.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* STEP 2: Replicate to Other Sections */}
+              <div style={{
+                background: "rgba(255, 255, 255, 0.02)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "12px",
+                padding: "1.25rem"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "6px" }}>
+                  <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>2️⃣</span> Replicate to Other Sections
+                  </h4>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Auto-Loads Each Section's Master Roster</span>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "1rem" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Target Sections:</span>
+                  {["A", "B", "C", "D", "E"].filter(s => s !== formData.section).map(sec => {
+                    const isChecked = cloneTargetSections.includes(sec);
+                    const rosterMatch = (rosters || []).find(r => 
+                      r.year === formData.year && 
+                      String(r.semester) === String(formData.semester) && 
+                      (r.department || "CSE") === (formData.department || "CSE") &&
+                      r.section === sec
+                    );
+                    const studentCount = rosterMatch?.students?.length || 0;
+                    return (
+                      <label 
+                        key={sec}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "8px 14px",
+                          borderRadius: "8px",
+                          background: isChecked ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                          border: `1px solid ${isChecked ? "var(--success)" : "var(--border-color)"}`,
+                          cursor: "pointer",
+                          userSelect: "none",
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        <input 
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => {
+                            if (e.target.checked) setCloneTargetSections([...cloneTargetSections, sec].sort());
+                            else setCloneTargetSections(cloneTargetSections.filter(x => x !== sec));
+                          }}
+                          style={{ cursor: "pointer" }}
+                        />
+                        <strong>Section {sec}</strong>
+                        <span style={{ fontSize: "0.75rem", color: studentCount > 0 ? "var(--success)" : "var(--text-muted)" }}>
+                          ({studentCount > 0 ? `${studentCount} students` : "No roster"})
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {cloneTargetSections.length > 0 && (
+                  <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px dashed var(--border-color)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Exams to generate for selected sections:</span>
+                      {["CIA - I", "CIA - II", "CIA - III", "ESE"].map(ex => {
+                        const isChecked = cloneSectionExams.includes(ex);
+                        return (
+                          <label 
+                            key={ex}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              background: isChecked ? "rgba(99, 102, 241, 0.1)" : "transparent",
+                              border: `1px solid ${isChecked ? "var(--primary)" : "var(--border-color)"}`,
+                              cursor: "pointer",
+                              fontSize: "0.8rem"
+                            }}
+                          >
+                            <input 
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) setCloneSectionExams([...cloneSectionExams, ex]);
+                                else setCloneSectionExams(cloneSectionExams.filter(x => x !== ex));
+                              }}
+                            />
+                            <span>{ex}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* STEP 3: Faculty Assignment per Section */}
+              {cloneTargetSections.length > 0 && (
+                <div style={{
+                  background: "rgba(255, 255, 255, 0.02)",
+                  border: "1px solid var(--border-color)",
+                  borderRadius: "12px",
+                  padding: "1.25rem"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "8px" }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>3️⃣</span> Faculty Assignments for Target Sections
+                      </h4>
+                      <p style={{ margin: "2px 0 0", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        Subjects and credits are copied automatically. Specify the faculty handling each subject for each section below:
+                      </p>
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: "4px 10px", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "4px" }}
+                        onClick={handleAutoFillFromTimetable}
+                        title="Auto-fill faculty names already mapped in Timetable & Workload Allocator"
+                      >
+                        <span>📥</span> Auto-Fill from Timetable
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                        onClick={handleCopySourceFacultyToAll}
+                      >
+                        📋 Copy Sec {formData.section} Faculty
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: "4px 10px", fontSize: "0.75rem", color: "var(--danger)" }}
+                        onClick={handleClearAllFaculty}
+                      >
+                        🧹 Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Matrix of Sections */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
+                    {cloneTargetSections.map(sec => (
+                      <div 
+                        key={sec}
+                        style={{
+                          border: "1px solid var(--border-color)",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          background: "rgba(0, 0, 0, 0.15)"
+                        }}
+                      >
+                        <div style={{
+                          padding: "8px 14px",
+                          background: "rgba(255, 255, 255, 0.04)",
+                          borderBottom: "1px solid var(--border-color)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}>
+                          <strong style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
+                            📌 Section {sec} Faculty Assignment
+                          </strong>
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                            {courseDetails.length} Courses to map
+                          </span>
+                        </div>
+                        <div style={{ padding: "8px 12px", overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                            <thead>
+                              <tr style={{ color: "var(--text-muted)", textAlign: "left", borderBottom: "1px solid var(--border-color)" }}>
+                                <th style={{ padding: "6px 8px", width: "120px" }}>Course Code</th>
+                                <th style={{ padding: "6px 8px" }}>Course Name</th>
+                                <th style={{ padding: "6px 8px", width: "160px" }}>Sec {formData.section} (Source)</th>
+                                <th style={{ padding: "6px 8px", width: "240px", color: "var(--primary)" }}>Sec {sec} Faculty</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {courseDetails.map((cd, cdIdx) => {
+                                const currentVal = cloneFacultyMaps[sec]?.[cd.courseCode] || "";
+                                return (
+                                  <tr key={cdIdx} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                                    <td style={{ padding: "6px 8px", fontWeight: "600" }}>{cd.courseCode || "-"}</td>
+                                    <td style={{ padding: "6px 8px" }}>{cd.courseName || cd.shortName || "-"}</td>
+                                    <td style={{ padding: "6px 8px", color: "var(--text-muted)" }}>{cd.facultyName || "-"}</td>
+                                    <td style={{ padding: "6px 8px" }}>
+                                      <input
+                                        list="clone-staff-datalist"
+                                        value={currentVal}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          setCloneFacultyMaps(prev => ({
+                                            ...prev,
+                                            [sec]: {
+                                              ...(prev[sec] || {}),
+                                              [cd.courseCode]: val
+                                            }
+                                          }));
+                                        }}
+                                        placeholder="Select or type faculty..."
+                                        className="text-input"
+                                        style={{ padding: "4px 8px", fontSize: "0.8rem", width: "100%" }}
+                                      />
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Datalist for Staff Dropdown Autocomplete */}
+                  <datalist id="clone-staff-datalist">
+                    {Array.from(new Set([
+                      ...(cloneStaffList || []).map(s => s.name),
+                      ...(users || []).map(u => u.name)
+                    ])).filter(Boolean).sort().map(name => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: "1rem 1.75rem",
+              borderTop: "1px solid var(--border-color)",
+              background: "rgba(0, 0, 0, 0.2)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "10px"
+            }}>
+              <div>
+                <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total to generate: </span>
+                <strong style={{ fontSize: "1rem", color: "var(--primary)" }}>
+                  {cloneTargetExamsForSource.length + (cloneTargetSections.length * cloneSectionExams.length)} Classes
+                </strong>
+                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginLeft: "6px" }}>
+                  ({cloneTargetExamsForSource.length} for Sec {formData.section} + {cloneTargetSections.length * cloneSectionExams.length} across {cloneTargetSections.join(", ")})
+                </span>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setShowBulkCloneModal(false)}
+                  disabled={cloneLoading}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary"
+                  style={{
+                    padding: "0.75rem 1.5rem",
+                    fontWeight: "700",
+                    background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: cloneLoading ? "not-allowed" : "pointer"
+                  }}
+                  onClick={handleExecuteBulkClone}
+                  disabled={cloneLoading || (cloneTargetExamsForSource.length === 0 && cloneTargetSections.length === 0)}
+                >
+                  {cloneLoading ? "⏳ Generating Classes..." : `🚀 Generate All (${cloneTargetExamsForSource.length + (cloneTargetSections.length * cloneSectionExams.length)}) Classes Now`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
