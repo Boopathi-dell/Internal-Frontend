@@ -371,6 +371,8 @@ export default function TimetableManager() {
 
   // Modal state for manual slot editing
   const [slotEditModal, setSlotEditModal] = useState(null);
+  // Modal state for fixed institutional slot (Option 1: Library, Placement, Seminar)
+  const [fixedSlotModal, setFixedSlotModal] = useState(null);
 
   // Staff and Subject State
   const [staffList, setStaffList] = useState([]);
@@ -1379,6 +1381,70 @@ export default function TimetableManager() {
     }
   };
 
+  // Fixed Institutional Slot (Option 1: Library, Placement, Seminar)
+  const handleOpenFixedSlotModal = (item) => {
+    const existing = (item.fixedSlots && item.fixedSlots[0]) || { day: "auto", period: "auto" };
+    let periodVal = existing.period ? String(existing.period) : "auto";
+    if (item.fixedSlots && item.fixedSlots.length > 1) {
+      const periods = item.fixedSlots.map(s => s.period).sort((a, b) => a - b);
+      periodVal = periods.join(",");
+    }
+
+    setFixedSlotModal({
+      isOpen: true,
+      allocId: item.id,
+      subjectCode: item.subjectCode,
+      subjectName: item.subjectName,
+      shortName: item.shortName || item.subjectCode,
+      year: item.year,
+      section: item.section,
+      day: existing.day || "auto",
+      period: periodVal || "auto"
+    });
+  };
+
+  const handleSaveFixedSlot = async (day, periodVal) => {
+    if (!fixedSlotModal) return;
+
+    let newFixedSlots = [];
+    if (day && day !== "auto" && periodVal && periodVal !== "auto") {
+      const parts = String(periodVal).split(",").map(p => Number(p.trim())).filter(p => p >= 1 && p <= 7);
+      newFixedSlots = parts.map(p => ({ day, period: p }));
+    }
+
+    const updatedAllocations = allocations.map(a => {
+      if (a.id === fixedSlotModal.allocId) {
+        return { ...a, fixedSlots: newFixedSlots };
+      }
+      return a;
+    });
+
+    setAllocations(updatedAllocations);
+    setFixedSlotModal(null);
+
+    try {
+      await API.post("/api/timetable/allocation", {
+        department,
+        academicYear,
+        semesterType,
+        allocations: updatedAllocations,
+        yearSections,
+        classAdvisors,
+        iqacNumber,
+        hallNumbers,
+        coordinators,
+        periodTimings
+      });
+      if (newFixedSlots.length > 0) {
+        showAlert(`📌 Fixed slot saved: ${fixedSlotModal.subjectName} locked to ${day} [Period ${periodVal}]! Auto-generation will schedule around it.`);
+      } else {
+        showAlert(`📌 Reset ${fixedSlotModal.subjectName} to Auto slot (Unpinned).`);
+      }
+    } catch (err) {
+      showAlert("Failed to save fixed slot: " + err.message, "error");
+    }
+  };
+
   // Open slot edit modal
   const handleOpenSlotEdit = (classKey, day, slot) => {
     if (timetableSchedule?.isLocked) {
@@ -1395,14 +1461,15 @@ export default function TimetableManager() {
       shortName: slot.shortName || "",
       facultyName: slot.facultyName === "-" ? "" : slot.facultyName,
       type: slot.type || "Theory",
-      room: slot.room || "LH-1"
+      room: slot.room || "LH-1",
+      isPinned: !!slot.isPinned
     });
   };
 
   // Save edited slot (Manual Override saved to DB permanently)
   const handleSaveSlotEdit = async () => {
     if (!slotEditModal) return;
-    const { classKey, day, period, time, subjectCode, subjectName, shortName, facultyName, type, room } = slotEditModal;
+    const { classKey, day, period, time, subjectCode, subjectName, shortName, facultyName, type, room, isPinned } = slotEditModal;
 
     const isFree = !subjectCode || subjectCode === "FREE";
     const updatedSlot = {
@@ -1414,7 +1481,8 @@ export default function TimetableManager() {
       facultyName: isFree ? "-" : (facultyName || "").trim(),
       facultyNames: (!isFree && facultyName) ? [facultyName.trim()] : [],
       type: isFree ? "Free" : type,
-      room: isFree ? "-" : (room || (type === "Lab" ? "Lab" : "LH-1"))
+      room: isFree ? "-" : (room || (type === "Lab" ? "Lab" : "LH-1")),
+      isPinned: !isFree && !!isPinned
     };
 
     try {
@@ -2953,6 +3021,55 @@ export default function TimetableManager() {
                                 <option value="custom_prompt" style={{ background: "#1e1e2d", color: "#38bdf8" }}>✏️ Custom Pattern...</option>
                               </select>
                             )}
+
+                            {/* Option 1: Fixed Institutional Slot Button (e.g. Library, Placement, Seminar) */}
+                            <div style={{ marginTop: "6px" }}>
+                              {item.fixedSlots && item.fixedSlots.length > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFixedSlotModal(item)}
+                                  title="📌 Institutional Slot is Fixed! Click to change or unpin."
+                                  style={{
+                                    fontSize: "0.68rem",
+                                    fontWeight: "800",
+                                    padding: "2px 7px",
+                                    borderRadius: "12px",
+                                    background: "rgba(168, 85, 247, 0.22)",
+                                    border: "1px solid #a855f7",
+                                    color: "#c084fc",
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                >
+                                  📌 {item.fixedSlots.map(s => `${(s.day || "").slice(0, 3)} P${s.period}`).join(", ")}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFixedSlotModal(item)}
+                                  title="📌 Click to lock this subject to a specific Day & Period (e.g. Library on Thu P2, Placement on Fri P5-6). Leave Auto if flexible!"
+                                  style={{
+                                    fontSize: "0.68rem",
+                                    fontWeight: "600",
+                                    padding: "2px 7px",
+                                    borderRadius: "12px",
+                                    background: "rgba(255, 255, 255, 0.04)",
+                                    border: "1px dashed var(--border-color)",
+                                    color: "var(--text-muted)",
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    whiteSpace: "nowrap"
+                                  }}
+                                >
+                                  📌 Auto Slot
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td>
                             {/* Staff Dropdown Selector */}
@@ -3448,6 +3565,24 @@ export default function TimetableManager() {
                                         : "rgba(99, 102, 241, 0.3)";
                                   }}
                                 >
+                                  {slot.isPinned && (
+                                    <span
+                                      title="📌 Pinned Institutional Slot (Protected from Auto-Generation)"
+                                      style={{
+                                        position: "absolute",
+                                        top: "4px",
+                                        right: "4px",
+                                        fontSize: "0.68rem",
+                                        background: "rgba(168, 85, 247, 0.25)",
+                                        border: "1px solid rgba(168, 85, 247, 0.5)",
+                                        borderRadius: "4px",
+                                        padding: "1px 3px",
+                                        lineHeight: 1
+                                      }}
+                                    >
+                                      📌
+                                    </span>
+                                  )}
                                   {isFree ? (
                                     <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontStyle: "italic", padding: "4px 0" }}>
                                       {slot.shortName || "Free"}
@@ -5096,6 +5231,29 @@ export default function TimetableManager() {
                       />
                     </div>
                   </div>
+
+                  {/* Pin / Fixed Institutional Slot Option (Option 3) */}
+                  <div style={{ marginTop: "12px", padding: "10px 12px", borderRadius: "8px", background: "rgba(168, 85, 247, 0.12)", border: "1px solid rgba(168, 85, 247, 0.35)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ fontWeight: "700", fontSize: "0.85rem", color: "#c084fc", display: "flex", alignItems: "center", gap: "6px" }}>
+                        📌 Pin / Lock This Slot (Institutional Fixed Hour)
+                      </div>
+                      <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                        Locks this period permanently. Re-generating timetable will NEVER overwrite or move this slot!
+                      </div>
+                    </div>
+                    <label style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: "6px" }}>
+                      <input 
+                        type="checkbox"
+                        checked={!!slotEditModal.isPinned}
+                        onChange={e => setSlotEditModal({ ...slotEditModal, isPinned: e.target.checked })}
+                        style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#a855f7" }}
+                      />
+                      <span style={{ fontSize: "0.82rem", fontWeight: "700", color: slotEditModal.isPinned ? "#c084fc" : "var(--text-muted)" }}>
+                        {slotEditModal.isPinned ? "PINNED" : "UNPINNED"}
+                      </span>
+                    </label>
+                  </div>
                 </>
               )}
 
@@ -5112,7 +5270,8 @@ export default function TimetableManager() {
                       shortName: "LIB/SEM",
                       facultyName: "",
                       type: "Free",
-                      room: "Library"
+                      room: "Library",
+                      isPinned: false
                     }));
                   }}
                   style={{ fontSize: "0.8rem", padding: "0.5rem 0.9rem" }}
@@ -5137,6 +5296,153 @@ export default function TimetableManager() {
                     style={{ fontSize: "0.8rem", padding: "0.5rem 1.2rem", fontWeight: "700" }}
                   >
                     {loading ? "Saving..." : "Save Slot Changes"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL: FIXED INSTITUTIONAL SLOT CONFIGURATION (OPTION 1)      */}
+      {/* ============================================================== */}
+      {fixedSlotModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0, 0, 0, 0.78)",
+          backdropFilter: "blur(6px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: "1rem"
+        }}>
+          <div className="glass-card" style={{
+            background: "#12131f",
+            border: "1px solid rgba(168, 85, 247, 0.4)",
+            borderRadius: "16px",
+            maxWidth: "540px",
+            width: "100%",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px rgba(168, 85, 247, 0.2)",
+            overflow: "hidden"
+          }}>
+            <div style={{
+              padding: "1.25rem 1.5rem",
+              borderBottom: "1px solid var(--border-color)",
+              background: "rgba(168, 85, 247, 0.08)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center"
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "800", color: "#c084fc", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>📌</span> Fix Institutional Slot (Optional)
+                </h3>
+                <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                  {fixedSlotModal.subjectName} ({fixedSlotModal.subjectCode}) • <b>{fixedSlotModal.year} Year - Sec {fixedSlotModal.section}</b>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setFixedSlotModal(null)}
+                style={{ padding: "4px 10px", fontSize: "0.85rem", borderRadius: "8px" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: "1.5rem" }}>
+              <div style={{
+                background: "rgba(59, 130, 246, 0.08)",
+                border: "1px solid rgba(59, 130, 246, 0.25)",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                marginBottom: "1.25rem",
+                fontSize: "0.82rem",
+                color: "#93c5fd",
+                lineHeight: "1.4"
+              }}>
+                💡 <b>College Shared Facilities (Library, Placement Hall, Seminar):</b><br/>
+                If college management gives a fixed hour for this facility, choose the Day and Period below. The auto-generator will lock this slot first and place other subjects around it. Leave as <b>"Auto"</b> if flexible!
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginBottom: "1.25rem" }}>
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: "700", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
+                    FIXED DAY:
+                  </label>
+                  <select
+                    className="select-input"
+                    value={fixedSlotModal.day}
+                    onChange={e => setFixedSlotModal({ ...fixedSlotModal, day: e.target.value })}
+                    style={{ width: "100%", padding: "0.6rem 0.8rem", fontSize: "0.85rem", borderRadius: "8px" }}
+                  >
+                    <option value="auto">⚡ Auto (No Fixed Day - Flexible)</option>
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.78rem", fontWeight: "700", color: "var(--text-muted)", display: "block", marginBottom: "6px" }}>
+                    FIXED PERIOD(S):
+                  </label>
+                  <select
+                    className="select-input"
+                    value={fixedSlotModal.period}
+                    onChange={e => setFixedSlotModal({ ...fixedSlotModal, period: e.target.value })}
+                    style={{ width: "100%", padding: "0.6rem 0.8rem", fontSize: "0.85rem", borderRadius: "8px" }}
+                  >
+                    <option value="auto">⚡ Auto (No Fixed Period - Flexible)</option>
+                    <option value="1">Period 1 (09:10 - 10:05)</option>
+                    <option value="2">Period 2 (10:05 - 11:00)</option>
+                    <option value="3">Period 3 (11:15 - 12:10)</option>
+                    <option value="4">Period 4 (12:10 - 01:00)</option>
+                    <option value="5">Period 5 (01:45 - 02:40)</option>
+                    <option value="6">Period 6 (02:40 - 03:35)</option>
+                    <option value="7">Period 7 (03:35 - 04:30)</option>
+                    <option value="5,6">Periods 5 & 6 (2h Continuous Afternoon)</option>
+                    <option value="3,4">Periods 3 & 4 (2h Continuous Morning)</option>
+                    <option value="6,7">Periods 6 & 7 (2h Late Afternoon)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.5rem", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handleSaveFixedSlot("auto", "auto")}
+                  style={{ fontSize: "0.8rem", padding: "0.55rem 1rem", border: "1px dashed var(--border-color)" }}
+                >
+                  Clear to Auto (Unpin)
+                </button>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setFixedSlotModal(null)}
+                    style={{ fontSize: "0.8rem", padding: "0.55rem 1rem" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => handleSaveFixedSlot(fixedSlotModal.day, fixedSlotModal.period)}
+                    style={{ fontSize: "0.8rem", padding: "0.55rem 1.4rem", fontWeight: "700", background: "linear-gradient(135deg, #9333ea, #6366f1)" }}
+                  >
+                    Save Fixed Slot 📌
                   </button>
                 </div>
               </div>
