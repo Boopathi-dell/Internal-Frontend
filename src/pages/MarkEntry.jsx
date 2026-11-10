@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import API from "../api";
 import * as XLSX from "xlsx";
 import headerLogo from "../assets/logo image.jpg";
+import SubjectClearModal from "../components/SubjectClearModal";
+import { getSubjectLabel } from "../utils/subjectClearUtils";
 
 
 
@@ -107,6 +109,16 @@ export default function MarkEntry() {
   const isAdmin = (sessionStorage.getItem("role") || "").toLowerCase() === "admin";
   const [focusedSubjectIndices, setFocusedSubjectIndices] = useState([]); // empty means all
   const [focusDropdownOpen, setFocusDropdownOpen] = useState(false);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
+  const [clearSubjectIdx, setClearSubjectIdx] = useState(0);
+  const [isClearingMarks, setIsClearingMarks] = useState(false);
+  const [lastClearBackup, setLastClearBackup] = useState(null);
+
+  useEffect(() => {
+    if (focusedSubjectIndices.length === 1) {
+      setClearSubjectIdx(focusedSubjectIndices[0]);
+    }
+  }, [focusedSubjectIndices]);
 
   const toggleSubjectFocus = (idx) => {
     setFocusedSubjectIndices(prev => {
@@ -273,110 +285,204 @@ export default function MarkEntry() {
     }
   }
 
+  const normalizeLoadedClassData = (rawData) => {
+    const subjectCount = (rawData.subjects || []).length;
+    let updatedStudents = (rawData.students || []).map(s => {
+      const paddedMarks = Array.isArray(s.marks) ? [...s.marks] : [];
+      while (paddedMarks.length < subjectCount) paddedMarks.push("");
+      return { ...s, marks: paddedMarks.slice(0, subjectCount) };
+    });
+
+    updatedStudents.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true, sensitivity: 'base' }));
+
+    const cleanedCourseDetails = (rawData.courseDetails || []).map(cd => {
+      if (cd.courseCode && cd.courseCode.includes(' & ')) {
+        const parts = cd.courseCode.split(' & ');
+        return { 
+          courseCode: parts[0].trim(), 
+          courseName: cd.courseName || parts[1]?.trim() || "", 
+          shortName: cd.shortName || "",
+          facultyName: cd.facultyName || "",
+          credits: cd.credits !== undefined ? cd.credits : 3
+        };
+      }
+      return {
+        ...cd,
+        shortName: cd.shortName || "",
+        credits: cd.credits !== undefined ? cd.credits : 3
+      };
+    });
+
+    const fullClassData = { ...rawData, courseDetails: cleanedCourseDetails };
+
+    const getGradePoint = (grade, system) => {
+      const g = String(grade).toUpperCase().trim();
+      if (system === "System 1") {
+        const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
+        return map[g] !== undefined ? map[g] : 0;
+      }
+      const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
+      return map[g] !== undefined ? map[g] : 0;
+    };
+
+    updatedStudents = updatedStudents.map(s => {
+      let total = 0;
+      let totalGradePoints = 0;
+      let totalCredits = 0;
+      let fail = false;
+      const isESE = fullClassData.examName === "ESE";
+
+      s.marks = [...s.marks];
+      s.marks.forEach((val, idx) => {
+        let markStr = String(val || "").toUpperCase().trim();
+        
+        if (!isESE && markStr !== "" && markStr !== "A" && markStr !== "AB") {
+          const numVal = Number(markStr);
+          if (!isNaN(numVal)) {
+             markStr = Math.round(numVal).toString();
+             s.marks[idx] = markStr;
+          }
+        }
+
+        if (isESE) {
+          if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") {
+            fail = true;
+          }
+          const gp = getGradePoint(markStr, fullClassData.eseGradingSystem || "System 2");
+          const credits = (fullClassData.courseDetails && fullClassData.courseDetails[idx] && fullClassData.courseDetails[idx].credits !== undefined) ? Number(fullClassData.courseDetails[idx].credits) : 3;
+          totalGradePoints += (gp * credits);
+          totalCredits += credits;
+        } else {
+          if (markStr === "AB" || markStr === "A") {
+            fail = true;
+          } else {
+            const numVal = Number(markStr || 0);
+            total += (isNaN(numVal) ? 0 : numVal);
+            if (numVal < fullClassData.passMark) fail = true;
+          }
+        }
+      });
+
+      const maxTotal = isESE ? fullClassData.subjects.length * 10 : fullClassData.subjects.length * fullClassData.markPerSubject;
+      let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
+
+      if (isESE) {
+        total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
+        percentage = Math.round(total * 10);
+      } else {
+        total = Math.round(total);
+      }
+
+      return {
+        ...s,
+        total,
+        percentage: Math.round(percentage),
+        result: fail ? "Fail" : "Pass"
+      };
+    });
+
+    return { ...fullClassData, students: updatedStudents };
+  };
+
   const loadSpecificClassData = async (name, allClasses) => {
     const cls = allClasses ? allClasses.find(c => c.className === name) : classes.find(c => c.className === name);
     if (!cls) return;
     try {
       const res = await API.get(`/api/classes/${encodeURIComponent(name)}`);
-      let updatedStudents = res.data.students.map(s => {
-        if (!s.marks || s.marks.length !== res.data.subjects.length) {
-          return { ...s, marks: Array(res.data.subjects.length).fill("") };
-        }
-        return s;
-      });
-
-      updatedStudents.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true, sensitivity: 'base' }));
-
-      let cleanedCourseDetails = (res.data.courseDetails || []).map(cd => {
-        if (cd.courseCode && cd.courseCode.includes(' & ')) {
-          const parts = cd.courseCode.split(' & ');
-          return { 
-            courseCode: parts[0].trim(), 
-            courseName: cd.courseName || parts[1]?.trim() || "", 
-            shortName: cd.shortName || "",
-            facultyName: cd.facultyName || "",
-            credits: cd.credits !== undefined ? cd.credits : 3
-          };
-        }
-        return {
-          ...cd,
-          shortName: cd.shortName || "",
-          credits: cd.credits !== undefined ? cd.credits : 3
-        };
-      });
-
-      const fullClassData = { ...res.data, courseDetails: cleanedCourseDetails };
-
-      const getGradePoint = (grade, system) => {
-        const g = String(grade).toUpperCase().trim();
-        if (system === "System 1") {
-          const map = { "S": 10, "A+": 9, "A": 8, "B+": 7, "B": 6.5, "C+": 6, "C": 5, "U": 0, "U*": 0 };
-          return map[g] !== undefined ? map[g] : 0;
-        } else {
-          const map = { "O": 10, "A+": 9, "A": 8, "B+": 7, "B": 6, "C": 5, "U": 0, "U*": 0 };
-          return map[g] !== undefined ? map[g] : 0;
-        }
-      };
-
-      updatedStudents = updatedStudents.map(s => {
-        let total = 0;
-        let totalGradePoints = 0;
-        let totalCredits = 0;
-        let fail = false;
-        const isESE = fullClassData.examName === "ESE";
-
-        s.marks = [...s.marks];
-        s.marks.forEach((val, idx) => {
-          let markStr = String(val || "").toUpperCase().trim();
-          
-          if (!isESE && markStr !== "" && markStr !== "A" && markStr !== "AB") {
-            const numVal = Number(markStr);
-            if (!isNaN(numVal)) {
-               markStr = Math.round(numVal).toString();
-               s.marks[idx] = markStr;
-            }
-          }
-
-          if (isESE) {
-            if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "") {
-              fail = true;
-            }
-            const gp = getGradePoint(markStr, fullClassData.eseGradingSystem || "System 2");
-            const credits = (fullClassData.courseDetails && fullClassData.courseDetails[idx] && fullClassData.courseDetails[idx].credits !== undefined) ? Number(fullClassData.courseDetails[idx].credits) : 3;
-            totalGradePoints += (gp * credits);
-            totalCredits += credits;
-          } else {
-            if (markStr === "AB" || markStr === "A") {
-              fail = true;
-            } else {
-              const numVal = Number(markStr || 0);
-              total += (isNaN(numVal) ? 0 : numVal);
-              if (numVal < fullClassData.passMark) fail = true;
-            }
-          }
-        });
-
-        const maxTotal = isESE ? fullClassData.subjects.length * 10 : fullClassData.subjects.length * fullClassData.markPerSubject;
-        let percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
-
-        if (isESE) {
-          total = totalCredits > 0 ? Number((totalGradePoints / totalCredits).toFixed(2)) : 0;
-          percentage = Math.round(total * 10);
-        } else {
-          total = Math.round(total);
-        }
-
-        return {
-          ...s,
-          total,
-          percentage: Math.round(percentage),
-          result: fail ? "Fail" : "Pass"
-        };
-      });
-
-      setClassData({ ...fullClassData, students: updatedStudents });
+      setClearSubjectIdx(0);
+      setClassData(normalizeLoadedClassData(res.data));
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleConfirmSubjectClear = async (subjectIndex, mode) => {
+    if (!isAdmin || !classData) return;
+    setIsClearingMarks(true);
+    try {
+      // Flush any unsaved local edits in other subjects before clearing one column
+      if (unsavedChanges) {
+        await API.post(`/api/classes/${encodeURIComponent(classData.className)}/marks`, {
+          students: classData.students,
+          isAdmin: true
+        });
+      }
+
+      const res = await API.post(
+        `/api/classes/${encodeURIComponent(classData.className)}/clear-subject-marks`,
+        { subjectIndex, mode },
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } }
+      );
+
+      setUnsavedChanges(false);
+      setLastAutoSave(new Date());
+      setClassData(normalizeLoadedClassData(res.data.classData));
+      setLastClearBackup({
+        className: classData.className,
+        subjectIndex,
+        subjectCode: res.data.subjectCode,
+        marksByRegNo: res.data.backupMarksByRegNo,
+        count: res.data.clearedCount
+      });
+      setClearModalOpen(false);
+      setToast({
+        show: true,
+        message: `🧹 Cleared ${res.data.clearedCount} mark(s) for ${res.data.subjectCode}!`,
+        type: "success"
+      });
+      setTimeout(() => setToast({ show: false, message: "", type: "" }), 4000);
+    } catch (err) {
+      setToast({
+        show: true,
+        message: "Failed to clear marks: " + (err.response?.data?.error || err.message),
+        type: "error"
+      });
+      setTimeout(() => setToast({ show: false, message: "", type: "" }), 5000);
+    } finally {
+      setIsClearingMarks(false);
+    }
+  };
+
+  const handleUndoSubjectClear = async () => {
+    if (!isAdmin || !classData || !lastClearBackup || lastClearBackup.className !== classData.className) return;
+    setIsClearingMarks(true);
+    try {
+      if (unsavedChanges) {
+        await API.post(`/api/classes/${encodeURIComponent(classData.className)}/marks`, {
+          students: classData.students,
+          isAdmin: true
+        });
+      }
+
+      const res = await API.post(
+        `/api/classes/${encodeURIComponent(classData.className)}/restore-subject-marks`,
+        {
+          subjectIndex: lastClearBackup.subjectIndex,
+          marksByRegNo: lastClearBackup.marksByRegNo
+        },
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } }
+      );
+
+      setUnsavedChanges(false);
+      setLastAutoSave(new Date());
+      setClassData(normalizeLoadedClassData(res.data.classData));
+      const restoredCode = lastClearBackup.subjectCode;
+      setLastClearBackup(null);
+      setToast({
+        show: true,
+        message: `↩️ Restored ${res.data.restoredCount} mark(s) for ${restoredCode}!`,
+        type: "success"
+      });
+      setTimeout(() => setToast({ show: false, message: "", type: "" }), 4000);
+    } catch (err) {
+      setToast({
+        show: true,
+        message: "Failed to undo clear: " + (err.response?.data?.error || err.message),
+        type: "error"
+      });
+      setTimeout(() => setToast({ show: false, message: "", type: "" }), 5000);
+    } finally {
+      setIsClearingMarks(false);
     }
   };
 
@@ -1191,50 +1297,117 @@ export default function MarkEntry() {
             </div>
           )}
 
-          {/* Focus Mode Subject Selector */}
-          <div className="no-print" style={{ 
-            marginBottom: "20px", 
-            padding: "15px", 
-            background: "var(--bg-card)", 
-            borderRadius: "12px", 
-            border: "1px solid var(--border-color)",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "15px",
-            boxShadow: "var(--shadow-sm)"
-          }}>
-            <label style={{ fontWeight: "bold", color: "var(--primary)" }}>Focus Mode (Screen Only):</label>
-            <div style={{ position: "relative" }}>
-              <button 
-                className="select-input"
-                style={{ background: "white", cursor: "pointer", textAlign: "left", minWidth: "250px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                onClick={() => setFocusDropdownOpen(!focusDropdownOpen)}
-              >
-                {focusedSubjectIndices.length === 0 ? "Show All Subjects" : `${focusedSubjectIndices.length} Subject(s) Selected`}
-                <span>▼</span>
-              </button>
-              {focusDropdownOpen && (
-                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #ccc", borderRadius: "4px", marginTop: "4px", zIndex: 100, maxHeight: "250px", overflowY: "auto", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", textAlign: "left" }}>
-                  <div 
-                    style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", background: "#f8f9fa", fontWeight: "bold", color: "black" }}
-                    onClick={() => { setFocusedSubjectIndices([]); setFocusDropdownOpen(false); }}
-                  >
-                    Show All Subjects
+          {/* Focus Mode & Admin Subject Mark Cleaner */}
+          <div className="no-print" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "15px", marginBottom: "20px" }}>
+            <div style={{ 
+              padding: "15px", 
+              background: "var(--bg-card)", 
+              borderRadius: "12px", 
+              border: "1px solid var(--border-color)",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "15px",
+              boxShadow: "var(--shadow-sm)"
+            }}>
+              <label style={{ fontWeight: "bold", color: "var(--primary)" }}>Focus Mode (Screen Only):</label>
+              <div style={{ position: "relative" }}>
+                <button 
+                  className="select-input"
+                  style={{ background: "white", cursor: "pointer", textAlign: "left", minWidth: "250px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  onClick={() => setFocusDropdownOpen(!focusDropdownOpen)}
+                >
+                  {focusedSubjectIndices.length === 0 ? "Show All Subjects" : `${focusedSubjectIndices.length} Subject(s) Selected`}
+                  <span>▼</span>
+                </button>
+                {focusDropdownOpen && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "white", border: "1px solid #ccc", borderRadius: "4px", marginTop: "4px", zIndex: 100, maxHeight: "250px", overflowY: "auto", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", textAlign: "left" }}>
+                    <div 
+                      style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", background: "#f8f9fa", fontWeight: "bold", color: "black" }}
+                      onClick={() => { setFocusedSubjectIndices([]); setFocusDropdownOpen(false); }}
+                    >
+                      Show All Subjects
+                    </div>
+                    {(classData.subjects || []).map((sub, idx) => (
+                      <label key={idx} style={{ display: "flex", alignItems: "center", padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", color: "black", margin: 0 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={focusedSubjectIndices.includes(idx)} 
+                          onChange={() => toggleSubjectFocus(idx)} 
+                          style={{ marginRight: "10px", width: "16px", height: "16px" }}
+                        />
+                        <span style={{ fontSize: "12px" }}>{getCourseDetails()[idx]?.courseName || sub} ({getCourseDetails()[idx]?.courseCode || sub})</span>
+                      </label>
+                    ))}
                   </div>
-                  {(classData.subjects || []).map((sub, idx) => (
-                    <label key={idx} style={{ display: "flex", alignItems: "center", padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #eee", color: "black", margin: 0 }}>
-                      <input 
-                        type="checkbox" 
-                        checked={focusedSubjectIndices.includes(idx)} 
-                        onChange={() => toggleSubjectFocus(idx)} 
-                        style={{ marginRight: "10px", width: "16px", height: "16px" }}
-                      />
-                      <span style={{ fontSize: "12px" }}>{getCourseDetails()[idx]?.courseName || sub} ({getCourseDetails()[idx]?.courseCode || sub})</span>
-                    </label>
-                  ))}
-                </div>
-              )}
+                )}
+              </div>
             </div>
+
+            {isAdmin && (classData.subjects || []).length > 0 && (
+              <div style={{
+                padding: "12px 15px",
+                background: "var(--bg-card)",
+                borderRadius: "12px",
+                border: "1px solid rgba(239, 68, 68, 0.35)",
+                display: "inline-flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "10px",
+                boxShadow: "var(--shadow-sm)"
+              }}>
+                <label style={{ fontWeight: "bold", color: "#ef4444", fontSize: "0.9rem" }}>
+                  🛡️ Clear Subject Marks:
+                </label>
+                <select
+                  className="select-input"
+                  value={clearSubjectIdx}
+                  onChange={(e) => setClearSubjectIdx(Number(e.target.value))}
+                  style={{ minWidth: "220px", maxWidth: "320px" }}
+                >
+                  {(classData.subjects || []).map((_, idx) => (
+                    <option key={idx} value={idx}>
+                      {getSubjectLabel(classData, idx)}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setClearModalOpen(true)}
+                  disabled={isClearingMarks}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "#ef4444",
+                    color: "#ffffff",
+                    fontWeight: "700",
+                    cursor: isClearingMarks ? "not-allowed" : "pointer",
+                    fontSize: "0.85rem"
+                  }}
+                >
+                  🧹 Clear
+                </button>
+                {lastClearBackup && lastClearBackup.className === classData.className && (
+                  <button
+                    type="button"
+                    onClick={handleUndoSubjectClear}
+                    disabled={isClearingMarks}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #f59e0b",
+                      background: "rgba(245, 158, 11, 0.14)",
+                      color: "#d97706",
+                      fontWeight: "700",
+                      cursor: isClearingMarks ? "not-allowed" : "pointer",
+                      fontSize: "0.85rem"
+                    }}
+                  >
+                    ↩️ Undo Clear ({lastClearBackup.subjectCode} - {lastClearBackup.count})
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <style>{`
@@ -1623,6 +1796,16 @@ export default function MarkEntry() {
 
           </div>
         </div>
+
+        <SubjectClearModal
+          isOpen={isAdmin && clearModalOpen}
+          onClose={() => setClearModalOpen(false)}
+          classData={classData}
+          selectedSubjectIdx={clearSubjectIdx}
+          onSelectSubjectIdx={setClearSubjectIdx}
+          onConfirmClear={handleConfirmSubjectClear}
+          isClearing={isClearingMarks}
+        />
         </>
       )}
       {/* Watermark - Fixed at bottom corner, hidden in print */}

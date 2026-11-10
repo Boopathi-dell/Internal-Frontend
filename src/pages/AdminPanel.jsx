@@ -6,9 +6,12 @@ import SeatingManager from "../components/SeatingManager";
 import AttendanceReportsContainer from "../components/AttendanceReportsContainer";
 import InternalMarkTemplateSetup from "../components/InternalMarkTemplateSetup";
 import TimetableManager from "../components/TimetableManager";
+import SubjectClearModal from "../components/SubjectClearModal";
+import { getSubjectLabel } from "../utils/subjectClearUtils";
 
 export default function AdminPanel() {
   const role = sessionStorage.getItem("role");
+  const isStrictAdmin = (role || "").toLowerCase() === "admin";
   let myAdminTabs = [];
   try {
     myAdminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
@@ -178,6 +181,10 @@ export default function AdminPanel() {
   const [eseListSaving, setEseListSaving] = useState(false);
   const [eseListSearch, setEseListSearch] = useState("");
   const [eseListExamFilter, setEseListExamFilter] = useState("");
+  const [eseClearModalOpen, setEseClearModalOpen] = useState(false);
+  const [eseClearSubjectIdx, setEseClearSubjectIdx] = useState(0);
+  const [eseIsClearing, setEseIsClearing] = useState(false);
+  const [eseLastClearBackup, setEseLastClearBackup] = useState(null);
 
   // User management states
   const [users, setUsers] = useState([]);
@@ -1870,6 +1877,7 @@ export default function AdminPanel() {
 
   const openEseListEdit = (cls) => {
     setEseListEditClass(cls);
+    setEseClearSubjectIdx(0);
     const attMap = {};
     const marksMap = {};
     if (cls.students) {
@@ -1880,6 +1888,77 @@ export default function AdminPanel() {
     }
     setEseListAttendance(attMap);
     setEseListMarks(marksMap);
+  };
+
+  const syncEseEditedClassFromServer = (updatedCls) => {
+    setEseListEditClass(updatedCls);
+    const marksMap = {};
+    (updatedCls.students || []).forEach(s => {
+      marksMap[s.regNo] = s.marks || [];
+    });
+    setEseListMarks(marksMap);
+    loadClasses();
+  };
+
+  const handleConfirmEseSubjectClear = async (subjectIndex, mode) => {
+    if (!isStrictAdmin || !eseListEditClass) return;
+    setEseIsClearing(true);
+    try {
+      const studentsMarksPayload = (eseListEditClass.students || []).map(s => ({
+        regNo: s.regNo,
+        name: s.name,
+        marks: eseListMarks[s.regNo] || s.marks || []
+      }));
+      await API.post(`/api/classes/${encodeURIComponent(eseListEditClass.className)}/marks`, {
+        students: studentsMarksPayload,
+        isAdmin: true
+      });
+
+      const res = await API.post(
+        `/api/classes/${encodeURIComponent(eseListEditClass.className)}/clear-subject-marks`,
+        { subjectIndex, mode },
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } }
+      );
+
+      syncEseEditedClassFromServer(res.data.classData);
+      setEseLastClearBackup({
+        className: eseListEditClass.className,
+        subjectIndex,
+        subjectCode: res.data.subjectCode,
+        marksByRegNo: res.data.backupMarksByRegNo,
+        count: res.data.clearedCount
+      });
+      setEseClearModalOpen(false);
+      alert(`Cleared ${res.data.clearedCount} mark(s) for ${res.data.subjectCode}.`);
+    } catch (err) {
+      alert("Failed to clear subject marks: " + (err.response?.data?.error || err.message));
+    } finally {
+      setEseIsClearing(false);
+    }
+  };
+
+  const handleUndoEseSubjectClear = async () => {
+    if (!isStrictAdmin || !eseListEditClass || !eseLastClearBackup || eseLastClearBackup.className !== eseListEditClass.className) return;
+    setEseIsClearing(true);
+    try {
+      const res = await API.post(
+        `/api/classes/${encodeURIComponent(eseListEditClass.className)}/restore-subject-marks`,
+        {
+          subjectIndex: eseLastClearBackup.subjectIndex,
+          marksByRegNo: eseLastClearBackup.marksByRegNo
+        },
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } }
+      );
+
+      syncEseEditedClassFromServer(res.data.classData);
+      const restoredCode = eseLastClearBackup.subjectCode;
+      setEseLastClearBackup(null);
+      alert(`Restored ${res.data.restoredCount} mark(s) for ${restoredCode}.`);
+    } catch (err) {
+      alert("Failed to undo clear: " + (err.response?.data?.error || err.message));
+    } finally {
+      setEseIsClearing(false);
+    }
   };
 
   const handleEseListSave = async () => {
@@ -4714,10 +4793,92 @@ export default function AdminPanel() {
             </div>
           ) : (
             <div className="fade-in" style={{ background: "var(--surface)", borderRadius: "16px", padding: "1.5rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem", marginBottom: "1rem" }}>
                 <h3 style={{ margin: 0, color: "var(--text-primary)" }}>Editing: {eseListEditClass.className}</h3>
                 <button className="btn btn-secondary" onClick={() => setEseListEditClass(null)}>Back to List</button>
               </div>
+
+              {isStrictAdmin && (eseListEditClass.subjects || []).length > 0 && (
+                <div style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "0.85rem 1rem",
+                  marginBottom: "1rem",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  background: "rgba(239, 68, 68, 0.06)"
+                }}>
+                  <span style={{ fontWeight: "700", color: "#ef4444", fontSize: "0.88rem" }}>
+                    🛡️ Clear Subject Marks:
+                  </span>
+                  <select
+                    className="select-input"
+                    value={eseClearSubjectIdx}
+                    onChange={(e) => setEseClearSubjectIdx(Number(e.target.value))}
+                    style={{ minWidth: "220px", maxWidth: "340px", padding: "0.4rem 0.6rem" }}
+                  >
+                    {(eseListEditClass.subjects || []).map((_, idx) => (
+                      <option key={idx} value={idx}>
+                        {getSubjectLabel(eseListEditClass, idx)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={eseIsClearing}
+                    onClick={() => setEseClearModalOpen(true)}
+                    style={{
+                      padding: "0.45rem 0.9rem",
+                      borderRadius: "8px",
+                      border: "none",
+                      background: "#ef4444",
+                      color: "#ffffff",
+                      fontWeight: "700",
+                      cursor: eseIsClearing ? "not-allowed" : "pointer",
+                      fontSize: "0.85rem"
+                    }}
+                  >
+                    🧹 Clear
+                  </button>
+                  {eseLastClearBackup && eseLastClearBackup.className === eseListEditClass.className && (
+                    <button
+                      type="button"
+                      disabled={eseIsClearing}
+                      onClick={handleUndoEseSubjectClear}
+                      style={{
+                        padding: "0.45rem 0.9rem",
+                        borderRadius: "8px",
+                        border: "1px solid #f59e0b",
+                        background: "rgba(245, 158, 11, 0.14)",
+                        color: "#d97706",
+                        fontWeight: "700",
+                        cursor: eseIsClearing ? "not-allowed" : "pointer",
+                        fontSize: "0.85rem"
+                      }}
+                    >
+                      ↩️ Undo Clear ({eseLastClearBackup.subjectCode} - {eseLastClearBackup.count})
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <SubjectClearModal
+                isOpen={isStrictAdmin && eseClearModalOpen}
+                onClose={() => setEseClearModalOpen(false)}
+                classData={eseListEditClass ? {
+                  ...eseListEditClass,
+                  students: (eseListEditClass.students || []).map(s => ({
+                    ...s,
+                    marks: eseListMarks[s.regNo] || s.marks || []
+                  }))
+                } : null}
+                selectedSubjectIdx={eseClearSubjectIdx}
+                onSelectSubjectIdx={setEseClearSubjectIdx}
+                onConfirmClear={handleConfirmEseSubjectClear}
+                isClearing={eseIsClearing}
+              />
 
               <div className="table-container" style={{ maxHeight: "60vh", overflowY: "auto" }}>
                 <table className="admin-table">
