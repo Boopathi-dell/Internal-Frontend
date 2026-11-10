@@ -838,7 +838,7 @@ export default function TimetableManager() {
     if (!timetableSchedule?.classes) return false;
     return timetableSchedule.classes.some(cls =>
       ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].some(day =>
-        (cls.days?.[day] || []).some(s => s && (s.type === "Free" || s.subjectCode === "FREE" || s.shortName === "FREE"))
+        (cls.days?.[day] || []).some(s => s && (s.type === "Free" || s.subjectCode === "FREE" || s.shortName === "FREE" || (s.shortName || "").toUpperCase() === "TUT" || (s.subjectCode || "").toUpperCase() === "TUT"))
       )
     );
   }, [timetableSchedule]);
@@ -1450,18 +1450,19 @@ export default function TimetableManager() {
     if (timetableSchedule?.isLocked) {
       return showAlert("🔒 Timetable is LOCKED (Finalized)! Unlock it first to edit slots.", "error");
     }
+    const isFree = !slot || slot.type === "Free" || slot.subjectCode === "FREE" || (slot.shortName || "").toUpperCase() === "FREE" || (slot.shortName || "").toUpperCase() === "TUT";
     setSlotEditModal({
       isOpen: true,
       classKey,
       day,
       period: slot.period,
       time: slot.time,
-      subjectCode: slot.subjectCode === "FREE" ? "FREE" : slot.subjectCode,
-      subjectName: slot.subjectCode === "FREE" ? "Library / Mentoring" : slot.subjectName,
-      shortName: slot.shortName || "",
-      facultyName: slot.facultyName === "-" ? "" : slot.facultyName,
-      type: slot.type || "Theory",
-      room: slot.room || "LH-1",
+      subjectCode: isFree ? "FREE" : slot.subjectCode,
+      subjectName: isFree ? "Free Period" : slot.subjectName,
+      shortName: isFree ? "Free" : (slot.shortName || ""),
+      facultyName: isFree || slot.facultyName === "-" ? "" : slot.facultyName,
+      type: isFree ? "Free" : (slot.type || "Theory"),
+      room: isFree ? "-" : (slot.room || "LH-1"),
       isPinned: !!slot.isPinned
     });
   };
@@ -3525,7 +3526,7 @@ export default function TimetableManager() {
                             </td>
                             {daySlots.map((slot, sIdx) => {
                               const isLab = slot.type === "Lab";
-                              const isFree = slot.type === "Free";
+                              const isFree = !slot || slot.type === "Free" || slot.subjectCode === "FREE" || (slot.shortName || "").toUpperCase() === "FREE" || (slot.shortName || "").toUpperCase() === "TUT";
 
                               return (
                                 <td 
@@ -3585,7 +3586,7 @@ export default function TimetableManager() {
                                   )}
                                   {isFree ? (
                                     <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontStyle: "italic", padding: "4px 0" }}>
-                                      {slot.shortName || "Free"}
+                                      Free
                                       <div style={{ fontSize: "0.62rem", opacity: 0.6, marginTop: "2px" }}>✏️ Edit</div>
                                     </div>
                                   ) : (
@@ -6073,7 +6074,7 @@ export default function TimetableManager() {
                         const daySlots = cls.days?.[day] || [];
                         const getSlotVal = (period) => {
                           const s = daySlots.find(item => item.period === period);
-                          if (!s || s.type === "Free") return "";
+                          if (!s || s.type === "Free" || s.subjectCode === "FREE" || (s.shortName || "").toUpperCase() === "FREE" || (s.shortName || "").toUpperCase() === "TUT" || (s.shortName || "").toUpperCase() === "MENTOR") return "";
                           return s.shortName || s.subjectCode || "";
                         };
 
