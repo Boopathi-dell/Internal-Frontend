@@ -361,54 +361,63 @@ export default function InternalMarkSheet() {
     });
   };
 
-  // Helper to evaluate row formulas (im1, im2, im3, total)
+  // Helper to evaluate row formulas (dynamically executes Admin-configured formulas from active template)
   const evaluateRowFormulas = (row, cols) => {
-    // 1. Calculate IM1: ((UT1 + UT2 + CIA1) / 110) * 10
-    const ut1 = parseNum(row.ut1 ?? row["UT-1 (30)"]);
-    const ut2 = parseNum(row.ut2 ?? row["UT-2 (30)"]);
-    const cia1 = parseNum(row.cia1 ?? row["CIA1 (50)"]);
-    const im1 = Math.round(((ut1 + ut2 + cia1) / 110) * 10);
-    row.im1 = im1;
-
-    // 2. Calculate IM2: ((UT3 + UT4 + CIA2) / 110) * 10
-    const ut3 = parseNum(row.ut3 ?? row["UT-3 (30)"]);
-    const ut4 = parseNum(row.ut4 ?? row["UT-4 (30)"]);
-    const cia2 = parseNum(row.cia2 ?? row["CIA2 (50)"]);
-    const im2 = Math.round(((ut3 + ut4 + cia2) / 110) * 10);
-    row.im2 = im2;
-
-    // 3. Calculate IM3: ((UT5 + CIA3) / 130) * 10
-    const ut5 = parseNum(row.ut5 ?? row["UT-5 (30)"]);
-    const cia3 = parseNum(row.cia3 ?? row["CIA3 (100)"]);
-    const im3 = Math.round(((ut5 + cia3) / 130) * 10);
-    row.im3 = im3;
-
-    // 4. Calculate TOTAL: IM1 + IM2 + IM3 + SM + MKC (max 40)
-    const sm = parseNum(row.sm ?? row["SM (5)"]);
-    const mkc = parseNum(row.mkc ?? row["MKC (5)"]);
-    const total = Math.min(40, Math.round(im1 + im2 + im3 + sm + mkc));
-    row.total = total;
-
-    // For any custom template columns
+    // 1. Process any column that has a custom formula defined by the Admin in the active template
     cols.forEach(col => {
-      if (col.type === "formula" || col.type === "calculation") {
-        if (!["im1", "im2", "im3", "total"].includes(col.colKey) && col.formula) {
-          try {
-            let f = col.formula;
-            cols.forEach(inner => {
-              const val = parseNum(row[inner.colKey] ?? row[inner.heading]);
-              f = f.split(`#[${inner.heading}]`).join(val);
-              f = f.split(`#[${inner.colKey}]`).join(val);
-            });
-            const res = new Function(`return ${f}`)();
-            row[col.colKey] = isNaN(res) ? 0 : Math.round(res);
-          } catch (e) {
-            row[col.colKey] = 0;
+      if ((col.type === "formula" || col.type === "calculation") && col.formula) {
+        try {
+          let f = col.formula;
+          cols.forEach(inner => {
+            const val = parseNum(row[inner.colKey] ?? row[inner.heading] ?? row[inner.title]);
+            f = f.split(`#[${inner.heading}]`).join(val);
+            f = f.split(`#[${inner.colKey}]`).join(val);
+            if (inner.title) f = f.split(`#[${inner.title}]`).join(val);
+          });
+          // Replace any remaining unresolved #[...] with 0
+          f = f.replace(/#\[.*?\]/g, "0");
+          if (/^[\d+\-*/().\s]+$/.test(f)) {
+            const res = Function(`"use strict"; return (${f})`)();
+            const val = isNaN(res) ? 0 : Math.round(res);
+            row[col.colKey] = val;
+            if (col.heading) row[col.heading] = val;
           }
+        } catch (e) {
+          row[col.colKey] = 0;
+          if (col.heading) row[col.heading] = 0;
         }
-        if (col.heading) {
-          row[col.heading] = row[col.colKey];
-        }
+      }
+    });
+
+    // 2. Standard MEC calculations if column was not already calculated by custom Admin formula:
+    const ut1 = parseNum(row.ut1 ?? row["UT-1 (30)"] ?? row["UT-1"]);
+    const ut2 = parseNum(row.ut2 ?? row["UT-2 (30)"] ?? row["UT-2"]);
+    const cia1 = parseNum(row.cia1 ?? row["CIA1 (50)"] ?? row["CIA1"]);
+    const ut3 = parseNum(row.ut3 ?? row["UT-3 (30)"] ?? row["UT-3"]);
+    const ut4 = parseNum(row.ut4 ?? row["UT-4 (30)"] ?? row["UT-4"]);
+    const cia2 = parseNum(row.cia2 ?? row["CIA2 (50)"] ?? row["CIA2"]);
+    const ut5 = parseNum(row.ut5 ?? row["UT-5 (30)"] ?? row["UT-5"]);
+    const cia3 = parseNum(row.cia3 ?? row["CIA3 (100)"] ?? row["CIA3"]);
+    const sm = parseNum(row.sm ?? row["SM (5)"] ?? row["SM"]);
+    const mkc = parseNum(row.mkc ?? row["MKC (5)"] ?? row["MKC"]);
+
+    if (row.im1 === undefined) {
+      row.im1 = Math.round(((ut1 + ut2 + cia1) / 110) * 10);
+    }
+    if (row.im2 === undefined) {
+      row.im2 = Math.round(((ut3 + ut4 + cia2) / 110) * 10);
+    }
+    if (row.im3 === undefined) {
+      row.im3 = Math.round(((ut5 + cia3) / 130) * 10);
+    }
+    if (row.total === undefined) {
+      row.total = Math.min(40, Math.round(row.im1 + row.im2 + row.im3 + sm + mkc));
+    }
+
+    // Sync all headings
+    cols.forEach(col => {
+      if (col.heading && row[col.colKey] !== undefined) {
+        row[col.heading] = row[col.colKey];
       }
     });
 
@@ -1398,41 +1407,39 @@ export default function InternalMarkSheet() {
                           />
                         </div>
                       ) : (
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: "4px" }}>
-                          <div style={{ position: "absolute", left: "0", top: "0" }}>
-                            <img 
-                              src="/logo1.png" 
-                              alt="MEC Logo" 
-                              className="mec-crest-logo"
-                              style={{ height: "46px", width: "auto", objectFit: "contain" }}
-                              onError={(e) => { e.target.style.display = "none"; }}
-                            />
-                          </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", marginBottom: "6px" }}>
+                          <img 
+                            src="/logo1.png" 
+                            alt="MEC Logo" 
+                            className="mec-crest-logo"
+                            style={{ height: "48px", width: "auto", objectFit: "contain" }}
+                            onError={(e) => { e.target.style.display = "none"; }}
+                          />
 
                           <div style={{ textAlign: "center" }}>
-                            <h2 style={{ fontSize: "17px", fontWeight: "bold", margin: "0", letterSpacing: "0.5px", fontFamily: '"Times New Roman", Times, serif', textTransform: "uppercase" }}>
+                            <h2 style={{ fontSize: "16pt", fontWeight: "900", margin: "0", letterSpacing: "0.5px", fontFamily: '"Times New Roman", Times, serif', textTransform: "uppercase", color: "#000000" }}>
                               MUTHAYAMMAL ENGINEERING COLLEGE
                             </h2>
-                            <div style={{ fontSize: "12px", fontWeight: "bold", margin: "1px 0" }}>
+                            <div style={{ fontSize: "11pt", fontWeight: "bold", margin: "1px 0", color: "#000000" }}>
                               (Autonomous)
                             </div>
-                            <div style={{ fontSize: "10px", margin: 0 }}>
+                            <div style={{ fontSize: "9pt", margin: 0, fontWeight: "600", color: "#000000" }}>
                               Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* Metadata Row 1 */}
-                      <div className="print-metadata-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", fontWeight: "bold", margin: "4px 0 2px 0", fontFamily: '"Times New Roman", Times, serif' }}>
-                        <div style={{ flex: "0 0 140px" }}>Dept: {formData.department}</div>
-                        <div style={{ flex: "0 0 190px" }}>Year/Sem/Sec: {formData.year} / {formData.semester} / {formData.section}</div>
-                        <div style={{ flex: "1", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
-                        <div style={{ flex: "0 0 130px", textAlign: "right" }}>Date: {formData.date}</div>
+                      {/* Metadata Row 1 (Image 1 Format) */}
+                      <div className="print-metadata-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10pt", fontWeight: "bold", margin: "4px 0 3px 0", fontFamily: '"Times New Roman", Times, serif', color: "#000000" }}>
+                        <div style={{ flex: "1", textAlign: "left" }}>Dept: {formData.department}</div>
+                        <div style={{ flex: "1.2", textAlign: "center" }}>Year/Sem/Sec: {formData.year}/{formData.semester}/{formData.section}</div>
+                        <div style={{ flex: "2", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
+                        <div style={{ flex: "1", textAlign: "right" }}>Date: {formData.date}</div>
                       </div>
 
                       {/* Metadata Row 2 */}
-                      <div style={{ fontSize: "11px", fontWeight: "bold", margin: "2px 0 4px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left" }}>
+                      <div style={{ fontSize: "10pt", fontWeight: "bold", margin: "2px 0 5px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left", color: "#000000" }}>
                         Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
                       </div>
                     </div>

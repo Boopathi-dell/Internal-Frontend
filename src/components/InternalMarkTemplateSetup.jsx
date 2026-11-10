@@ -81,20 +81,57 @@ export default function InternalMarkTemplateSetup() {
     try {
       const res = await API.get("/api/classes");
       const uniqueExams = [...new Set(res.data.map(c => c.examName).filter(Boolean))];
-      setAvailableExams(uniqueExams.length > 0 ? uniqueExams : ["UNIT I", "UNIT II", "UNIT III", "UNIT IV", "UNIT V", "CIA I", "CIA II", "CIA III"]);
+      const defaults = [
+        "Unit Test - I", "Unit Test - II", "CIA - I", 
+        "Unit Test - III", "Unit Test - IV", "CIA - II", 
+        "Unit Test - V", "Model Exam", "CIA - III", 
+        "UNIT I", "UNIT II", "UNIT III", "UNIT IV", "UNIT V", "CIA I", "CIA II", "CIA III",
+        "Seminar", "SEMINAR", "MKC"
+      ];
+      setAvailableExams([...new Set([...uniqueExams, ...defaults])]);
     } catch (err) {
       console.error(err);
-      setAvailableExams(["UNIT I", "UNIT II", "UNIT III", "UNIT IV", "UNIT V", "CIA I", "CIA II", "CIA III"]);
+      setAvailableExams([
+        "Unit Test - I", "Unit Test - II", "CIA - I", 
+        "Unit Test - III", "Unit Test - IV", "CIA - II", 
+        "Unit Test - V", "Model Exam", "CIA - III",
+        "Seminar", "MKC"
+      ]);
     }
   };
 
   const handleAddNewTemplate = () => {
     setEditingTemplate({
-      templateName: "2025-26 ODD SEMESTER",
-      regulation: "2021",
+      templateName: "Theory Internal Mark Format",
+      regulation: "2023",
       isActive: false,
       columns: [
-        { heading: "UNIT I (30)", type: "exam", examName: "UNIT I", formula: "", calcSources: [], calcType: "scale", calcOutof: 110, calcWeightage: 10 }
+        { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false }
+      ]
+    });
+  };
+
+  // Official MEC 14-Column / 40-Mark Internal Mark Template Preset (Exact Excel Format)
+  const handleLoadMecStandardTemplate = () => {
+    setEditingTemplate({
+      templateName: "MEC Official Theory Internal Mark Format (40 Marks)",
+      regulation: "2023",
+      isActive: true,
+      columns: [
+        { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
+        { heading: "UT-2 (30)", type: "exam", examName: "Unit Test - II", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
+        { heading: "CIA1 (50)", type: "exam", examName: "CIA - I", formula: "", calcSources: [], calcType: "scale", calcOutof: 50, calcWeightage: 50, isHidden: false },
+        { heading: "IM (10)", type: "calculation", examName: "", formula: "(#[UT-1 (30)] + #[UT-2 (30)] + #[CIA1 (50)]) / 110 * 10", calcSources: ["UT-1 (30)", "UT-2 (30)", "CIA1 (50)"], calcType: "scale", calcOutof: 110, calcWeightage: 10, isHidden: false },
+        { heading: "UT-3 (30)", type: "exam", examName: "Unit Test - III", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
+        { heading: "UT-4 (30)", type: "exam", examName: "Unit Test - IV", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
+        { heading: "CIA2 (50)", type: "exam", examName: "CIA - II", formula: "", calcSources: [], calcType: "scale", calcOutof: 50, calcWeightage: 50, isHidden: false },
+        { heading: "IM (10)", type: "calculation", examName: "", formula: "(#[UT-3 (30)] + #[UT-4 (30)] + #[CIA2 (50)]) / 110 * 10", calcSources: ["UT-3 (30)", "UT-4 (30)", "CIA2 (50)"], calcType: "scale", calcOutof: 110, calcWeightage: 10, isHidden: false },
+        { heading: "UT-5 (30)", type: "exam", examName: "Unit Test - V", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
+        { heading: "CIA3 (100)", type: "exam", examName: "Model Exam", formula: "", calcSources: [], calcType: "scale", calcOutof: 100, calcWeightage: 100, isHidden: false },
+        { heading: "IM (10)", type: "calculation", examName: "", formula: "(#[UT-5 (30)] + #[CIA3 (100)]) / 130 * 10", calcSources: ["UT-5 (30)", "CIA3 (100)"], calcType: "scale", calcOutof: 130, calcWeightage: 10, isHidden: false },
+        { heading: "SM (5)", type: "exam", examName: "Seminar", formula: "", calcSources: [], calcType: "scale", calcOutof: 5, calcWeightage: 5, isHidden: false },
+        { heading: "MKC (5)", type: "exam", examName: "MKC", formula: "", calcSources: [], calcType: "scale", calcOutof: 5, calcWeightage: 5, isHidden: false },
+        { heading: "TOTAL (40)", type: "calculation", examName: "", formula: "(#[IM (10)] + #[IM (10)] + #[IM (10)] + #[SM (5)] + #[MKC (5)])", calcSources: ["IM (10)", "IM (10)", "IM (10)", "SM (5)", "MKC (5)"], calcType: "sum", calcOutof: 40, calcWeightage: 40, isHidden: false }
       ]
     });
   };
@@ -182,11 +219,18 @@ export default function InternalMarkTemplateSetup() {
   const parseExistingFormula = (template) => {
     const cloned = { ...template };
     cloned.columns = cloned.columns.map(col => {
-      if (col.type === "formula") {
+      if (col.type === "formula" || col.type === "calculation") {
         col.type = "calculation";
-        // Check if it's a direct sum: e.g. (#[A] + #[B])
-        const scaleMatch = col.formula.match(/\((.*?)\)\s*\/\s*([\d.]+)\s*\*\s*([\d.]+)/);
-        const sumMatch = col.formula.match(/^\((.*?)\)$/);
+        // If calcSources and calcType are already populated, keep them directly!
+        if (col.calcSources && col.calcSources.length > 0) {
+          col.calcOutof = col.calcOutof || 110;
+          col.calcWeightage = col.calcWeightage || 10;
+          return col;
+        }
+
+        // Otherwise parse from formula string: e.g. (#[A] + #[B]) / 110 * 10
+        const scaleMatch = (col.formula || "").match(/\((.*?)\)\s*\/\s*([\d.]+)\s*\*\s*([\d.]+)/);
+        const sumMatch = (col.formula || "").match(/^\((.*?)\)$/);
         
         if (scaleMatch) {
           col.calcSources = [...scaleMatch[1].matchAll(/#\[(.*?)\]/g)].map(m => m[1]);
@@ -199,10 +243,9 @@ export default function InternalMarkTemplateSetup() {
           col.calcOutof = 100;
           col.calcWeightage = 10;
         } else {
-          // fallback
           col.calcSources = [];
           col.calcType = "scale";
-          col.calcOutof = 100;
+          col.calcOutof = 110;
           col.calcWeightage = 10;
         }
       }
@@ -252,10 +295,25 @@ export default function InternalMarkTemplateSetup() {
             )}
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-            <button onClick={handleAddNewTemplate} className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-              <Plus size={16} /> Create New Template
-            </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button onClick={handleAddNewTemplate} className="btn btn-secondary" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <Plus size={16} /> Create Blank Template
+              </button>
+              <button 
+                onClick={handleLoadMecStandardTemplate} 
+                className="btn btn-primary" 
+                style={{ 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  gap: "8px",
+                  background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                  fontWeight: "bold"
+                }}
+              >
+                <span>⭐</span> Load Official MEC 14-Column Preset (40 Marks)
+              </button>
+            </div>
           </div>
           
           <table className="table">
