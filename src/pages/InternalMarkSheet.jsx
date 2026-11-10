@@ -53,7 +53,7 @@ export default function InternalMarkSheet() {
   const [studentsData, setStudentsData] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [rosters, setRosters] = useState([]);
+  const [currentCohortRoster, setCurrentCohortRoster] = useState(null);
   const [allFetchedClasses, setAllFetchedClasses] = useState([]);
   const [isEditingMarks, setIsEditingMarks] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
@@ -83,7 +83,6 @@ export default function InternalMarkSheet() {
   // 1. Fetch All Admin Templates & Extract Regulations
   useEffect(() => {
     fetchTemplatesAndRegulations();
-    fetchAllRosters();
     fetchHeaderImage();
   }, []);
 
@@ -126,14 +125,6 @@ export default function InternalMarkSheet() {
     }
   };
 
-  const fetchAllRosters = async () => {
-    try {
-      const res = await API.get("/api/rosters");
-      setRosters(res.data || []);
-    } catch (err) {
-      console.error("Failed to fetch rosters:", err);
-    }
-  };
 
   // When selected regulation changes, automatically activate matching template
   const handleRegulationChange = (reg) => {
@@ -158,22 +149,25 @@ export default function InternalMarkSheet() {
     }));
   }, [formData.semester, formData.academicYear]);
 
-  // Fetch subjects for currently selected Dept & Class
-  const fetchSubjectsForSelection = async () => {
+  // Fast, targeted fetch for ONLY the selected Department & Section
+  const loadClassAndSubjectData = async () => {
+    setLoading(true);
     try {
       const yearSemSec = `${formData.year}/${formData.semester}/${formData.section}`;
-      const res = await API.get(`/api/classes`);
-      const classesList = res.data || [];
-      setAllFetchedClasses(classesList);
+      const [classRes, rosterRes] = await Promise.all([
+        API.get("/api/classes", { params: { department: formData.department, yearSemSec } }),
+        API.get("/api/rosters", { params: { department: formData.department, year: formData.year, semester: formData.semester, section: formData.section } })
+      ]);
 
-      const filteredClasses = classesList.filter(c => 
-        c.department === formData.department && 
-        c.yearSemSec === yearSemSec
-      );
+      const filteredClasses = classRes.data || [];
+      const rosterList = rosterRes.data || [];
+      const matchedRoster = rosterList[0] || null;
+
+      setAllFetchedClasses(filteredClasses);
+      setCurrentCohortRoster(matchedRoster);
 
       const courseMap = {};
       const allCourseCodes = new Set();
-
       filteredClasses.forEach(c => {
         if (c.courseDetails && Array.isArray(c.courseDetails)) {
           c.courseDetails.forEach(cd => {
@@ -193,30 +187,33 @@ export default function InternalMarkSheet() {
 
       const distinctSubjectCodes = [...allCourseCodes];
       const subjectsWithNames = distinctSubjectCodes.map(code => ({
-        code: code,
+        code,
         name: courseMap[code] || "Theory Subject"
       })).sort((a, b) => a.code.localeCompare(b.code));
 
       setSubjects(subjectsWithNames);
 
+      let targetSubj = formData.selectedSubject;
       if (subjectsWithNames.length > 0) {
-        setFormData(prev => ({ 
-          ...prev, 
-          selectedSubject: prev.selectedSubject && subjectsWithNames.some(s => s.code === prev.selectedSubject) 
-            ? prev.selectedSubject 
-            : subjectsWithNames[0].code, 
-          isCustomSubject: false
-        }));
+        if (!targetSubj || !subjectsWithNames.some(s => s.code === targetSubj)) {
+          targetSubj = subjectsWithNames[0].code;
+          setFormData(prev => ({ ...prev, selectedSubject: targetSubj, isCustomSubject: false }));
+        }
       } else {
+        targetSubj = "CUSTOM";
         setFormData(prev => ({ ...prev, selectedSubject: "CUSTOM", isCustomSubject: true }));
       }
+
+      calculateStudentsMarks(filteredClasses, matchedRoster, targetSubj, activeTemplate);
     } catch (e) {
-      console.error("Error fetching subjects:", e);
+      console.error("Error loading class data:", e);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSubjectsForSelection();
+    loadClassAndSubjectData();
   }, [formData.department, formData.year, formData.semester, formData.section]);
 
   // Helper to parse numbers safely
@@ -424,111 +421,78 @@ export default function InternalMarkSheet() {
     return row;
   };
 
-  // Process and calculate student marks based on the current template
-  const processSubjectData = async () => {
-    setLoading(true);
-    try {
-      const yearSemSec = `${formData.year}/${formData.semester}/${formData.section}`;
-      const res = await API.get(`/api/classes`);
-      const classesList = res.data || [];
-      setAllFetchedClasses(classesList);
+  // Pure in-memory student marks & formulas calculation (Instant 0ms update, Zero API calls)
+  const calculateStudentsMarks = (classesList, rosterObj, targetSubj, template) => {
+    const targetSubject = targetSubj || (formData.isCustomSubject ? formData.customSubject : formData.selectedSubject);
+    if (!targetSubject) {
+      setStudentsData([]);
+      return;
+    }
 
-      const allClassesForSection = classesList.filter(c => 
-        c.department === formData.department && 
-        c.yearSemSec === yearSemSec
-      );
+    const studentMap = {};
 
-      const targetSubject = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
-      if (!targetSubject) {
-        setStudentsData([]);
-        setLoading(false);
-        return;
-      }
+    // 1. Gather all students from Roster of this section
+    if (rosterObj && rosterObj.students) {
+      rosterObj.students.forEach(student => {
+        if (student.regNo) {
+          studentMap[student.regNo] = {
+            regNo: student.regNo,
+            name: student.name || ""
+          };
+        }
+      });
+    }
 
-      const studentMap = {};
-
-      // 1. Gather all students from Roster
-      const matchingRoster = rosters.find(r => 
-        r.department === formData.department && 
-        r.year === formData.year && 
-        r.semester === formData.semester && 
-        r.section === formData.section
-      );
-
-      if (matchingRoster && matchingRoster.students) {
-        matchingRoster.students.forEach(student => {
-          if (student.regNo) {
-            studentMap[student.regNo] = {
-              regNo: student.regNo,
-              name: student.name || ""
+    // 2. Also gather students from uploaded classes of this section
+    (classesList || []).forEach(c => {
+      if (c.students && Array.isArray(c.students)) {
+        c.students.forEach(st => {
+          if (st.regNo && !studentMap[st.regNo]) {
+            studentMap[st.regNo] = {
+              regNo: st.regNo,
+              name: st.name || ""
             };
           }
         });
       }
+    });
 
-      // 2. Also gather students from ANY uploaded class for this department & section
-      allClassesForSection.forEach(c => {
-        if (c.students && Array.isArray(c.students)) {
-          c.students.forEach(st => {
-            if (st.regNo && !studentMap[st.regNo]) {
-              studentMap[st.regNo] = {
-                regNo: st.regNo,
-                name: st.name || ""
-              };
-            }
-          });
+    const rawCols = (template && template.columns && template.columns.length > 0)
+      ? template.columns
+      : defaultMecColumns;
+    const columnsToUse = getColumnsWithKeys(rawCols);
+
+    // 3. Compute marks and formulas for every student against columnsToUse
+    const evaluatedStudents = Object.values(studentMap).map(student => {
+      const row = { ...student };
+
+      columnsToUse.forEach(col => {
+        if (col.type === "exam") {
+          const mark = findExamMarkForStudent(student, col.examName, targetSubject, classesList || []);
+          row[col.colKey] = mark;
+          row[col.heading] = mark;
         }
       });
 
-      const rawCols = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
-        ? activeTemplate.columns
-        : defaultMecColumns;
-      const columnsToUse = getColumnsWithKeys(rawCols);
+      evaluateRowFormulas(row, columnsToUse);
+      return row;
+    });
 
-      // 3. Calculate marks for every student against columnsToUse
-      const evaluatedStudents = Object.values(studentMap).map(student => {
-        const row = { ...student };
-
-        columnsToUse.forEach(col => {
-          if (col.type === "exam") {
-            const mark = findExamMarkForStudent(student, col.examName, targetSubject, allClassesForSection);
-            row[col.colKey] = mark;
-            row[col.heading] = mark;
-          }
-        });
-
-        // Evaluate formulas with unique keys
-        evaluateRowFormulas(row, columnsToUse);
-
-        return row;
-      });
-
-      evaluatedStudents.sort((a, b) => a.regNo.localeCompare(b.regNo, undefined, { numeric: true }));
-      setStudentsData(evaluatedStudents);
-    } catch (err) {
-      console.error("Error evaluating marks:", err);
-    }
-    setLoading(false);
+    evaluatedStudents.sort((a, b) => (a.regNo || "").localeCompare(b.regNo || "", undefined, { numeric: true }));
+    setStudentsData(evaluatedStudents);
   };
 
+  // Instant in-memory recalculation when subject, custom subject, or active template changes (0ms delay)
   useEffect(() => {
-    if (formData.selectedSubject !== "CUSTOM" || formData.customSubject.length >= 2) {
-      const timer = setTimeout(() => {
-        processSubjectData();
-      }, 300);
-      return () => clearTimeout(timer);
+    if (allFetchedClasses.length > 0 || currentCohortRoster) {
+      const targetSubj = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
+      calculateStudentsMarks(allFetchedClasses, currentCohortRoster, targetSubj, activeTemplate);
     }
   }, [
     formData.selectedSubject, 
     formData.customSubject, 
-    formData.department, 
-    formData.year, 
-    formData.semester, 
-    formData.section, 
-    formData.regulation, 
-    formData.academicYear, 
-    activeTemplate,
-    rosters
+    formData.isCustomSubject,
+    activeTemplate
   ]);
 
   // Handle cell edit on screen
