@@ -595,7 +595,11 @@ export default function TimetableManager() {
                 difficulty: sub.difficulty || existing?.difficulty || "Normal",
                 isTraining: resolvedIsTraining,
                 slotPattern: resolvedPattern,
-                hoursPerWeek: Number(sub.hoursPerWeek) || (sub.type?.toLowerCase().includes("lab") ? 3 : 4),
+                hoursPerWeek: (sub.hoursPerWeek !== undefined && sub.hoursPerWeek !== null && sub.hoursPerWeek !== "" && !isNaN(Number(sub.hoursPerWeek)))
+                  ? Number(sub.hoursPerWeek)
+                  : ((sub.type || "").toLowerCase().includes("lib") || (sub.type || "").toLowerCase().includes("sem") || (sub.type || "").toLowerCase().includes("mentor")
+                    ? 1
+                    : ((sub.type || "").toLowerCase().includes("lab") ? 3 : 4)),
                 facultyNames: existing ? (existing.facultyNames || []) : []
               });
             }
