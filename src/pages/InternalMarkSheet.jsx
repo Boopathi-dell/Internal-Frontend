@@ -155,7 +155,7 @@ export default function InternalMarkSheet() {
       const keyedCols = getColumnsWithKeys(activeTemplate.columns || []);
       const updatedColumns = (activeTemplate.columns || []).map((col, idx) => ({
         ...col,
-        isHidden: userHiddenColumns.includes(keyedCols[idx].colKey) || userHiddenColumns.includes(col.heading)
+        isHidden: userHiddenColumns.includes(keyedCols[idx].colKey)
       }));
       const payload = {
         templateName: activeTemplate.templateName,
@@ -459,14 +459,26 @@ export default function InternalMarkSheet() {
     { colKey: "total", heading: "TOTAL (40)", title: "TOTAL", maxMark: "40", type: "formula", formulaType: "total" }
   ];
 
-  // Helper to get active columns with unique keys
+  // Helper to get active columns with guaranteed unique keys (prevents collisions like "MKC" vs "MKC IM")
   const getColumnsWithKeys = (cols) => {
     let imIndex = 0;
+    const usedKeys = new Set();
     return cols.map((c, i) => {
       let key = c.colKey || c.key;
-      const headingLower = (c.heading || "").toLowerCase();
+      const headingLower = (c.heading || "").toLowerCase().trim();
+      const isFormulaLike = c.type === "formula" || c.type === "calculation" || /\bim\b/.test(headingLower) || headingLower.includes("internal");
+
       if (!key) {
-        if (headingLower.includes("ut-1") || headingLower.includes("ut 1") || headingLower.includes("ut1")) key = "ut1";
+        if (isFormulaLike) {
+          if (headingLower.includes("total")) {
+            key = "total";
+          } else if (headingLower.startsWith("im") || headingLower === "internal") {
+            imIndex += 1;
+            key = `im${imIndex}`;
+          } else {
+            key = `col_${i}`;
+          }
+        } else if (headingLower.includes("ut-1") || headingLower.includes("ut 1") || headingLower.includes("ut1")) key = "ut1";
         else if (headingLower.includes("ut-2") || headingLower.includes("ut 2") || headingLower.includes("ut2")) key = "ut2";
         else if (headingLower.includes("ut-3") || headingLower.includes("ut 3") || headingLower.includes("ut3")) key = "ut3";
         else if (headingLower.includes("ut-4") || headingLower.includes("ut 4") || headingLower.includes("ut4")) key = "ut4";
@@ -474,19 +486,17 @@ export default function InternalMarkSheet() {
         else if (headingLower.includes("cia1") || headingLower.includes("cia 1") || headingLower.includes("cia-1") || headingLower.includes("cia-i")) key = "cia1";
         else if (headingLower.includes("cia2") || headingLower.includes("cia 2") || headingLower.includes("cia-2") || headingLower.includes("cia-ii")) key = "cia2";
         else if (headingLower.includes("cia3") || headingLower.includes("cia 3") || headingLower.includes("cia-3") || headingLower.includes("cia-iii") || headingLower.includes("model")) key = "cia3";
-        else if (headingLower.startsWith("im") || headingLower.includes("internal")) {
-          imIndex += 1;
-          key = `im${imIndex}`;
-        } else if (headingLower.includes("total")) {
-          key = "total";
-        } else if (headingLower.includes("sm") || headingLower.includes("seminar")) {
-          key = "sm";
-        } else if (headingLower.includes("mkc")) {
-          key = "mkc";
-        } else {
-          key = `col_${i}`;
-        }
+        else if (headingLower.includes("total")) key = "total";
+        else if (headingLower.includes("sm") || headingLower.includes("seminar")) key = "sm";
+        else if (headingLower.includes("mkc")) key = "mkc";
+        else key = `col_${i}`;
       }
+
+      if (usedKeys.has(key)) {
+        key = `col_${i}`;
+      }
+      usedKeys.add(key);
+
       const parsed = parseHeading(c.heading || "");
       return {
         ...c,
@@ -720,7 +730,7 @@ export default function InternalMarkSheet() {
 
   // Visible Columns (Filters out hidden columns while calculations still run for all columns in background)
   const visibleColumns = useMemo(() => {
-    return currentColumns.filter(c => !userHiddenColumns.includes(c.heading) && !userHiddenColumns.includes(c.colKey));
+    return currentColumns.filter(c => !userHiddenColumns.includes(c.colKey));
   }, [currentColumns, userHiddenColumns]);
 
   // Check if visible columns have subheaders (like "(50)")
@@ -1337,7 +1347,7 @@ export default function InternalMarkSheet() {
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
               {currentColumns.map(col => {
-                const isHidden = userHiddenColumns.includes(col.colKey) || userHiddenColumns.includes(col.heading);
+                const isHidden = userHiddenColumns.includes(col.colKey);
                 return (
                   <button
                     key={col.colKey}
