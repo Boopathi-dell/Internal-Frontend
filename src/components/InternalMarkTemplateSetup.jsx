@@ -106,6 +106,8 @@ export default function InternalMarkTemplateSetup() {
     setEditingTemplate({
       templateName: "Theory Internal Mark Format",
       regulation: "2023",
+      courseCategory: "Theory",
+      printOrientation: "landscape",
       passMark: 20,
       isActive: false,
       columns: [
@@ -119,6 +121,8 @@ export default function InternalMarkTemplateSetup() {
     setEditingTemplate({
       templateName: "MEC Official Theory Internal Mark Format (40 Marks)",
       regulation: "2023",
+      courseCategory: "Theory",
+      printOrientation: "landscape",
       passMark: 20,
       isActive: true,
       columns: [
@@ -314,7 +318,12 @@ export default function InternalMarkTemplateSetup() {
   };
 
   const parseExistingFormula = (template) => {
-    const cloned = { ...template };
+    const inferredCategory = template.courseCategory || (/\blab\b|laboratory|practical/i.test(template.templateName || "") ? "Lab" : "Theory");
+    const cloned = {
+      ...template,
+      courseCategory: inferredCategory,
+      printOrientation: template.printOrientation || (inferredCategory === "Lab" ? "portrait" : "landscape")
+    };
     const normalizeParsedSources = (rawSources, colsBefore) => {
       const seenLegacy = {};
       return rawSources.map(raw => {
@@ -460,6 +469,7 @@ export default function InternalMarkTemplateSetup() {
               <tr>
                 <th>Template Name</th>
                 <th>Regulation</th>
+                <th>Type &amp; Print</th>
                 <th>Pass Mark</th>
                 <th>Status</th>
                 <th>Columns</th>
@@ -467,10 +477,37 @@ export default function InternalMarkTemplateSetup() {
               </tr>
             </thead>
             <tbody>
-              {templates.map(t => (
+              {templates.map(t => {
+                const cat = t.courseCategory || (/\blab\b|laboratory|practical/i.test(t.templateName || "") ? "Lab" : "Theory");
+                const orient = t.printOrientation || (cat === "Lab" ? "portrait" : "landscape");
+                return (
                 <tr key={t._id}>
                   <td style={{ fontWeight: "bold" }}>{t.templateName}</td>
                   <td>{t.regulation || "N/A"}</td>
+                  <td>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{
+                        background: cat === "Lab" ? "rgba(236, 72, 153, 0.12)" : "rgba(99, 102, 241, 0.12)",
+                        color: cat === "Lab" ? "#db2777" : "#4f46e5",
+                        padding: "3px 9px",
+                        borderRadius: "99px",
+                        fontWeight: "700",
+                        fontSize: "0.75rem"
+                      }}>
+                        {cat === "Lab" ? "🧪 Lab" : "📘 Theory"}
+                      </span>
+                      <span style={{
+                        background: "rgba(100, 116, 139, 0.1)",
+                        color: "#475569",
+                        padding: "3px 8px",
+                        borderRadius: "6px",
+                        fontWeight: "600",
+                        fontSize: "0.72rem"
+                      }}>
+                        {orient === "portrait" ? "Portrait" : "Landscape"}
+                      </span>
+                    </div>
+                  </td>
                   <td>
                     {Number(t.passMark) > 0 ? (
                       <span style={{ background: "rgba(239, 68, 68, 0.1)", color: "#dc2626", padding: "3px 10px", borderRadius: "99px", fontWeight: "700", fontSize: "0.82rem" }}>
@@ -491,10 +528,11 @@ export default function InternalMarkTemplateSetup() {
                     <button onClick={() => handleDeleteTemplate(t._id)} className="btn btn-danger btn-sm"><Trash size={14} /></button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {templates.length === 0 && (
                 <tr>
-                  <td colSpan="6" style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>No templates created yet. Click above to make one!</td>
+                  <td colSpan="7" style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>No templates created yet. Click above to make one!</td>
                 </tr>
               )}
             </tbody>
@@ -514,7 +552,7 @@ export default function InternalMarkTemplateSetup() {
                   style={{ fontSize: "1.05rem", padding: "10px", width: "100%", boxSizing: "border-box" }}
                 />
               </div>
-              <div style={{ width: "170px" }}>
+              <div style={{ width: "155px" }}>
                 <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Regulation</label>
                 <input 
                   type="text"
@@ -529,7 +567,38 @@ export default function InternalMarkTemplateSetup() {
                   {["2019", "2021", "2023", "2025"].map(r => <option key={r} value={r}>{r}</option>)}
                 </datalist>
               </div>
-              <div style={{ width: "190px" }}>
+              <div style={{ width: "155px" }}>
+                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Template Type</label>
+                <select
+                  className="input-field"
+                  value={editingTemplate.courseCategory || "Theory"}
+                  onChange={(e) => {
+                    const nextCat = e.target.value;
+                    setEditingTemplate({
+                      ...editingTemplate,
+                      courseCategory: nextCat,
+                      printOrientation: nextCat === "Lab" ? "portrait" : "landscape"
+                    });
+                  }}
+                  style={{ fontSize: "1rem", padding: "10px", width: "100%", boxSizing: "border-box", fontWeight: "600" }}
+                >
+                  <option value="Theory">📘 Theory</option>
+                  <option value="Lab">🧪 Lab / Practical</option>
+                </select>
+              </div>
+              <div style={{ width: "165px" }}>
+                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Print Layout</label>
+                <select
+                  className="input-field"
+                  value={editingTemplate.printOrientation || (editingTemplate.courseCategory === "Lab" ? "portrait" : "landscape")}
+                  onChange={(e) => setEditingTemplate({ ...editingTemplate, printOrientation: e.target.value })}
+                  style={{ fontSize: "1rem", padding: "10px", width: "100%", boxSizing: "border-box", fontWeight: "600" }}
+                >
+                  <option value="landscape">A4 Landscape</option>
+                  <option value="portrait">A4 Portrait</option>
+                </select>
+              </div>
+              <div style={{ width: "175px" }}>
                 <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.5rem", color: "#dc2626" }}>
                   Internal Pass Mark
                 </label>
@@ -553,7 +622,7 @@ export default function InternalMarkTemplateSetup() {
                   onChange={(e) => setEditingTemplate({ ...editingTemplate, isActive: e.target.checked })}
                   style={{ width: "20px", height: "20px" }}
                 />
-                Use this as Active Format
+                Active for {editingTemplate.courseCategory || "Theory"} (Reg {editingTemplate.regulation || "..."})
               </label>
             </div>
           </div>

@@ -26,9 +26,37 @@ import {
 } from "lucide-react";
 
 export default function InternalMarkSheet() {
-  const [allTemplates, setAllTemplates] = useState([]);
   const [availableRegulations, setAvailableRegulations] = useState([]);
   const [activeTemplate, setActiveTemplate] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState("Theory");
+  const allTemplatesRef = useRef([]);
+  const selectedCategoryRef = useRef("Theory");
+
+  const getTemplateCategory = (t) => {
+    if (!t) return "Theory";
+    if (t.courseCategory === "Lab" || t.courseCategory === "Theory") return t.courseCategory;
+    return /\blab\b|laboratory|practical/i.test(t.templateName || "") ? "Lab" : "Theory";
+  };
+
+  const getTemplateOrientation = (t) => {
+    if (!t) return "landscape";
+    if (t.printOrientation === "portrait" || t.printOrientation === "landscape") return t.printOrientation;
+    return getTemplateCategory(t) === "Lab" ? "portrait" : "landscape";
+  };
+
+  const isPortraitMode = getTemplateOrientation(activeTemplate) === "portrait";
+
+  const resolveTemplateForRegulationAndCategory = (list = [], reg, category = "Theory") => {
+    if (!Array.isArray(list) || list.length === 0) return null;
+    const cat = category === "Lab" ? "Lab" : "Theory";
+    return (
+      list.find(t => t.regulation === reg && getTemplateCategory(t) === cat && t.isActive) ||
+      list.find(t => t.regulation === reg && getTemplateCategory(t) === cat) ||
+      list.find(t => t.regulation === reg && t.isActive) ||
+      list.find(t => t.regulation === reg) ||
+      null
+    );
+  };
 
   const [formData, setFormData] = useState({
     regulation: "2023",
@@ -159,6 +187,8 @@ export default function InternalMarkSheet() {
       const payload = {
         templateName: activeTemplate.templateName,
         regulation: activeTemplate.regulation,
+        courseCategory: getTemplateCategory(activeTemplate),
+        printOrientation: getTemplateOrientation(activeTemplate),
         passMark: activeTemplate.passMark ?? 0,
         isActive: activeTemplate.isActive,
         headerImage: activeTemplate.headerImage,
@@ -166,7 +196,7 @@ export default function InternalMarkSheet() {
       };
       const res = await API.put(`/api/internal-marks/${activeTemplate._id}`, payload);
       const savedTemplate = res.data || { ...activeTemplate, columns: updatedColumns };
-      setAllTemplates(prev => prev.map(t => (t._id === savedTemplate._id ? savedTemplate : t)));
+      allTemplatesRef.current = allTemplatesRef.current.map(t => (t._id === savedTemplate._id ? savedTemplate : t));
       setActiveTemplate(savedTemplate);
       persistHiddenLocal(userHiddenColumns, formData.regulation, savedTemplate);
       setHiddenColsMsg(`Saved permanently for Regulation ${formData.regulation} (all subjects)!`);
@@ -208,7 +238,7 @@ export default function InternalMarkSheet() {
     try {
       const res = await API.get("/api/internal-marks", { params: { _ts: Date.now() } });
       const templates = res.data || [];
-      setAllTemplates(templates);
+      allTemplatesRef.current = templates;
 
       const regs = [...new Set(templates.map(t => t.regulation).filter(Boolean))];
       setAvailableRegulations(regs);
@@ -220,7 +250,7 @@ export default function InternalMarkSheet() {
           ? activeAny.regulation
           : (regs.includes("2023") ? "2023" : (regs.includes("2025") ? "2025" : regs[0]));
         setFormData(prev => ({ ...prev, regulation: defaultReg }));
-        const matched = templates.find(t => t.regulation === defaultReg && t.isActive) || templates.find(t => t.regulation === defaultReg);
+        const matched = resolveTemplateForRegulationAndCategory(templates, defaultReg, selectedCategoryRef.current);
         setActiveTemplate(matched || null);
       }
     } catch (err) {
@@ -228,12 +258,42 @@ export default function InternalMarkSheet() {
     }
   };
 
+  // Switch Theory <-> Lab format manually or via subject selection
+  const applyCategoryAndResolveTemplate = (category, regOverride = null) => {
+    const nextCat = category === "Lab" ? "Lab" : "Theory";
+    selectedCategoryRef.current = nextCat;
+    setSelectedCategory(nextCat);
+    const targetReg = regOverride || formData.regulation;
+    const matched = resolveTemplateForRegulationAndCategory(allTemplatesRef.current, targetReg, nextCat);
+    if (matched) {
+      setActiveTemplate(matched);
+    }
+  };
 
-  // When selected regulation changes, automatically activate matching template
+  // When selected regulation changes, automatically activate matching template for active category
   const handleRegulationChange = (reg) => {
     setFormData(prev => ({ ...prev, regulation: reg }));
-    const matched = allTemplates.find(t => t.regulation === reg && t.isActive) || allTemplates.find(t => t.regulation === reg);
+    const matched = resolveTemplateForRegulationAndCategory(allTemplatesRef.current, reg, selectedCategoryRef.current);
     setActiveTemplate(matched || null);
+  };
+
+  const handleTargetSubjectChange = (val) => {
+    if (val === "CUSTOM") {
+      setFormData(prev => ({ ...prev, selectedSubject: "CUSTOM", isCustomSubject: true }));
+      return;
+    }
+    const subjObj = subjects.find(s => s.code === val);
+    const nextCat = subjObj?.isLab ? "Lab" : "Theory";
+    setFormData(prev => ({ ...prev, selectedSubject: val, isCustomSubject: false, customSubject: "" }));
+    applyCategoryAndResolveTemplate(nextCat);
+  };
+
+  const handleCustomSubjectChange = (textVal) => {
+    setFormData(prev => ({ ...prev, customSubject: textVal }));
+    const nextCat = /\blab\b|laboratory|practical/i.test(textVal || "") ? "Lab" : "Theory";
+    if (nextCat !== selectedCategoryRef.current) {
+      applyCategoryAndResolveTemplate(nextCat);
+    }
   };
 
   // Calculate default semester session based on Semester & Academic Year
@@ -257,9 +317,10 @@ export default function InternalMarkSheet() {
     setLoading(true);
     try {
       const yearSemSec = `${formData.year}/${formData.semester}/${formData.section}`;
-      const [classRes, rosterRes] = await Promise.all([
+      const [classRes, rosterRes, currSubjRes] = await Promise.all([
         API.get("/api/classes", { params: { department: formData.department, yearSemSec } }),
-        API.get("/api/rosters", { params: { department: formData.department, year: formData.year, semester: formData.semester, section: formData.section } })
+        API.get("/api/rosters", { params: { department: formData.department, year: formData.year, semester: formData.semester, section: formData.section } }),
+        API.get("/api/curriculum/subjects", { params: { department: formData.department, year: formData.year, semester: formData.semester } }).catch(() => ({ data: [] }))
       ]);
 
       const filteredClasses = classRes.data || [];
@@ -269,46 +330,85 @@ export default function InternalMarkSheet() {
       setAllFetchedClasses(filteredClasses);
       setCurrentCohortRoster(matchedRoster);
 
+      const masterLabCodes = new Set();
+      (Array.isArray(currSubjRes.data) ? currSubjRes.data : []).forEach(doc => {
+        (doc.subjects || []).forEach(s => {
+          if (s.category === "Lab" && s.courseCode) {
+            masterLabCodes.add(String(s.courseCode).trim().toUpperCase());
+          }
+        });
+      });
+
       const courseMap = {};
       const allCourseCodes = new Set();
+      const examNamesByCode = {};
       filteredClasses.forEach(c => {
+        const examStr = String(c.examName || "");
         if (c.courseDetails && Array.isArray(c.courseDetails)) {
           c.courseDetails.forEach(cd => {
             if (cd.courseCode) {
               const code = cd.courseCode.trim();
               courseMap[code] = cd.courseName ? cd.courseName.trim() : code;
               allCourseCodes.add(code);
+              if (!examNamesByCode[code]) examNamesByCode[code] = [];
+              examNamesByCode[code].push(examStr);
             }
           });
         }
         if (c.subjects && Array.isArray(c.subjects)) {
           c.subjects.forEach(s => {
-            if (s && s.trim()) allCourseCodes.add(s.trim());
+            if (s && s.trim()) {
+              const code = s.trim();
+              allCourseCodes.add(code);
+              if (!examNamesByCode[code]) examNamesByCode[code] = [];
+              examNamesByCode[code].push(examStr);
+            }
           });
         }
       });
 
       const distinctSubjectCodes = [...allCourseCodes];
-      const subjectsWithNames = distinctSubjectCodes.map(code => ({
-        code,
-        name: courseMap[code] || "Theory Subject"
-      })).sort((a, b) => a.code.localeCompare(b.code));
+      const subjectsWithNames = distinctSubjectCodes.map(code => {
+        const name = courseMap[code] || "Theory Subject";
+        const exList = examNamesByCode[code] || [];
+        const isLab =
+          masterLabCodes.has(code.toUpperCase()) ||
+          /\blab\b|laboratory|practical/i.test(name) ||
+          /\blab\b/i.test(code) ||
+          (exList.length > 0 && exList.every(ex => /lab|practical|observation/i.test(ex)));
+        return { code, name, isLab };
+      }).sort((a, b) => a.code.localeCompare(b.code));
 
       setSubjects(subjectsWithNames);
 
       let targetSubj = formData.selectedSubject;
+      let nextIsCustom = formData.isCustomSubject;
       if (subjectsWithNames.length > 0) {
         if (!targetSubj || !subjectsWithNames.some(s => s.code === targetSubj)) {
           targetSubj = subjectsWithNames[0].code;
+          nextIsCustom = false;
           setFormData(prev => ({ ...prev, selectedSubject: targetSubj, isCustomSubject: false }));
         }
       } else {
         targetSubj = "CUSTOM";
+        nextIsCustom = true;
         setFormData(prev => ({ ...prev, selectedSubject: "CUSTOM", isCustomSubject: true }));
       }
 
-      const targetSubjName = subjectsWithNames.find(s => s.code === targetSubj)?.name || "";
-      calculateStudentsMarks(filteredClasses, matchedRoster, targetSubj, activeTemplate, targetSubjName);
+      const targetSubjObj = subjectsWithNames.find(s => s.code === targetSubj);
+      const targetSubjName = targetSubjObj?.name || "";
+      const detectedCat = nextIsCustom
+        ? (/\blab\b|laboratory|practical/i.test(formData.customSubject || "") ? "Lab" : "Theory")
+        : (targetSubjObj?.isLab ? "Lab" : "Theory");
+
+      selectedCategoryRef.current = detectedCat;
+      setSelectedCategory(detectedCat);
+      const resolvedTpl = resolveTemplateForRegulationAndCategory(allTemplatesRef.current, formData.regulation, detectedCat) || activeTemplate;
+      if (resolvedTpl && resolvedTpl._id !== activeTemplate?._id) {
+        setActiveTemplate(resolvedTpl);
+      }
+
+      calculateStudentsMarks(filteredClasses, matchedRoster, targetSubj, resolvedTpl, targetSubjName);
     } catch (e) {
       console.error("Error loading class data:", e);
     } finally {
@@ -897,7 +997,7 @@ export default function InternalMarkSheet() {
     return visibleColumns.some(c => c.maxMark || (c.heading && c.heading.includes("(") && c.heading.includes(")")));
   }, [visibleColumns]);
 
-  // Multi-page chunking: Balanced 2 Pages (Fit ONLY actual enrolled students cleanly into max 2 pages)
+  // Multi-page chunking: Balanced 2 Pages (Fit ONLY actual enrolled students cleanly into max 2 pages; Portrait fits more rows vertically)
   const studentPages = useMemo(() => {
     const baseList = [...studentsData];
 
@@ -907,12 +1007,14 @@ export default function InternalMarkSheet() {
 
     const mode = formData.pageSplitMode || "2pages";
 
-    // Balanced 2 Pages: Small classes (<= 24) fit cleanly on 1 page; larger classes balance header space so Page 1 won't spill 1 row onto extra page
+    // Balanced 2 Pages: Portrait A4 fits up to 36 rows on 1 page cleanly; Landscape fits up to 24 rows on 1 page cleanly
     if (mode === "2pages") {
-      if (baseList.length <= 24) {
+      const singlePageCap = isPortraitMode ? 36 : 24;
+      if (baseList.length <= singlePageCap) {
         return [baseList];
       }
-      const splitIdx = baseList.length > 40
+      const splitThreshold = isPortraitMode ? 58 : 40;
+      const splitIdx = baseList.length > splitThreshold
         ? Math.max(1, Math.floor((baseList.length - 3) / 2))
         : Math.ceil(baseList.length / 2);
       return [
@@ -933,28 +1035,41 @@ export default function InternalMarkSheet() {
       pages.push(baseList.slice(i, i + chunkSize));
     }
     return pages;
-  }, [studentsData, formData.pageSplitMode]);
+  }, [studentsData, formData.pageSplitMode, isPortraitMode]);
 
-  // Dynamically scale row height & font in print so Header + Table + Page Number ALWAYS fit cleanly on 1 sheet per page (2 pages total)
+  // Dynamically scale row height & font in print so Header + Table + Signatures + Page Number fit cleanly in both Landscape and Portrait A4
   const printMetrics = useMemo(() => {
     const maxRows = Math.max(1, ...studentPages.map(p => p.length));
+    if (isPortraitMode) {
+      if (maxRows <= 34) return { rowHeight: 19, fontSize: 9.5, paddingY: 1 };
+      if (maxRows <= 40) return { rowHeight: 17, fontSize: 9, paddingY: 0 };
+      if (maxRows <= 46) return { rowHeight: 15, fontSize: 8.5, paddingY: 0 };
+      const fitted = Math.max(11, Math.floor(780 / maxRows));
+      return { rowHeight: fitted, fontSize: Math.max(7.5, fitted - 3), paddingY: 0 };
+    }
     if (maxRows <= 25) return { rowHeight: 17, fontSize: 9.5, paddingY: 1 };
     if (maxRows <= 30) return { rowHeight: 15, fontSize: 9, paddingY: 0 };
     if (maxRows <= 34) return { rowHeight: 14, fontSize: 8.5, paddingY: 0 };
     if (maxRows <= 38) return { rowHeight: 13, fontSize: 8, paddingY: 0 };
     const fitted = Math.max(10, Math.floor(490 / maxRows));
     return { rowHeight: fitted, fontSize: Math.max(7.5, fitted - 4), paddingY: 0 };
-  }, [studentPages]);
+  }, [studentPages, isPortraitMode]);
 
-  // Auto-fit student Name column width to longest enrolled name while keeping mark columns roomy in Landscape
+  // Auto-fit student Name column width to longest enrolled name while keeping mark columns roomy within Portrait (~650px) or Landscape (~920px) budget
   const resolvedNameColWidth = useMemo(() => {
     if (formData.nameColWidth !== "auto") return formData.nameColWidth;
     const maxChars = studentsData.reduce((mx, st) => Math.max(mx, (st.name || "").length), 14);
-    const reservedForMarks = Math.max(240, visibleColumns.length * 40);
-    const maxAllowedForName = Math.max(145, Math.min(270, 920 - reservedForMarks));
-    const desired = Math.max(145, Math.ceil(maxChars * 6.8 + 16));
+    const totalBudget = isPortraitMode ? 650 : 920;
+    const minColSpace = isPortraitMode ? 36 : 40;
+    const reservedForMarks = Math.max(isPortraitMode ? 185 : 240, visibleColumns.length * minColSpace);
+    const maxAllowedForName = isPortraitMode
+      ? Math.max(115, Math.min(200, totalBudget - reservedForMarks))
+      : Math.max(145, Math.min(270, totalBudget - reservedForMarks));
+    const charFactor = isPortraitMode ? 6.0 : 6.8;
+    const minName = isPortraitMode ? 115 : 145;
+    const desired = Math.max(minName, Math.ceil(maxChars * charFactor + 14));
     return `${Math.min(maxAllowedForName, desired)}px`;
-  }, [formData.nameColWidth, studentsData, visibleColumns.length]);
+  }, [formData.nameColWidth, studentsData, visibleColumns.length, isPortraitMode]);
 
   // Identifies the final formula/total column for UI highlight & summary KPIs (no functional change)
   const finalSummaryColumn = useMemo(() => {
@@ -1110,7 +1225,7 @@ export default function InternalMarkSheet() {
         wch: Math.max(8, String(c.title || "").length + 3, String(c.maxMark || "").length + 3)
       }))
     ];
-    ws["!pageSetup"] = { orientation: "landscape", paperSize: 9, fitToWidth: 1, fitToHeight: 2 };
+    ws["!pageSetup"] = { orientation: isPortraitMode ? "portrait" : "landscape", paperSize: 9, fitToWidth: 1, fitToHeight: 2 };
     return ws;
   };
 
@@ -1270,7 +1385,7 @@ export default function InternalMarkSheet() {
                 </span>
               </div>
               <p style={{ color: "#64748b", margin: "2px 0 0 0", fontSize: "0.85rem" }}>
-                Admin-configured mark sheet with automatic calculations, Excel export, and A4 Landscape print.
+                Admin-configured mark sheet with automatic calculations, Excel export, and A4 {isPortraitMode ? "Portrait" : "Landscape"} print.
               </p>
             </div>
           </div>
@@ -1527,73 +1642,117 @@ export default function InternalMarkSheet() {
               </div>
             </div>
 
-            {/* Template Badge */}
-            {activeTemplate ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            {/* Template Badge + Theory/Lab Mode Switcher */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              <div style={{
+                display: "inline-flex",
+                background: "#f1f5f9",
+                borderRadius: "99px",
+                padding: "3px",
+                border: "1px solid #cbd5e1"
+              }}>
+                <button
+                  type="button"
+                  onClick={() => applyCategoryAndResolveTemplate("Theory")}
+                  style={{
+                    border: "none",
+                    borderRadius: "99px",
+                    padding: "4px 12px",
+                    fontSize: "0.78rem",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    background: selectedCategory === "Theory" ? "#4f46e5" : "transparent",
+                    color: selectedCategory === "Theory" ? "#ffffff" : "#475569"
+                  }}
+                >
+                  📘 Theory
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyCategoryAndResolveTemplate("Lab")}
+                  style={{
+                    border: "none",
+                    borderRadius: "99px",
+                    padding: "4px 12px",
+                    fontSize: "0.78rem",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                    background: selectedCategory === "Lab" ? "#db2777" : "transparent",
+                    color: selectedCategory === "Lab" ? "#ffffff" : "#475569"
+                  }}
+                >
+                  🧪 Lab
+                </button>
+              </div>
+
+              {activeTemplate ? (
+                <>
+                  <div style={{ 
+                    background: "linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.15))", 
+                    border: "1px solid rgba(34, 197, 94, 0.3)", 
+                    padding: "6px 14px", 
+                    borderRadius: "30px", 
+                    display: "flex", 
+                    alignItems: "center", 
+                    gap: "8px" 
+                  }}>
+                    <CheckCircle2 size={16} color="#16a34a" />
+                    <span style={{ fontWeight: "700", color: "#15803d", fontSize: "0.85rem" }}>
+                      {activeTemplate.templateName} ({currentColumns.length} cols • {isPortraitMode ? "Portrait" : "Landscape"})
+                    </span>
+                  </div>
+                  {internalPassMark > 0 && (
+                    <div style={{
+                      background: "rgba(239, 68, 68, 0.1)",
+                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                      padding: "6px 12px",
+                      borderRadius: "30px",
+                      fontSize: "0.8rem",
+                      fontWeight: "700",
+                      color: "#dc2626"
+                    }}>
+                      Pass Mark: {internalPassMark}
+                    </div>
+                  )}
+                </>
+              ) : (
                 <div style={{ 
-                  background: "linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.15))", 
-                  border: "1px solid rgba(34, 197, 94, 0.3)", 
+                  background: "rgba(234, 179, 8, 0.1)", 
+                  border: "1px solid rgba(234, 179, 8, 0.3)", 
                   padding: "6px 14px", 
                   borderRadius: "30px", 
                   display: "flex", 
                   alignItems: "center", 
                   gap: "8px" 
                 }}>
-                  <CheckCircle2 size={16} color="#16a34a" />
-                  <span style={{ fontWeight: "700", color: "#15803d", fontSize: "0.85rem" }}>
-                    Active Template: {activeTemplate.templateName} ({currentColumns.length} columns)
+                  <AlertCircle size={16} color="#d97706" />
+                  <span style={{ fontWeight: "600", color: "#b45309", fontSize: "0.85rem" }}>
+                    Standard MEC Format Active ({currentColumns.length} columns)
                   </span>
                 </div>
-                {internalPassMark > 0 && (
-                  <div style={{
-                    background: "rgba(239, 68, 68, 0.1)",
-                    border: "1px solid rgba(239, 68, 68, 0.3)",
-                    padding: "6px 12px",
-                    borderRadius: "30px",
-                    fontSize: "0.8rem",
-                    fontWeight: "700",
-                    color: "#dc2626"
-                  }}>
-                    Pass Mark: {internalPassMark}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={fetchTemplatesAndRegulations}
-                  title="Sync latest template settings from Admin Panel"
-                  style={{
-                    background: "#ffffff",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "30px",
-                    padding: "5px 10px",
-                    fontSize: "0.75rem",
-                    fontWeight: "700",
-                    color: "#475569",
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px"
-                  }}
-                >
-                  <RefreshCw size={12} /> Sync
-                </button>
-              </div>
-            ) : (
-              <div style={{ 
-                background: "rgba(234, 179, 8, 0.1)", 
-                border: "1px solid rgba(234, 179, 8, 0.3)", 
-                padding: "6px 14px", 
-                borderRadius: "30px", 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "8px" 
-              }}>
-                <AlertCircle size={16} color="#d97706" />
-                <span style={{ fontWeight: "600", color: "#b45309", fontSize: "0.85rem" }}>
-                  Standard MEC Format Active ({currentColumns.length} columns)
-                </span>
-              </div>
-            )}
+              )}
+
+              <button
+                type="button"
+                onClick={fetchTemplatesAndRegulations}
+                title="Sync latest template settings from Admin Panel"
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "30px",
+                  padding: "5px 10px",
+                  fontSize: "0.75rem",
+                  fontWeight: "700",
+                  color: "#475569",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px"
+                }}
+              >
+                <RefreshCw size={12} /> Sync
+              </button>
+            </div>
           </div>
 
           {/* Primary Parameter Selectors Grid */}
@@ -1682,14 +1841,7 @@ export default function InternalMarkSheet() {
               <select 
                 className="input-field" 
                 value={formData.isCustomSubject ? "CUSTOM" : formData.selectedSubject} 
-                onChange={e => {
-                  const val = e.target.value;
-                  if (val === "CUSTOM") {
-                    setFormData(prev => ({ ...prev, selectedSubject: "CUSTOM", isCustomSubject: true }));
-                  } else {
-                    setFormData(prev => ({ ...prev, selectedSubject: val, isCustomSubject: false, customSubject: "" }));
-                  }
-                }}
+                onChange={e => handleTargetSubjectChange(e.target.value)}
                 style={{ 
                   border: "2px solid rgba(99, 102, 241, 0.3)", 
                   background: "#ffffff", 
@@ -1697,7 +1849,7 @@ export default function InternalMarkSheet() {
                   borderRadius: "10px" 
                 }}
               >
-                {subjects.map(s => <option key={s.code} value={s.code}>{s.code} - {s.name}</option>)}
+                {subjects.map(s => <option key={s.code} value={s.code}>{s.code} - {s.name}{s.isLab ? " (Lab)" : ""}</option>)}
                 <option value="CUSTOM">+ Type Custom Subject Code & Name</option>
               </select>
             </div>
@@ -1712,7 +1864,7 @@ export default function InternalMarkSheet() {
                   className="input-field" 
                   placeholder="E.g. 21CS401 - Operating Systems"
                   value={formData.customSubject}
-                  onChange={e => setFormData({ ...formData, customSubject: e.target.value })}
+                  onChange={e => handleCustomSubjectChange(e.target.value)}
                   style={{ border: "2px solid var(--primary)", background: "#ffffff", borderRadius: "10px" }}
                   autoFocus
                 />
@@ -1725,7 +1877,7 @@ export default function InternalMarkSheet() {
             <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.85rem", color: "#64748b", flexWrap: "wrap" }}>
               <span>Loaded Students: <strong style={{ color: "var(--primary)" }}>{studentsData.length}</strong></span>
               <span>•</span>
-              <span>Print Pages: <strong style={{ color: "#16a34a" }}>{formData.pageSplitMode === "2pages" ? `Fit All in ${studentPages.length} Page${studentPages.length > 1 ? "s" : ""} (Landscape)` : `${formData.pageSplitMode} Mode`}</strong></span>
+              <span>Print Pages: <strong style={{ color: "#16a34a" }}>{formData.pageSplitMode === "2pages" ? `Fit All in ${studentPages.length} Page${studentPages.length > 1 ? "s" : ""} (${isPortraitMode ? "Portrait" : "Landscape"})` : `${formData.pageSplitMode} Mode`}</strong></span>
               <span>•</span>
               <span>Table Layout: <strong style={{ color: "#6366f1" }}>{formData.tableWidthMode === "autoFit" ? "Auto-Fit Content (Snug)" : "Full Width (100%)"}</strong></span>
               <span>•</span>
@@ -1747,7 +1899,7 @@ export default function InternalMarkSheet() {
                 {/* Print Page Layout */}
                 <div>
                   <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
-                    Print Page Layout (Landscape)
+                    Print Page Layout ({isPortraitMode ? "Portrait" : "Landscape"})
                   </label>
                   <select 
                     className="input-field" 
@@ -1924,7 +2076,7 @@ export default function InternalMarkSheet() {
                   </div>
                 ) : (
                   <div style={{ fontSize: "1.1rem", fontWeight: "800", color: "#0f172a", marginTop: "4px" }}>
-                    {studentPages.length} Landscape {studentPages.length > 1 ? "Pages" : "Page"}
+                    {studentPages.length} {isPortraitMode ? "Portrait" : "Landscape"} {studentPages.length > 1 ? "Pages" : "Page"}
                   </div>
                 )}
               </div>
@@ -1942,7 +2094,7 @@ export default function InternalMarkSheet() {
           Loading student marks for Regulation {formData.regulation}...
         </div>
       )}
-      {/* SCREEN MODERN UI + OFFICIAL PRINT STYLES (A4 LANDSCAPE, NO OUTER PAGE BORDER) */}
+      {/* SCREEN MODERN UI + OFFICIAL PRINT STYLES (DYNAMIC A4 LANDSCAPE / PORTRAIT) */}
       <style>{`
         .internal-mark-root .input-field {
           width: 100%;
@@ -1977,7 +2129,7 @@ export default function InternalMarkSheet() {
             background: #ffffff;
             color: #0f172a;
             width: 100%;
-            max-width: 1420px;
+            max-width: ${isPortraitMode ? "820px" : "1420px"};
             border: 1px solid #e2e8f0;
             padding: 24px 28px;
             box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.1);
@@ -2101,8 +2253,8 @@ export default function InternalMarkSheet() {
 
         @media print {
           @page {
-            size: A4 landscape;
-            margin: 5mm 7mm 11mm 7mm;
+            size: ${isPortraitMode ? "A4 portrait" : "A4 landscape"};
+            margin: ${isPortraitMode ? "6mm 7mm 11mm 7mm" : "5mm 7mm 11mm 7mm"};
             @bottom-center {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 10px;
@@ -2181,13 +2333,13 @@ export default function InternalMarkSheet() {
             padding: 0 !important;
           }
           .print-sheet img.header-banner-img {
-            max-height: 40px !important;
+            max-height: ${isPortraitMode ? "48px" : "40px"} !important;
           }
           .print-sheet img.mec-crest-logo {
-            height: 36px !important;
+            height: ${isPortraitMode ? "40px" : "36px"} !important;
           }
           .print-sheet h2 {
-            font-size: 13.5pt !important;
+            font-size: ${isPortraitMode ? "12.5pt" : "13.5pt"} !important;
           }
           .print-bottom-block {
             margin-top: 6px !important;
@@ -2199,12 +2351,12 @@ export default function InternalMarkSheet() {
           }
           .print-metadata-row {
             margin: 2px 0 2px 0 !important;
-            font-size: 10px !important;
+            font-size: ${isPortraitMode ? "9px" : "10px"} !important;
           }
           .print-signatures {
-            padding: 8px 20px 2px 20px !important;
+            padding: ${isPortraitMode ? "10px 8px 2px 8px" : "8px 20px 2px 20px"} !important;
             margin-bottom: 2px !important;
-            font-size: 10px !important;
+            font-size: ${isPortraitMode ? "9.5px" : "10px"} !important;
           }
           .mec-official-table tbody tr,
           .mec-official-table tbody tr:nth-child(even),
@@ -2238,13 +2390,13 @@ export default function InternalMarkSheet() {
           .mec-official-table thead tr:first-child th,
           .mec-official-table thead tr.max-mark-row th {
             font-family: "Times New Roman", Times, serif !important;
-            font-size: 9.5px !important;
+            font-size: ${isPortraitMode ? "8.5px" : "9.5px"} !important;
           }
           .mec-official-table th.col-sno, .mec-official-table td.col-sno {
-            width: 30px !important;
+            width: ${isPortraitMode ? "26px" : "30px"} !important;
           }
           .mec-official-table th.col-reg, .mec-official-table td.col-reg {
-            width: 85px !important;
+            width: ${isPortraitMode ? "72px" : "85px"} !important;
           }
           .mec-official-table th.col-name, .mec-official-table td.col-name {
             padding-left: 4px !important;
@@ -2361,7 +2513,7 @@ export default function InternalMarkSheet() {
                     <span style={{ fontSize: "0.78rem", fontWeight: "600", color: isEditingMarks ? "#d97706" : "#64748b" }}>
                       {isEditingMarks
                         ? "Inline Editing Mode • Changes recalculate automatically"
-                        : "Screen Preview • Prints in Official A4 Landscape Format"}
+                        : `Screen Preview • Prints in Official A4 ${isPortraitMode ? "Portrait" : "Landscape"} Format`}
                     </span>
                   </div>
 
