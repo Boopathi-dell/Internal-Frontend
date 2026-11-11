@@ -8,6 +8,7 @@ import InternalMarkTemplateSetup from "../components/InternalMarkTemplateSetup";
 import TimetableManager from "../components/TimetableManager";
 import SubjectClearModal from "../components/SubjectClearModal";
 import { getSubjectLabel } from "../utils/subjectClearUtils";
+import { ADMIN_PANEL_TABS, RESULT_HUB_PAGES } from "../constants/navigationConfig";
 
 export default function AdminPanel() {
   const role = sessionStorage.getItem("role");
@@ -32,38 +33,9 @@ export default function AdminPanel() {
   const [selectedAdminTabs, setSelectedAdminTabs] = useState([]);
   const [selectedDashboardTabs, setSelectedDashboardTabs] = useState([]);
 
-  const AVAILABLE_ADMIN_TABS = [
-    { id: "classes", label: "Class Setup" },
-    { id: "roster", label: "Roster, Subjects & Staff" },
-    { id: "access", label: "Mark Entry Access" },
-    { id: "reports", label: "Mark Entry Reports" },
-    { id: "users", label: "User Access" },
-    { id: "activity", label: "Activity Logs" },
-    { id: "recycle", label: "Recycle Bin" },
-    { id: "eseList", label: "Uploaded Classes" },
-    { id: "approvals", label: "Result Approvals" },
-    { id: "extensions", label: "Extension Requests" },
-    { id: "advisors", label: "Class Advisors" },
-    { id: "announcements", label: "Notices" },
-    { id: "security", label: "Security" },
-    { id: "lettertemplate", label: "Letter Template" },
-    { id: "reportsettings", label: "Report Settings" },
-    { id: "seating", label: "Seating" },
-    { id: "attendance-tracker", label: "Attendance Tracker" },
-    { id: "internal-marks", label: "Internal Mark Templates" },
-    { id: "timetable", label: "Time Table & Workload" }
-  ];
+  const AVAILABLE_ADMIN_TABS = ADMIN_PANEL_TABS;
 
-  const AVAILABLE_DASHBOARD_PAGES = [
-    { id: "daily-attendance", label: "Daily Attendance" },
-    { id: "attendance", label: "Attendance Entry" },
-    { id: "entry", label: "Mark Statement" },
-    { id: "analysis", label: "Class Analysis" },
-    { id: "department-analysis", label: "Dept. Analysis" },
-    { id: "rank", label: "Rank List" },
-    { id: "parent-letters", label: "Parent Letters" },
-    { id: "requests", label: "Mark Requests" },
-  ];
+  const AVAILABLE_DASHBOARD_PAGES = RESULT_HUB_PAGES;
 
   const [classes, setClasses] = useState([]);
   const [rosters, setRosters] = useState([]);

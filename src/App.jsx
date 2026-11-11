@@ -23,6 +23,7 @@ import API from "./api";
 import { LayoutDashboard, Settings, FileEdit, BarChart, Trophy, LogOut, MessageSquareWarning, Menu, X, Bell, Calendar } from "lucide-react";
 import './App.css';
 import ErrorBoundary from "./ErrorBoundary";
+import { RESULT_HUB_PAGES } from "./constants/navigationConfig";
 
 const blinkAnimation = `
 @keyframes pulseBlink {
@@ -329,61 +330,42 @@ function App() {
   const isPrintAdmin = authState === "printAdmin";
   const isStudent = authState === "student";
 
+  const renderNavIcon = (iconKey) => {
+    switch (iconKey) {
+      case "calendar": return <Calendar size={20} />;
+      case "barChart": return <BarChart size={20} />;
+      case "trophy": return <Trophy size={20} />;
+      case "letter": return <span style={{ fontSize: "18px" }}>📬</span>;
+      case "requests": return <MessageSquareWarning size={20} />;
+      default: return <FileEdit size={20} />;
+    }
+  };
+
+  const toNavItem = (page) => ({
+    id: page.id,
+    name: page.label,
+    path: page.path,
+    icon: renderNavIcon(page.iconKey),
+    ...(page.hasPendingBadge && pendingRequestsCount > 0 ? { badge: pendingRequestsCount } : {})
+  });
+
   const adminNavItems = [
     { name: "Dashboard", path: "/", icon: <LayoutDashboard size={20} /> },
     { name: "Admin Panel", path: "/admin", icon: <Settings size={20} /> },
-    { name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
-    { name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
-    { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
-    { name: "Internal Marks", path: "/internal-mark", icon: <FileEdit size={20} /> },
-    { name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
-    { name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
-    { name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
-    { name: "Parent Letters", path: "/parent-letters", icon: <span style={{ fontSize: "18px" }}>📬</span> },
-    { name: "Time Table", path: "/timetable", icon: <Calendar size={20} /> },
-    {
-      name: "Mark Requests",
-      path: "/requests",
-      icon: <MessageSquareWarning size={20} />,
-      badge: pendingRequestsCount > 0 ? pendingRequestsCount : null
-    },
+    ...RESULT_HUB_PAGES.map(toNavItem)
   ];
 
-  const printAdminNavItems = [
-    { name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
-    { name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
-    { name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
-    { name: "Internal Marks", path: "/internal-mark", icon: <FileEdit size={20} /> },
-    { name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
-    { name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
-    { name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
-    { name: "Parent Letters", path: "/parent-letters", icon: <span style={{ fontSize: "18px" }}>📬</span> },
-    {
-      name: "Mark Requests",
-      path: "/requests",
-      icon: <MessageSquareWarning size={20} />,
-      badge: pendingRequestsCount > 0 ? pendingRequestsCount : null
-    },
-  ];
+  const printAdminNavItems = RESULT_HUB_PAGES
+    .filter(p => p.showInPrintAdmin !== false)
+    .map(toNavItem);
 
   // Default pages always visible to all faculty
   const userNavItems = [
     { name: "Dashboard", path: "/", icon: <LayoutDashboard size={20} /> },
   ];
 
-  // Extra pages the admin can allocate
-  const ALLOCATABLE_DASHBOARD_PAGES = [
-    { id: "daily-attendance", name: "Daily Attendance", path: "/daily-attendance", icon: <Calendar size={20} /> },
-    { id: "attendance", name: "Attendance Entry", path: "/attendance", icon: <FileEdit size={20} /> },
-    { id: "entry", name: "Mark Statement", path: "/entry", icon: <FileEdit size={20} /> },
-    { id: "internal-mark", name: "Internal Marks", path: "/internal-mark", icon: <FileEdit size={20} /> },
-    { id: "analysis", name: "Class Analysis", path: "/analysis", icon: <BarChart size={20} /> },
-    { id: "department-analysis", name: "Dept. Analysis", path: "/department-analysis", icon: <BarChart size={20} /> },
-    { id: "rank", name: "Rank List", path: "/rank", icon: <Trophy size={20} /> },
-    { id: "parent-letters", name: "Parent Letters", path: "/parent-letters", icon: <span style={{ fontSize: "18px" }}>📬</span> },
-    { id: "timetable", name: "Time Table", path: "/timetable", icon: <Calendar size={20} /> },
-    { id: "requests", name: "Mark Requests", path: "/requests", icon: <MessageSquareWarning size={20} />, badge: pendingRequestsCount > 0 ? pendingRequestsCount : null },
-  ];
+  // Extra pages the admin can allocate (derived automatically from RESULT_HUB_PAGES)
+  const ALLOCATABLE_DASHBOARD_PAGES = RESULT_HUB_PAGES.map(toNavItem);
 
   try {
     const dashboardTabs = JSON.parse(sessionStorage.getItem("dashboardTabs") || "[]");
@@ -508,7 +490,6 @@ function App() {
               {(isAdmin || isPrintAdmin) && <Route path="/requests" element={<CorrectionRequests />} />}
               <Route path="/timetable" element={<TimetablePage />} />
               {/* Faculty (user) routes for allocated dashboard pages */}
-              {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/internal-mark" element={<InternalMarkSheet />} />}
               {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/analysis" element={<ResultAnalysis />} />}
               {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/department-analysis" element={<DepartmentAnalysis />} />}
               {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/rank" element={<RankList />} />}
