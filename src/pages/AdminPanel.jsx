@@ -146,6 +146,8 @@ export default function AdminPanel() {
   const [alsoCreateSections, setAlsoCreateSections] = useState([]);
   const [cloneFacultyMaps, setCloneFacultyMaps] = useState({});
   const [cloneLoading, setCloneLoading] = useState(false);
+  const [savingClass, setSavingClass] = useState(false);
+  const [savingRoster, setSavingRoster] = useState(false);
   const [cloneStaffList, setCloneStaffList] = useState([]);
   const [cloneTimetableAllocations, setCloneTimetableAllocations] = useState([]);
 
@@ -1563,6 +1565,8 @@ export default function AdminPanel() {
   };
 
   const handleSave = async () => {
+    if (savingClass) return;
+    setSavingClass(true);
     try {
       const trimmedExam = String(formData.examName || "").trim();
       const trimmedProg = String(formData.programme || "B.E").trim();
@@ -1658,6 +1662,8 @@ export default function AdminPanel() {
       alert(`Class saved successfully!${multiCloneSummary}`);
     } catch (err) {
       alert("Failed to save: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSavingClass(false);
     }
   };
 
@@ -1814,6 +1820,8 @@ export default function AdminPanel() {
   };
 
   const handleSaveRoster = async () => {
+    if (savingRoster) return;
+    setSavingRoster(true);
     try {
       const cohortName = `${formData.programme}-${formData.department} - ${formData.year}/${formData.semester}/${formData.section}`;
       const payload = {
@@ -1830,7 +1838,9 @@ export default function AdminPanel() {
       loadRosters();
       loadClasses();
     } catch (err) {
-      alert("Failed to save roster: " + err.message);
+      alert("Failed to save roster: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSavingRoster(false);
     }
   };  const handleDeleteSelectedRosters = async () => {
     if (selectedRostersForDelete.length === 0) return;
@@ -3016,12 +3026,23 @@ export default function AdminPanel() {
             <div style={{ display: "flex", gap: "10px", marginTop: "1rem", flexWrap: "wrap" }}>
               <button 
                 className="btn btn-primary" 
-                style={{ flex: 1, minWidth: "220px", padding: "0.9rem 1.25rem", fontSize: "0.95rem", fontWeight: "600" }} 
+                style={{
+                  flex: 1,
+                  minWidth: "220px",
+                  padding: "0.9rem 1.25rem",
+                  fontSize: "0.95rem",
+                  fontWeight: "600",
+                  opacity: savingClass || cloneLoading ? 0.7 : 1,
+                  cursor: savingClass || cloneLoading ? "not-allowed" : "pointer"
+                }} 
                 onClick={handleSave}
+                disabled={savingClass || cloneLoading}
               >
-                {alsoCreateSections.length > 0
-                  ? `🚀 Save Class Setup (Sec ${formData.section} + ${alsoCreateSections.join(", ")})`
-                  : "🚀 Save Class Setup"}
+                {savingClass
+                  ? "⏳ Saving Class Setup..."
+                  : alsoCreateSections.length > 0
+                    ? `🚀 Save Class Setup (Sec ${formData.section} + ${alsoCreateSections.join(", ")})`
+                    : "🚀 Save Class Setup"}
               </button>
               <button 
                 type="button"
@@ -3034,7 +3055,8 @@ export default function AdminPanel() {
                   color: "#ffffff",
                   border: "none",
                   borderRadius: "10px",
-                  cursor: "pointer",
+                  cursor: savingClass || cloneLoading ? "not-allowed" : "pointer",
+                  opacity: savingClass || cloneLoading ? 0.7 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -3043,6 +3065,7 @@ export default function AdminPanel() {
                   transition: "all 0.2s ease"
                 }} 
                 onClick={openBulkCloneModal}
+                disabled={savingClass || cloneLoading}
                 title="Replicate this setup across any Exams (SEMINAR, MKC, CIA, ESE, etc.) and other Sections with custom faculty mapping"
               >
                 ⚡ Bulk Clone to Other Sections &amp; Exams
@@ -3243,8 +3266,22 @@ export default function AdminPanel() {
             </>
           )}
 
-          <button className="btn btn-secondary" style={{ width: "100%", marginTop: "2rem", padding: "1rem", background: "var(--primary)", color: "#fff", border: "none" }} onClick={handleSaveRoster}>
-            🚀 Save & Synchronize Roster
+          <button
+            className="btn btn-secondary"
+            style={{
+              width: "100%",
+              marginTop: "2rem",
+              padding: "1rem",
+              background: "var(--primary)",
+              color: "#fff",
+              border: "none",
+              opacity: savingRoster || savingClass ? 0.7 : 1,
+              cursor: savingRoster || savingClass ? "not-allowed" : "pointer"
+            }}
+            onClick={handleSaveRoster}
+            disabled={savingRoster || savingClass}
+          >
+            {savingRoster ? "⏳ Saving & Synchronizing Roster..." : "🚀 Save & Synchronize Roster"}
           </button>
 
           <div style={{ marginTop: "3rem", borderTop: "1px solid var(--border-color)", paddingTop: "2rem" }}>
