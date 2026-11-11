@@ -664,14 +664,14 @@ export default function InternalMarkSheet() {
     return pages;
   }, [studentsData, formData.pageSplitMode, formData.padTo60, currentColumns]);
 
-  // Dynamically scale row height & font in print so all students strictly fit within max 2 A4 Landscape pages
+  // Dynamically scale row height & font in print so Header + Table + Page Number ALWAYS fit cleanly on 1 sheet per page (2 pages total)
   const printMetrics = useMemo(() => {
     const maxRows = Math.max(1, ...studentPages.map(p => p.length));
-    if (maxRows <= 25) return { rowHeight: 20, fontSize: 10, paddingY: 2 };
-    if (maxRows <= 30) return { rowHeight: 17, fontSize: 9.5, paddingY: 1 };
-    if (maxRows <= 34) return { rowHeight: 15, fontSize: 9, paddingY: 1 };
-    if (maxRows <= 38) return { rowHeight: 14, fontSize: 8.5, paddingY: 0 };
-    const fitted = Math.max(11, Math.floor(540 / maxRows));
+    if (maxRows <= 25) return { rowHeight: 17, fontSize: 9.5, paddingY: 1 };
+    if (maxRows <= 30) return { rowHeight: 15, fontSize: 9, paddingY: 0 };
+    if (maxRows <= 34) return { rowHeight: 14, fontSize: 8.5, paddingY: 0 };
+    if (maxRows <= 38) return { rowHeight: 13, fontSize: 8, paddingY: 0 };
+    const fitted = Math.max(10, Math.floor(490 / maxRows));
     return { rowHeight: fitted, fontSize: Math.max(7.5, fitted - 4), paddingY: 0 };
   }, [studentPages]);
 
@@ -1771,13 +1771,11 @@ export default function InternalMarkSheet() {
             padding: 0 !important;
           }
           .print-sheet {
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: space-between !important;
+            display: block !important;
             box-sizing: border-box !important;
             width: 100% !important;
             max-width: 100% !important;
-            min-height: 186mm !important;
+            min-height: 0 !important;
             height: auto !important;
             max-height: none !important;
             border: none !important;
@@ -1806,23 +1804,28 @@ export default function InternalMarkSheet() {
             padding: 0 !important;
           }
           .print-sheet img.header-banner-img {
-            max-height: 44px !important;
+            max-height: 40px !important;
           }
           .print-sheet img.mec-crest-logo {
-            height: 40px !important;
+            height: 36px !important;
+          }
+          .print-sheet h2 {
+            font-size: 13.5pt !important;
           }
           .print-bottom-block {
-            margin-top: 4px !important;
+            margin-top: 6px !important;
             margin-bottom: 0 !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
+            page-break-before: avoid !important;
+            break-before: avoid !important;
           }
           .print-metadata-row {
             margin: 2px 0 2px 0 !important;
-            font-size: 10.5px !important;
+            font-size: 10px !important;
           }
           .print-signatures {
-            padding-top: 10px !important;
+            padding: 8px 20px 2px 20px !important;
             margin-bottom: 2px !important;
             font-size: 10px !important;
           }
