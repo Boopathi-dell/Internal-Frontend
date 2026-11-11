@@ -600,7 +600,8 @@ export default function TimetableManager() {
                   : ((sub.type || "").toLowerCase().includes("lib") || (sub.type || "").toLowerCase().includes("sem") || (sub.type || "").toLowerCase().includes("mentor")
                     ? 1
                     : ((sub.type || "").toLowerCase().includes("lab") ? 3 : 4)),
-                facultyNames: existing ? (existing.facultyNames || []) : []
+                facultyNames: existing ? (existing.facultyNames || []) : [],
+                fixedSlots: existing ? (existing.fixedSlots || []) : []
               });
             }
           });
@@ -1374,7 +1375,13 @@ export default function TimetableManager() {
         if (res.data.classes && res.data.classes.length > 0) {
           setSelectedClassKey(res.data.classes[0].classKey);
         }
-        showAlert("⚡ Clash-Free Timetable Generated Successfully with Staff Rest Breaks & Monday Period 1 Advisors!");
+        const incomplete = (res.data.classSummary || []).filter(c => (c.unplacedSubjects && c.unplacedSubjects.length > 0));
+        if (incomplete.length > 0) {
+          const detailStr = incomplete.map(c => `${c.classKey} (${c.unplacedSubjects.map(u => `${u.subjectCode}: ${u.placed}/${u.required}`).join(", ")})`).join(" | ");
+          showAlert(`Timetable generated with constraint warnings: ${detailStr}`, "error");
+        } else {
+          showAlert("⚡ Clash-Free Timetable Generated Successfully with Full 35-Period Coverage!");
+        }
         fetchHistory();
         setActiveSubTab("schedule");
       }
