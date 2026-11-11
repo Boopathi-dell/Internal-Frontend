@@ -137,9 +137,13 @@ export default function AdminPanel() {
 
   // Bulk Clone Modal states (Option 1)
   const [showBulkCloneModal, setShowBulkCloneModal] = useState(false);
-  const [cloneTargetExamsForSource, setCloneTargetExamsForSource] = useState(["CIA - II", "CIA - III"]);
+  const [cloneIncludeSourceCurrentExam, setCloneIncludeSourceCurrentExam] = useState(true);
+  const [cloneTargetExamsForSource, setCloneTargetExamsForSource] = useState([]);
   const [cloneTargetSections, setCloneTargetSections] = useState(["B", "C"]);
   const [cloneSectionExams, setCloneSectionExams] = useState(["CIA - I", "CIA - II", "CIA - III"]);
+  const [cloneCustomExamText, setCloneCustomExamText] = useState("");
+  const [cloneCustomExamList, setCloneCustomExamList] = useState([]);
+  const [alsoCreateSections, setAlsoCreateSections] = useState([]);
   const [cloneFacultyMaps, setCloneFacultyMaps] = useState({});
   const [cloneLoading, setCloneLoading] = useState(false);
   const [cloneStaffList, setCloneStaffList] = useState([]);
@@ -285,23 +289,58 @@ export default function AdminPanel() {
     "Model Practical Exam",
     "Unit Test - I", "Unit Test - II", "Unit Test - III", "Unit Test - IV", "Unit Test - V",
     "CIA - I", "CIA - II", "CIA - III",
-    "MKC", "ESE"
+    "SEMINAR", "MKC", "ESE"
   ];
 
   const dynamicExamNameOptions = Array.from(new Set([
     ...examNameOptions,
-    ...(classes ? classes.map(c => c.examName) : [])
+    ...(classes ? classes.map(c => c.examName) : []),
+    ...cloneCustomExamList
   ])).filter(Boolean);
 
   const getDefaultMarks = (examName) => {
-    if (examName.toLowerCase().includes("unit test")) {
+    const lower = String(examName || "").toLowerCase();
+    if (lower.includes("unit test")) {
       return { passMark: "15", markPerSubject: "30" };
-    } else if (examName === "CIA - I" || examName === "CIA - II") {
+    } else if (lower === "cia - i" || lower === "cia - ii" || lower === "cia i" || lower === "cia ii") {
       return { passMark: "25", markPerSubject: "50" };
-    } else if (examName === "CIA - III" || examName === "ESE") {
+    } else if (lower === "mkc") {
+      return { passMark: "3", markPerSubject: "5" };
+    } else if (lower === "cia - iii" || lower === "cia iii" || lower === "ese" || lower.includes("model")) {
       return { passMark: "50", markPerSubject: "100" };
     }
     return { passMark: "50", markPerSubject: "100" };
+  };
+
+  // Detect all sections belonging to a cohort across Master Rosters, existing classes, and defaults A-E
+  const getSectionsForCohort = (yr, sem, dept, prog) => {
+    const rosterSecs = (rosters || [])
+      .filter(r => r.year === yr && String(r.semester) === String(sem) && (r.department || "CSE") === (dept || "CSE") && (!prog || !r.programme || r.programme === prog))
+      .map(r => r.section);
+    const classSecs = (classes || [])
+      .filter(c => c.yearSemSec && c.yearSemSec.startsWith(`${yr}/${sem}/`) && (c.department || "CSE") === (dept || "CSE") && (!prog || !c.programme || c.programme === prog))
+      .map(c => c.yearSemSec.split("/")[2]);
+    return Array.from(new Set([...rosterSecs, ...classSecs, "A", "B", "C", "D", "E"]))
+      .filter(Boolean)
+      .sort();
+  };
+
+  const getRosterCountForSection = (yr, sem, sec, dept, prog) => {
+    const r = (rosters || []).find(item =>
+      item.year === yr &&
+      String(item.semester) === String(sem) &&
+      item.section === sec &&
+      (item.department || "CSE") === (dept || "CSE") &&
+      (!prog || !item.programme || item.programme === prog)
+    );
+    if (r?.students?.length > 0) return r.students.length;
+    const peer = (classes || []).find(c =>
+      c.yearSemSec === `${yr}/${sem}/${sec}` &&
+      (c.department || "CSE") === (dept || "CSE") &&
+      (!prog || !c.programme || c.programme === prog) &&
+      c.students?.length > 0
+    );
+    return peer?.students?.length || 0;
   };
 
   useEffect(() => {
@@ -1095,6 +1134,7 @@ export default function AdminPanel() {
     const targetName = buildClassName(y, validatedSem, sec, exam, currentProg, currentDept);
     const found = list.find(c => c.className === targetName);
     if (found) {
+      setShowCustomExamInput(false);
       handleManualClassSelectLocal(found.className, list);
       setAutoLoadedFrom("");
     } else {
@@ -1102,6 +1142,7 @@ export default function AdminPanel() {
       const targetYSS = `${y}/${validatedSem}/${sec}`;
       const foundByYSS = list.find(c => c.yearSemSec === targetYSS && c.examName === exam && c.programme === currentProg && c.department === currentDept);
       if (foundByYSS) {
+        setShowCustomExamInput(false);
         handleManualClassSelectLocal(foundByYSS.className, list);
         setAutoLoadedFrom("");
       } else {
@@ -1275,6 +1316,7 @@ export default function AdminPanel() {
       setTargetPassPercentage(String(cls.targetPassPercentage || 85));
       setStudents(cls.students || []);
       setSelectedClassId(cls.className);
+      setShowCustomExamInput(false);
       setShowAllClassesDropdown(false);
       setAutoLoadedFrom("");
       setCourseAutoLoadedFrom(""); // Clear auto-load banners when explicitly selecting a saved configuration
@@ -1439,7 +1481,8 @@ export default function AdminPanel() {
           courseCode: (r[codeIdx] || "").toString().trim(),
           courseName: (r[nameIdx] || "").toString().trim(),
           shortName: shortIdx !== -1 ? (r[shortIdx] || "").toString().trim() : "",
-          facultyName: facultyIdx !== -1 ? (r[facultyIdx] || "").toString().trim() : ""
+          facultyName: facultyIdx !== -1 ? (r[facultyIdx] || "").toString().trim() : "",
+          credits: 3
         }));
       
       if (newCourses.length > 0) {
@@ -1465,22 +1508,93 @@ export default function AdminPanel() {
     setCourseDetails(newC);
   };
 
+  // Resolve smart faculty assignments per target section:
+  // Priority 1) Existing saved ClassData in same prog/dept/year/sem/sec
+  // Priority 2) Timetable Workload Allocation matching (department, year, semesterType, section)
+  // Priority 3) Optional fallback to source faculty (when fallbackToSource = true)
+  const buildSectionFacultyMap = (targetSec, targetExam, allocs, prog, dept, yr, sem, fallbackToSource = true) => {
+    const targetYSS = `${yr}/${sem}/${targetSec}`;
+    const sectionClasses = (classesRef?.current || classes || []).filter(c =>
+      c.yearSemSec === targetYSS &&
+      (c.department || "CSE") === (dept || "CSE") &&
+      (!prog || !c.programme || c.programme === prog) &&
+      c.courseDetails && c.courseDetails.length > 0
+    );
+    const exactExamClass = sectionClasses.find(c => c.examName === targetExam);
+    const anySectionClass = exactExamClass || sectionClasses[0];
+
+    const facMap = {};
+    courseDetails.forEach(cd => {
+      const codeUp = String(cd.courseCode || "").trim().toUpperCase();
+      let resolved = "";
+
+      if (anySectionClass) {
+        const peerCd = anySectionClass.courseDetails.find(pc =>
+          (codeUp && String(pc.courseCode || "").trim().toUpperCase() === codeUp) ||
+          (cd.courseName && pc.courseName && pc.courseName.trim().toLowerCase() === cd.courseName.trim().toLowerCase())
+        );
+        if (peerCd && peerCd.facultyName && peerCd.facultyName.trim()) {
+          resolved = peerCd.facultyName.trim();
+        }
+      }
+
+      if (!resolved && Array.isArray(allocs) && allocs.length > 0) {
+        const matchedAlloc = allocs.find(a =>
+          a.section === targetSec &&
+          String(a.year).toUpperCase() === String(yr).toUpperCase() &&
+          (
+            (codeUp && String(a.subjectCode || "").trim().toUpperCase() === codeUp) ||
+            (cd.shortName && a.shortName && a.shortName.trim().toLowerCase() === cd.shortName.trim().toLowerCase()) ||
+            (a.subjectName && cd.courseName && a.subjectName.trim().toLowerCase() === cd.courseName.trim().toLowerCase())
+          )
+        );
+        if (matchedAlloc && Array.isArray(matchedAlloc.facultyNames) && matchedAlloc.facultyNames.length > 0) {
+          resolved = matchedAlloc.facultyNames.filter(f => f && f !== "-").join(", ");
+        }
+      }
+
+      if (!resolved && fallbackToSource) {
+        resolved = String(cd.facultyName || "").trim();
+      }
+
+      facMap[cd.courseCode] = resolved;
+    });
+    return facMap;
+  };
+
   const handleSave = async () => {
     try {
-      const generatedName = buildClassName(formData.year, formData.semester, formData.section, formData.examName, formData.programme, formData.department);
+      const trimmedExam = String(formData.examName || "").trim();
+      const trimmedProg = String(formData.programme || "B.E").trim();
+      const trimmedDept = String(formData.department || "CSE").trim();
+      if (!trimmedExam) {
+        alert("Please select or enter an Evaluation Type / Exam Name.");
+        return;
+      }
+
+      const normalizedCourses = courseDetails.map(c => ({
+        ...c,
+        courseCode: String(c.courseCode || "").trim(),
+        courseName: String(c.courseName || "").trim(),
+        shortName: String(c.shortName || "").trim(),
+        facultyName: String(c.facultyName || "").trim(),
+        credits: c.credits !== undefined ? Number(c.credits) : 3
+      }));
+
+      const generatedName = buildClassName(formData.year, formData.semester, formData.section, trimmedExam, trimmedProg, trimmedDept);
       const payload = {
         className: generatedName,
-        subjects: courseDetails.map(c => c.courseCode || ""),
-        courseDetails,
+        subjects: normalizedCourses.map(c => c.courseCode || ""),
+        courseDetails: normalizedCourses,
         targetPassPercentage: Number(targetPassPercentage),
         passMark: Number(formData.passMark),
-        examName: formData.examName,
+        examName: trimmedExam,
         markPerSubject: Number(formData.markPerSubject),
         students,
         date: formData.date,
-        department: formData.department,
+        department: trimmedDept,
         yearSemSec: `${formData.year}/${formData.semester}/${formData.section}`,
-        programme: formData.programme,
+        programme: trimmedProg,
         allowEditing: formData.allowEditing,
         editingStartDate: formData.editingStartDate,
         editingEndDate: formData.editingEndDate,
@@ -1494,10 +1608,56 @@ export default function AdminPanel() {
       setSelectedClassId(generatedName);
       setAutoLoadedFrom("");
       setCourseAutoLoadedFrom("");
+
+      const extraSecs = alsoCreateSections.filter(s => s && s !== formData.section);
+      let multiCloneSummary = "";
+
+      if (extraSecs.length > 0) {
+        let allocs = [];
+        try {
+          const semesterType = ["I", "III", "V", "VII"].includes(formData.semester) ? "Odd" : "Even";
+          const allocRes = await API.get(`/api/timetable/allocation?department=${trimmedDept}&semesterType=${semesterType}`);
+          allocs = allocRes.data?.allocations || [];
+        } catch {
+          allocs = [];
+        }
+
+        const cloneRes = await API.post("/api/classes/bulk-clone", {
+          source: {
+            programme: trimmedProg,
+            department: trimmedDept,
+            year: formData.year,
+            semester: formData.semester,
+            section: formData.section,
+            examName: trimmedExam,
+            passMark: Number(formData.passMark),
+            markPerSubject: Number(formData.markPerSubject),
+            courseDetails: normalizedCourses,
+            students,
+            targetPassPercentage,
+            date: formData.date,
+            eseGradingSystem: formData.eseGradingSystem
+          },
+          includeSourceCurrentExam: false,
+          targetExamsForSource: [],
+          targetSections: extraSecs.map(sec => ({
+            section: sec,
+            exams: [trimmedExam],
+            facultyMap: buildSectionFacultyMap(sec, trimmedExam, allocs, trimmedProg, trimmedDept, formData.year, formData.semester, false),
+            preserveExistingSectionFaculty: true
+          }))
+        });
+        const details = (cloneRes.data?.results || [])
+          .map(r => `Sec ${r.section}: ${r.action} (${r.studentCount} students)`)
+          .join("\n• ");
+        multiCloneSummary = `\n\nAlso created/updated ${trimmedExam} for ${extraSecs.length} more section(s):\n• ${details}`;
+        setAlsoCreateSections([]);
+      }
+
       await loadClasses(false);
-      alert("Class saved successfully!");
+      alert(`Class saved successfully!${multiCloneSummary}`);
     } catch (err) {
-      alert("Failed to save: " + err.message);
+      alert("Failed to save: " + (err.response?.data?.error || err.message));
     }
   };
 
@@ -1511,76 +1671,56 @@ export default function AdminPanel() {
     const curYear = formData.year;
     const curSem = formData.semester;
     const curSec = formData.section;
-    const curDept = formData.department || "CSE";
-    const curExam = formData.examName;
+    const curDept = String(formData.department || "CSE").trim();
+    const curProg = String(formData.programme || "B.E").trim();
+    const curExam = String(formData.examName || "").trim();
+    if (!curExam) {
+      alert("Please select or enter an Evaluation Type / Exam Name first.");
+      return;
+    }
 
-    // Available other exams for source section
-    const allExams = ["CIA - I", "CIA - II", "CIA - III", "ESE"];
-    const otherExams = allExams.filter(ex => ex !== curExam);
-    setCloneTargetExamsForSource(otherExams.filter(ex => ex.startsWith("CIA")));
+    const semesterType = ["I", "III", "V", "VII"].includes(curSem) ? "Odd" : "Even";
+    setCloneIncludeSourceCurrentExam(true);
+    setCloneTargetExamsForSource([]);
 
-    // Detect sections from Master Roster for this cohort or fallback to ["A", "B", "C", "D", "E"]
-    const matchingRosterSections = (rosters || [])
-      .filter(r => r.year === curYear && String(r.semester) === String(curSem) && (r.department || "CSE") === curDept)
-      .map(r => r.section);
-    
-    const candidateSections = Array.from(new Set([...matchingRosterSections, "A", "B", "C", "D", "E"]))
-      .filter(s => s && s !== curSec)
-      .sort();
+    const candidateSections = getSectionsForCohort(curYear, curSem, curDept, curProg).filter(s => s !== curSec);
 
-    // Default target sections to whatever other sections exist in roster (or ["B", "C"])
-    const defaultSections = candidateSections.length > 0 ? candidateSections.slice(0, 3) : ["B", "C"];
+    // Default target sections to whatever sections already have Master Roster (or ["B", "C"])
+    const rosteredCandidates = candidateSections.filter(sec => getRosterCountForSection(curYear, curSem, sec, curDept, curProg) > 0);
+    const defaultSections = rosteredCandidates.length > 0 ? rosteredCandidates : candidateSections.slice(0, 2);
     setCloneTargetSections(defaultSections);
-    setCloneSectionExams(["CIA - I", "CIA - II", "CIA - III"]);
+    // Pre-select the active exam (e.g. SEMINAR, MKC, CIA - I, etc.) so user can clone it to other sections in 1 click!
+    setCloneSectionExams([curExam]);
+    setCloneCustomExamText("");
 
-    // Fetch staff and timetable allocations in parallel
+    // Fetch staff and semester-matched timetable allocations in parallel
+    let loadedAllocs = [];
     try {
       const [staffRes, allocRes] = await Promise.all([
         API.get(`/api/timetable/staff?department=${curDept}`),
-        API.get(`/api/timetable/allocation?department=${curDept}`)
+        API.get(`/api/timetable/allocation?department=${curDept}&semesterType=${semesterType}`)
       ]);
-      const staff = staffRes.data || [];
-      const allocs = allocRes.data?.allocations || [];
-      setCloneStaffList(staff);
-      setCloneTimetableAllocations(allocs);
-
-      // Pre-fill faculty maps for candidate sections from timetable allocations if available
-      const initialFacultyMaps = {};
-      candidateSections.forEach(sec => {
-        initialFacultyMaps[sec] = {};
-        courseDetails.forEach(cd => {
-          const matchedAlloc = allocs.find(a => 
-            a.section === sec &&
-            String(a.year).toUpperCase() === String(curYear).toUpperCase() &&
-            (a.subjectCode === cd.courseCode || a.shortName === cd.shortName || (a.subjectName && cd.courseName && a.subjectName.toLowerCase() === cd.courseName.toLowerCase()))
-          );
-          if (matchedAlloc && matchedAlloc.facultyNames && matchedAlloc.facultyNames.length > 0) {
-            initialFacultyMaps[sec][cd.courseCode] = matchedAlloc.facultyNames[0];
-          } else {
-            initialFacultyMaps[sec][cd.courseCode] = cd.facultyName || "";
-          }
-        });
-      });
-      setCloneFacultyMaps(initialFacultyMaps);
+      setCloneStaffList(staffRes.data || []);
+      loadedAllocs = allocRes.data?.allocations || [];
+      setCloneTimetableAllocations(loadedAllocs);
     } catch (err) {
       console.warn("Could not load timetable staff/allocations:", err);
-      // Fallback: copy current faculty to all sections
-      const initialFacultyMaps = {};
-      candidateSections.forEach(sec => {
-        initialFacultyMaps[sec] = {};
-        courseDetails.forEach(cd => {
-          initialFacultyMaps[sec][cd.courseCode] = cd.facultyName || "";
-        });
-      });
-      setCloneFacultyMaps(initialFacultyMaps);
+      loadedAllocs = [];
     }
+
+    // Priority: Existing saved section faculty -> Timetable allocation -> Source faculty
+    const initialFacultyMaps = {};
+    candidateSections.forEach(sec => {
+      initialFacultyMaps[sec] = buildSectionFacultyMap(sec, curExam, loadedAllocs, curProg, curDept, curYear, curSem, true);
+    });
+    setCloneFacultyMaps(initialFacultyMaps);
 
     setShowBulkCloneModal(true);
   };
 
   const handleAutoFillFromTimetable = () => {
     if (!cloneTimetableAllocations || cloneTimetableAllocations.length === 0) {
-      alert("No timetable allocations found for this department.");
+      alert("No timetable allocations found for this department & semester.");
       return;
     }
     const updated = { ...cloneFacultyMaps };
@@ -1594,7 +1734,7 @@ export default function AdminPanel() {
           (a.subjectCode === cd.courseCode || a.shortName === cd.shortName || (a.subjectName && cd.courseName && a.subjectName.toLowerCase() === cd.courseName.toLowerCase()))
         );
         if (matchedAlloc && matchedAlloc.facultyNames && matchedAlloc.facultyNames.length > 0) {
-          updated[sec][cd.courseCode] = matchedAlloc.facultyNames[0];
+          updated[sec][cd.courseCode] = matchedAlloc.facultyNames.filter(f => f && f !== "-").join(", ");
           matchCount++;
         }
       });
@@ -1626,22 +1766,30 @@ export default function AdminPanel() {
   };
 
   const handleExecuteBulkClone = async () => {
+    const trimmedExam = String(formData.examName || "").trim();
+    if (!trimmedExam) {
+      alert("Please select or enter an Evaluation Type / Exam Name first.");
+      return;
+    }
     setCloneLoading(true);
     try {
       const payload = {
         source: {
-          programme: formData.programme,
-          department: formData.department,
+          programme: String(formData.programme || "B.E").trim(),
+          department: String(formData.department || "CSE").trim(),
           year: formData.year,
           semester: formData.semester,
           section: formData.section,
-          examName: formData.examName,
+          examName: trimmedExam,
+          passMark: Number(formData.passMark),
+          markPerSubject: Number(formData.markPerSubject),
           courseDetails,
           students,
           targetPassPercentage: targetPassPercentage,
           date: formData.date,
           eseGradingSystem: formData.eseGradingSystem
         },
+        includeSourceCurrentExam: cloneIncludeSourceCurrentExam,
         targetExamsForSource: cloneTargetExamsForSource,
         targetSections: cloneTargetSections.map(sec => ({
           section: sec,
@@ -1651,7 +1799,10 @@ export default function AdminPanel() {
       };
 
       const res = await API.post("/api/classes/bulk-clone", payload);
-      alert(`🎉 ${res.data.message || "Bulk clone completed successfully!"}`);
+      const breakdown = (res.data.results || [])
+        .map(r => `${r.section} - ${r.examName}: ${r.action} (${r.studentCount} students)`)
+        .join("\n• ");
+      alert(`🎉 ${res.data.message || "Bulk clone completed successfully!"}${breakdown ? `\n\n• ${breakdown}` : ""}`);
       setShowBulkCloneModal(false);
       await loadClasses(false);
     } catch (err) {
@@ -2564,8 +2715,14 @@ export default function AdminPanel() {
               </div>
               <div className="input-group">
                 <label className="input-label">Section</label>
-                <select value={formData.section} onChange={e => checkAndLoadExistingLocal(formData.year, formData.semester, e.target.value, formData.examName, classes)} className="select-input">
-                  {["A","B","C","D","E"].map(s => <option key={s} value={s}>{s}</option>)}
+                <select value={formData.section} onChange={e => {
+                  const nextSec = e.target.value;
+                  setAlsoCreateSections(prev => prev.filter(x => x !== nextSec));
+                  checkAndLoadExistingLocal(formData.year, formData.semester, nextSec, formData.examName, classes);
+                }} className="select-input">
+                  {getSectionsForCohort(formData.year, formData.semester, formData.department, formData.programme).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -2769,13 +2926,102 @@ export default function AdminPanel() {
                 Auto-sync Course Details &amp; Report Date to all other sections in this Year &amp; Sem
               </label>
             </div>
+            <div style={{ marginTop: "1.25rem", padding: "1rem", borderRadius: "12px", background: "rgba(99, 102, 241, 0.05)", border: "1px solid rgba(99, 102, 241, 0.25)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "0.65rem" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--primary)" }}>
+                  📑 Also Create / Update "{formData.examName || "Exam"}" for Other Sections:
+                </span>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: "2px 8px", fontSize: "0.72rem" }}
+                    onClick={() => {
+                      const others = getSectionsForCohort(formData.year, formData.semester, formData.department, formData.programme)
+                        .filter(sec => sec !== formData.section);
+                      setAlsoCreateSections(others);
+                    }}
+                  >
+                    Select All
+                  </button>
+                  {alsoCreateSections.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: "2px 8px", fontSize: "0.72rem" }}
+                      onClick={() => setAlsoCreateSections([])}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {getSectionsForCohort(formData.year, formData.semester, formData.department, formData.programme).map(sec => {
+                  const isCurrent = sec === formData.section;
+                  const exists = classes.some(c =>
+                    c.yearSemSec === `${formData.year}/${formData.semester}/${sec}` &&
+                    (c.examName || "").trim().toLowerCase() === (formData.examName || "").trim().toLowerCase() &&
+                    (c.department || "CSE") === (formData.department || "CSE") &&
+                    (!formData.programme || !c.programme || c.programme === formData.programme)
+                  );
+                  const rCount = getRosterCountForSection(formData.year, formData.semester, sec, formData.department, formData.programme);
+                  const isChecked = isCurrent || alsoCreateSections.includes(sec);
+
+                  return (
+                    <label
+                      key={sec}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "6px 11px",
+                        borderRadius: "8px",
+                        fontSize: "0.8rem",
+                        fontWeight: "600",
+                        cursor: isCurrent ? "default" : "pointer",
+                        userSelect: "none",
+                        background: isCurrent
+                          ? "rgba(99, 102, 241, 0.16)"
+                          : (isChecked ? "rgba(16, 185, 129, 0.14)" : "rgba(255, 255, 255, 0.03)"),
+                        border: `1px solid ${isCurrent ? "var(--primary)" : (isChecked ? "var(--success)" : "var(--border-color)")}`,
+                        color: "var(--text-primary)"
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isCurrent}
+                        onChange={e => {
+                          if (isCurrent) return;
+                          setAlsoCreateSections(prev =>
+                            e.target.checked ? [...prev, sec].sort() : prev.filter(x => x !== sec)
+                          );
+                        }}
+                      />
+                      <span>Sec {sec}</span>
+                      <span style={{ fontSize: "0.7rem", color: exists ? "var(--success)" : "var(--text-muted)" }}>
+                        {isCurrent ? "• Active" : (exists ? `✓ Saved (${rCount})` : `(${rCount > 0 ? `${rCount} st` : "No roster"})`)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: "0.73rem", color: "var(--text-muted)", margin: "0.55rem 0 0 0" }}>
+                Automatically pulls each selected section's own Master Roster and preserves existing/Timetable faculty when saved.
+              </p>
+            </div>
+
             <div style={{ display: "flex", gap: "10px", marginTop: "1rem", flexWrap: "wrap" }}>
               <button 
                 className="btn btn-primary" 
                 style={{ flex: 1, minWidth: "220px", padding: "0.9rem 1.25rem", fontSize: "0.95rem", fontWeight: "600" }} 
                 onClick={handleSave}
               >
-                🚀 Save Class Setup
+                {alsoCreateSections.length > 0
+                  ? `🚀 Save Class Setup (Sec ${formData.section} + ${alsoCreateSections.join(", ")})`
+                  : "🚀 Save Class Setup"}
               </button>
               <button 
                 type="button"
@@ -2797,7 +3043,7 @@ export default function AdminPanel() {
                   transition: "all 0.2s ease"
                 }} 
                 onClick={openBulkCloneModal}
-                title="Replicate this setup across CIA I, II, III and other Sections (B, C, D, E) in 1 click"
+                title="Replicate this setup across any Exams (SEMINAR, MKC, CIA, ESE, etc.) and other Sections with custom faculty mapping"
               >
                 ⚡ Bulk Clone to Other Sections &amp; Exams
               </button>
@@ -5627,7 +5873,7 @@ export default function AdminPanel() {
             {/* Scrollable Body */}
             <div style={{ padding: "1.5rem 1.75rem", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
 
-              {/* STEP 1: Other exams for Current Section */}
+              {/* STEP 1: Current Exam & Other exams for Source Section */}
               <div style={{
                 background: "rgba(255, 255, 255, 0.02)",
                 border: "1px solid var(--border-color)",
@@ -5636,31 +5882,56 @@ export default function AdminPanel() {
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "6px" }}>
                   <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span>1️⃣</span> Generate Other Exams for Section <strong>{formData.section}</strong>
+                    <span>1️⃣</span> Exams to Save / Generate for Section <strong>{formData.section}</strong>
                   </h4>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Same Students &amp; Faculty • Auto-Sets Pass Marks</span>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Same Students &amp; Faculty • Preserves Current Pass/Max Marks</span>
                 </div>
-                <p style={{ margin: "0 0 0.75rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                  Select which other evaluation models should be created for this section:
+
+                <div style={{ marginBottom: "0.85rem" }}>
+                  <label style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "8px 14px",
+                    borderRadius: "8px",
+                    background: cloneIncludeSourceCurrentExam ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.03)",
+                    border: `1px solid ${cloneIncludeSourceCurrentExam ? "var(--success)" : "var(--border-color)"}`,
+                    cursor: "pointer",
+                    fontSize: "0.85rem"
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={cloneIncludeSourceCurrentExam}
+                      onChange={e => setCloneIncludeSourceCurrentExam(e.target.checked)}
+                    />
+                    <strong>Include Active Exam: {formData.examName}</strong>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                      (Pass {formData.passMark} / Max {formData.markPerSubject})
+                    </span>
+                  </label>
+                </div>
+
+                <p style={{ margin: "0 0 0.65rem", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  Optionally also generate additional evaluation models for Section {formData.section}:
                 </p>
-                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                  {["CIA - I", "CIA - II", "CIA - III", "ESE"].filter(ex => ex !== formData.examName).map(ex => {
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  {dynamicExamNameOptions.filter(ex => ex !== formData.examName).map(ex => {
                     const isChecked = cloneTargetExamsForSource.includes(ex);
-                    const passNote = (ex === "CIA - I" || ex === "CIA - II") ? "Pass 25 / Max 50" : "Pass 50 / Max 100";
+                    const def = getDefaultMarks(ex);
                     return (
                       <label 
                         key={ex} 
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: "8px",
-                          padding: "8px 14px",
+                          gap: "7px",
+                          padding: "7px 12px",
                           borderRadius: "8px",
                           background: isChecked ? "rgba(99, 102, 241, 0.15)" : "rgba(255, 255, 255, 0.03)",
                           border: `1px solid ${isChecked ? "var(--primary)" : "var(--border-color)"}`,
                           cursor: "pointer",
                           userSelect: "none",
-                          fontSize: "0.85rem"
+                          fontSize: "0.82rem"
                         }}
                       >
                         <input 
@@ -5673,13 +5944,10 @@ export default function AdminPanel() {
                           style={{ cursor: "pointer" }}
                         />
                         <strong>{ex}</strong>
-                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>({passNote})</span>
+                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>({def.passMark}/{def.markPerSubject})</span>
                       </label>
                     );
                   })}
-                  {["CIA - I", "CIA - II", "CIA - III", "ESE"].filter(ex => ex !== formData.examName).length === 0 && (
-                    <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>All exams already set up for this section.</span>
-                  )}
                 </div>
               </div>
 
@@ -5699,15 +5967,9 @@ export default function AdminPanel() {
 
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "1rem" }}>
                   <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Target Sections:</span>
-                  {["A", "B", "C", "D", "E"].filter(s => s !== formData.section).map(sec => {
+                  {getSectionsForCohort(formData.year, formData.semester, formData.department, formData.programme).filter(s => s !== formData.section).map(sec => {
                     const isChecked = cloneTargetSections.includes(sec);
-                    const rosterMatch = (rosters || []).find(r => 
-                      r.year === formData.year && 
-                      String(r.semester) === String(formData.semester) && 
-                      (r.department || "CSE") === (formData.department || "CSE") &&
-                      r.section === sec
-                    );
-                    const studentCount = rosterMatch?.students?.length || 0;
+                    const studentCount = getRosterCountForSection(formData.year, formData.semester, sec, formData.department, formData.programme);
                     return (
                       <label 
                         key={sec}
@@ -5744,9 +6006,30 @@ export default function AdminPanel() {
 
                 {cloneTargetSections.length > 0 && (
                   <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px dashed var(--border-color)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "0.65rem" }}>
                       <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "var(--text-secondary)" }}>Exams to generate for selected sections:</span>
-                      {["CIA - I", "CIA - II", "CIA - III", "ESE"].map(ex => {
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: "3px 9px", fontSize: "0.75rem" }}
+                          onClick={() => setCloneSectionExams([formData.examName])}
+                        >
+                          Current Only ({formData.examName})
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: "3px 9px", fontSize: "0.75rem" }}
+                          onClick={() => setCloneSectionExams(["CIA - I", "CIA - II", "CIA - III"])}
+                        >
+                          CIA I, II, III
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      {Array.from(new Set([formData.examName, ...dynamicExamNameOptions])).filter(Boolean).map(ex => {
                         const isChecked = cloneSectionExams.includes(ex);
                         return (
                           <label 
@@ -5755,12 +6038,13 @@ export default function AdminPanel() {
                               display: "flex",
                               alignItems: "center",
                               gap: "6px",
-                              padding: "4px 10px",
+                              padding: "5px 10px",
                               borderRadius: "6px",
-                              background: isChecked ? "rgba(99, 102, 241, 0.1)" : "transparent",
+                              background: isChecked ? "rgba(99, 102, 241, 0.14)" : "transparent",
                               border: `1px solid ${isChecked ? "var(--primary)" : "var(--border-color)"}`,
                               cursor: "pointer",
-                              fontSize: "0.8rem"
+                              fontSize: "0.8rem",
+                              fontWeight: isChecked ? "700" : "500"
                             }}
                           >
                             <input 
@@ -5775,6 +6059,35 @@ export default function AdminPanel() {
                           </label>
                         );
                       })}
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", marginTop: "0.75rem", alignItems: "center" }}>
+                      <input
+                        type="text"
+                        value={cloneCustomExamText}
+                        onChange={e => setCloneCustomExamText(e.target.value)}
+                        placeholder="+ Add another custom exam name (e.g. SEMINAR 2)"
+                        className="text-input"
+                        style={{ maxWidth: "300px", padding: "5px 10px", fontSize: "0.8rem" }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        style={{ padding: "5px 12px", fontSize: "0.8rem" }}
+                        onClick={() => {
+                          const trimmed = cloneCustomExamText.trim();
+                          if (!trimmed) return;
+                          if (!cloneCustomExamList.includes(trimmed)) {
+                            setCloneCustomExamList(prev => [...prev, trimmed]);
+                          }
+                          if (!cloneSectionExams.includes(trimmed)) {
+                            setCloneSectionExams(prev => [...prev, trimmed]);
+                          }
+                          setCloneCustomExamText("");
+                        }}
+                      >
+                        + Add Exam
+                      </button>
                     </div>
                   </div>
                 )}
@@ -5930,10 +6243,10 @@ export default function AdminPanel() {
               <div>
                 <span style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Total to generate: </span>
                 <strong style={{ fontSize: "1rem", color: "var(--primary)" }}>
-                  {cloneTargetExamsForSource.length + (cloneTargetSections.length * cloneSectionExams.length)} Classes
+                  {(cloneIncludeSourceCurrentExam ? 1 : 0) + cloneTargetExamsForSource.length + (cloneTargetSections.length * cloneSectionExams.length)} Classes
                 </strong>
                 <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginLeft: "6px" }}>
-                  ({cloneTargetExamsForSource.length} for Sec {formData.section} + {cloneTargetSections.length * cloneSectionExams.length} across {cloneTargetSections.join(", ")})
+                  ({(cloneIncludeSourceCurrentExam ? 1 : 0) + cloneTargetExamsForSource.length} for Sec {formData.section} + {cloneTargetSections.length * cloneSectionExams.length} across {cloneTargetSections.join(", ") || "none"})
                 </span>
               </div>
 
@@ -5958,9 +6271,9 @@ export default function AdminPanel() {
                     cursor: cloneLoading ? "not-allowed" : "pointer"
                   }}
                   onClick={handleExecuteBulkClone}
-                  disabled={cloneLoading || (cloneTargetExamsForSource.length === 0 && cloneTargetSections.length === 0)}
+                  disabled={cloneLoading || (!cloneIncludeSourceCurrentExam && cloneTargetExamsForSource.length === 0 && (cloneTargetSections.length === 0 || cloneSectionExams.length === 0))}
                 >
-                  {cloneLoading ? "⏳ Generating Classes..." : `🚀 Generate All (${cloneTargetExamsForSource.length + (cloneTargetSections.length * cloneSectionExams.length)}) Classes Now`}
+                  {cloneLoading ? "⏳ Generating Classes..." : `🚀 Generate All (${(cloneIncludeSourceCurrentExam ? 1 : 0) + cloneTargetExamsForSource.length + (cloneTargetSections.length * cloneSectionExams.length)}) Classes Now`}
                 </button>
               </div>
             </div>
