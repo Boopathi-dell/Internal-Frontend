@@ -685,6 +685,31 @@ export default function InternalMarkSheet() {
     return `${Math.min(maxAllowedForName, desired)}px`;
   }, [formData.nameColWidth, studentsData, visibleColumns.length]);
 
+  // Identifies the final formula/total column for UI highlight & summary KPIs (no functional change)
+  const finalSummaryColumn = useMemo(() => {
+    return [...currentColumns].reverse().find(c => c.type === "formula" || c.type === "calculation")
+      || currentColumns[currentColumns.length - 1]
+      || null;
+  }, [currentColumns]);
+
+  // Derived screen-only KPI stats for visual overview
+  const screenSummaryStats = useMemo(() => {
+    if (!studentsData.length || !finalSummaryColumn) {
+      return { total: studentsData.length, highest: 0, average: "0.0", maxMark: finalSummaryColumn?.maxMark || "" };
+    }
+    const vals = studentsData
+      .map(st => Number(st[finalSummaryColumn.colKey] ?? st[finalSummaryColumn.heading]))
+      .filter(n => !isNaN(n));
+    const highest = vals.length ? Math.max(...vals) : 0;
+    const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : "0.0";
+    return {
+      total: studentsData.length,
+      highest,
+      average: avg,
+      maxMark: finalSummaryColumn.maxMark || ""
+    };
+  }, [studentsData, finalSummaryColumn]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -923,43 +948,82 @@ export default function InternalMarkSheet() {
       {/* SCREEN CONTROLS & HEADER (HIDDEN IN PRINT) */}
       <div className="no-print">
         {/* Top Header Bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", flexWrap: "wrap", gap: "1rem" }}>
-          <div>
-            <h1 style={{ fontSize: "1.8rem", fontWeight: "800", color: "var(--primary)", margin: 0, display: "flex", alignItems: "center", gap: "12px" }}>
-              <FileSpreadsheet size={30} /> Internal Mark Generator
-            </h1>
-            <p style={{ color: "var(--text-muted)", margin: "4px 0 0 0", fontSize: "0.95rem" }}>
-              Template-driven marksheet generator with automated formulas and multi-page print layout.
-            </p>
+        <div style={{
+          background: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "18px",
+          padding: "1.15rem 1.5rem",
+          marginBottom: "1.25rem",
+          boxShadow: "0 4px 18px rgba(15, 23, 42, 0.04)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "1rem"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{
+              width: "46px",
+              height: "46px",
+              borderRadius: "14px",
+              background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+              color: "#ffffff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 6px 16px rgba(79, 70, 229, 0.28)"
+            }}>
+              <FileSpreadsheet size={24} />
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <h1 style={{ fontSize: "1.45rem", fontWeight: "800", color: "#0f172a", margin: 0, letterSpacing: "-0.02em" }}>
+                  Internal Mark Generator
+                </h1>
+                <span style={{
+                  fontSize: "0.75rem",
+                  fontWeight: "700",
+                  padding: "3px 10px",
+                  borderRadius: "99px",
+                  background: "rgba(99, 102, 241, 0.1)",
+                  color: "#4338ca"
+                }}>
+                  {formData.department} • {formData.year}/{formData.semester}/{formData.section}
+                </span>
+              </div>
+              <p style={{ color: "#64748b", margin: "2px 0 0 0", fontSize: "0.85rem" }}>
+                Admin-configured mark sheet with automatic calculations, Excel export, and A4 Landscape print.
+              </p>
+            </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             <button
               onClick={() => setFormData(prev => ({ ...prev, padTo60: !prev.padTo60 }))}
               className={`btn ${formData.padTo60 ? "btn-primary" : "btn-secondary"}`}
-              style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", padding: "0.65rem 1.2rem", borderRadius: "10px" }}
+              style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
               title="Toggle 60-row official MEC grid padding"
             >
-              <Check size={18} /> {formData.padTo60 ? "Official 60-Row Grid (Active)" : "Enrolled Students Only"}
+              <Check size={16} /> {formData.padTo60 ? "Official 60-Row Grid" : "Enrolled Only"}
             </button>
 
             <button
               onClick={() => setShowColumnManager(!showColumnManager)}
               className={`btn ${userHiddenColumns.length > 0 ? "btn-warning" : "btn-secondary"}`}
-              style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", padding: "0.65rem 1.2rem", borderRadius: "10px" }}
+              style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
               title="Hide or show specific columns on report"
             >
-              {userHiddenColumns.length > 0 ? <EyeOff size={18} /> : <Eye size={18} />}
-              Columns Visibility {userHiddenColumns.length > 0 ? `(${userHiddenColumns.length} Hidden)` : ""}
+              {userHiddenColumns.length > 0 ? <EyeOff size={16} /> : <Eye size={16} />}
+              Columns {userHiddenColumns.length > 0 ? `(${userHiddenColumns.length} Hidden)` : ""}
             </button>
 
             <button
               onClick={() => setIsEditingMarks(!isEditingMarks)}
               className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
-              style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", padding: "0.65rem 1.2rem", borderRadius: "10px" }}
+              style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
               title="Toggle inline mark editing"
             >
-              <Edit3 size={18} /> {isEditingMarks ? "Lock Editing" : "Edit Marks Inline"}
+              <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
             </button>
 
             <div ref={excelMenuRef} style={{ position: "relative" }}>
@@ -969,11 +1033,13 @@ export default function InternalMarkSheet() {
                 disabled={studentsData.length === 0 && subjects.length === 0}
                 className="btn btn-secondary"
                 style={{
+                  height: "40px",
                   display: "flex",
                   alignItems: "center",
-                  gap: "8px",
+                  gap: "7px",
                   fontWeight: "700",
-                  padding: "0.65rem 1.2rem",
+                  fontSize: "0.85rem",
+                  padding: "0 1rem",
                   borderRadius: "10px",
                   border: "1.5px solid #10b981",
                   color: "#059669",
@@ -981,7 +1047,7 @@ export default function InternalMarkSheet() {
                 }}
                 title="Download Internal Marks in Excel (.xlsx)"
               >
-                <Download size={18} /> Download Excel (.xlsx) <ChevronDown size={16} />
+                <Download size={16} /> Excel (.xlsx) <ChevronDown size={15} />
               </button>
 
               {showExcelMenu && (
@@ -1070,18 +1136,20 @@ export default function InternalMarkSheet() {
               onClick={handlePrint}
               className="btn btn-primary"
               disabled={studentsData.length === 0}
-              style={{ 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "8px", 
-                fontWeight: "700", 
-                padding: "0.75rem 1.6rem", 
-                borderRadius: "12px", 
-                boxShadow: "0 4px 15px rgba(99, 102, 241, 0.35)",
+              style={{
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontWeight: "700",
+                fontSize: "0.88rem",
+                padding: "0 1.25rem",
+                borderRadius: "10px",
+                boxShadow: "0 4px 14px rgba(79, 70, 229, 0.3)",
                 background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)"
               }}
             >
-              <Printer size={20} /> Print Report
+              <Printer size={17} /> Print Report
             </button>
           </div>
         </div>
@@ -1454,6 +1522,62 @@ export default function InternalMarkSheet() {
             </div>
           )}
         </div>
+
+        {/* SCREEN KPI OVERVIEW STRIP (HIDDEN IN PRINT) */}
+        {!loading && studentsData.length > 0 && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+            gap: "1rem",
+            marginBottom: "1.5rem"
+          }}>
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.95rem 1.2rem", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 10px rgba(15,23,42,0.03)" }}>
+              <div>
+                <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Enrolled Students</div>
+                <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "#0f172a", marginTop: "2px" }}>{screenSummaryStats.total}</div>
+              </div>
+              <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "#eef2ff", color: "#4f46e5", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <GraduationCap size={20} />
+              </div>
+            </div>
+
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.95rem 1.2rem", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 10px rgba(15,23,42,0.03)" }}>
+              <div>
+                <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Highest {finalSummaryColumn ? finalSummaryColumn.title : "Score"}
+                </div>
+                <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "#059669", marginTop: "2px" }}>
+                  {screenSummaryStats.highest}{screenSummaryStats.maxMark ? ` / ${screenSummaryStats.maxMark}` : ""}
+                </div>
+              </div>
+              <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "#ecfdf5", color: "#059669", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Sparkles size={20} />
+              </div>
+            </div>
+
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.95rem 1.2rem", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 10px rgba(15,23,42,0.03)" }}>
+              <div>
+                <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Class Average</div>
+                <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "#4338ca", marginTop: "2px" }}>{screenSummaryStats.average}</div>
+              </div>
+              <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "#f5f3ff", color: "#7c3aed", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Calendar size={20} />
+              </div>
+            </div>
+
+            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.95rem 1.2rem", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 10px rgba(15,23,42,0.03)" }}>
+              <div>
+                <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Print Layout</div>
+                <div style={{ fontSize: "1.1rem", fontWeight: "800", color: "#0f172a", marginTop: "4px" }}>
+                  {studentPages.length} Landscape {studentPages.length > 1 ? "Pages" : "Page"}
+                </div>
+              </div>
+              <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "#fff7ed", color: "#ea580c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Printer size={20} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {loading && (
@@ -1462,41 +1586,148 @@ export default function InternalMarkSheet() {
           Loading student marks for Regulation {formData.regulation}...
         </div>
       )}
-      {/* PRINT STYLES - LANDSCAPE, NO OUTER PAGE BORDER, FIT ALL STUDENTS IN 2 PAGES */}
+      {/* SCREEN MODERN UI + OFFICIAL PRINT STYLES (A4 LANDSCAPE, NO OUTER PAGE BORDER) */}
       <style>{`
+        .internal-mark-root .input-field {
+          width: 100%;
+          height: 40px;
+          padding: 0 12px;
+          border-radius: 10px;
+          border: 1.5px solid #cbd5e1;
+          background: #ffffff;
+          color: #0f172a;
+          font-size: 0.9rem;
+          font-weight: 500;
+          outline: none;
+          box-sizing: border-box;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .internal-mark-root .input-field:hover {
+          border-color: #94a3b8;
+        }
+        .internal-mark-root .input-field:focus {
+          border-color: #4f46e5;
+          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+        }
+
         @media screen {
           .print-container {
             display: flex;
             flex-direction: column;
-            gap: 2.5rem;
+            gap: 2rem;
             align-items: center;
           }
           .print-sheet {
             background: #ffffff;
-            color: #000000;
+            color: #0f172a;
             width: 100%;
-            max-width: 1350px;
+            max-width: 1420px;
             border: 1px solid #e2e8f0;
-            padding: 20px 24px;
-            box-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
-            border-radius: 6px;
-            font-family: "Times New Roman", Times, serif;
+            padding: 24px 28px;
+            box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.1);
+            border-radius: 18px;
+            font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
           }
-          .mec-official-table tbody tr {
-            height: 20px;
+          .print-sheet .table-responsive-wrapper {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            overflow-x: auto;
+            margin-top: 8px;
+          }
+          .print-sheet .mec-official-table {
+            font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+            font-size: 13px;
+            color: #1e293b;
+          }
+          .print-sheet .mec-official-table th,
+          .print-sheet .mec-official-table td {
+            border: 1px solid #e2e8f0;
+          }
+          .print-sheet .mec-official-table thead tr:first-child th {
+            background: #f1f5f9;
+            color: #334155;
+            font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 10px 8px;
+            letter-spacing: 0.02em;
+          }
+          .print-sheet .mec-official-table thead tr.max-mark-row th {
+            background: #f8fafc;
+            color: #64748b;
+            font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 8px;
+          }
+          .print-sheet .mec-official-table thead th.col-formula {
+            background: #eef2ff;
+            color: #3730a3;
+          }
+          .print-sheet .mec-official-table thead th.col-total {
+            background: #ecfdf5;
+            color: #065f46;
+          }
+          .print-sheet .mec-official-table tbody tr {
+            height: 36px;
+            transition: background-color 0.12s ease;
+          }
+          .print-sheet .mec-official-table tbody tr:nth-child(even) {
+            background: #f8fafc;
+          }
+          .print-sheet .mec-official-table tbody tr:hover {
+            background: #eef2ff;
+          }
+          .print-sheet .mec-official-table tbody td {
+            padding: 7px 8px;
+          }
+          .print-sheet .mec-official-table tbody td.col-sno {
+            color: #64748b;
+            font-weight: 600;
+          }
+          .print-sheet .mec-official-table tbody td.col-reg {
+            color: #334155;
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
+          }
+          .print-sheet .mec-official-table tbody td.col-name {
+            color: #0f172a;
+            font-weight: 600;
+          }
+          .print-sheet .mec-official-table tbody td.col-formula {
+            background: rgba(238, 242, 255, 0.5);
+            color: #312e81;
+            font-weight: 700;
+          }
+          .print-sheet .mec-official-table tbody td.col-total {
+            background: rgba(236, 253, 245, 0.72);
+            color: #047857;
+            font-weight: 800;
+          }
+          .print-sheet .mec-official-table tbody td.cell-absent {
+            color: #dc2626;
+            background: rgba(254, 226, 226, 0.45);
+            font-weight: 700;
           }
           .editable-cell-input {
             width: 100%;
-            border: 1px solid #6366f1;
-            border-radius: 4px;
-            padding: 2px;
+            height: 28px;
+            border: 1.5px solid #6366f1;
+            border-radius: 6px;
+            padding: 2px 4px;
             text-align: center;
-            font-size: 11px;
-            background: #f8fafc;
+            font-size: 12px;
+            font-weight: 600;
+            color: #0f172a;
+            background: #ffffff;
+            outline: none;
+          }
+          .editable-cell-input:focus {
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
           }
         }
 
@@ -1595,18 +1826,33 @@ export default function InternalMarkSheet() {
             margin-bottom: 2px !important;
             font-size: 10px !important;
           }
-          .mec-official-table tbody tr {
+          .mec-official-table tbody tr,
+          .mec-official-table tbody tr:nth-child(even),
+          .mec-official-table tbody tr:hover {
+            background: #ffffff !important;
             height: ${printMetrics.rowHeight}px !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
-          .mec-official-table th, .mec-official-table td {
+          .mec-official-table th,
+          .mec-official-table td,
+          .mec-official-table thead th.col-formula,
+          .mec-official-table thead th.col-total,
+          .mec-official-table thead tr.max-mark-row th,
+          .mec-official-table tbody td.col-formula,
+          .mec-official-table tbody td.col-total,
+          .mec-official-table tbody td.cell-absent {
+            background: #ffffff !important;
+            color: #000000 !important;
             border: 1px solid #000000 !important;
             padding: ${printMetrics.paddingY}px 2px !important;
             font-size: ${printMetrics.fontSize}px !important;
             line-height: 1.1 !important;
           }
-          .mec-official-table th {
+          .mec-official-table th,
+          .mec-official-table thead tr:first-child th,
+          .mec-official-table thead tr.max-mark-row th {
+            font-family: "Times New Roman", Times, serif !important;
             font-size: 9.5px !important;
           }
           .mec-official-table th.col-sno, .mec-official-table td.col-sno {
@@ -1621,8 +1867,20 @@ export default function InternalMarkSheet() {
           .mec-official-table th.col-mark, .mec-official-table td.col-mark {
             width: auto !important;
           }
+          .print-sheet .table-responsive-wrapper,
           .table-responsive-wrapper {
+            border: none !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
             overflow: visible !important;
+          }
+          .mec-official-table tbody td {
+            font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
+          }
+          .mec-official-table tbody td.col-name,
+          .mec-official-table tbody td.col-sno,
+          .mec-official-table tbody td.col-reg {
+            font-weight: normal !important;
           }
         }
 
@@ -1689,6 +1947,39 @@ export default function InternalMarkSheet() {
             return (
               <div key={pageIndex} className="print-sheet">
                 <div>
+                  {/* SCREEN-ONLY PAGE BANNER STRIP (HIDDEN IN PRINT) */}
+                  <div className="no-print" style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingBottom: "12px",
+                    marginBottom: "14px",
+                    borderBottom: "1px dashed #e2e8f0",
+                    flexWrap: "wrap",
+                    gap: "8px"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{
+                        background: "linear-gradient(135deg, #4f46e5, #6366f1)",
+                        color: "#ffffff",
+                        fontSize: "0.76rem",
+                        fontWeight: "700",
+                        padding: "4px 12px",
+                        borderRadius: "99px"
+                      }}>
+                        Page {pageNum} of {totalPages}
+                      </span>
+                      <span style={{ fontSize: "0.8rem", fontWeight: "600", color: "#475569" }}>
+                        Rows {startSno} – {startSno + pageStudents.length - 1}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: "0.78rem", fontWeight: "600", color: isEditingMarks ? "#d97706" : "#64748b" }}>
+                      {isEditingMarks
+                        ? "Inline Editing Mode • Changes recalculate automatically"
+                        : "Screen Preview • Prints in Official A4 Landscape Format"}
+                    </span>
+                  </div>
+
                   {/* TOP HEADER: PAGE 1 HAS FULL BANNER, PAGE 2 HAS ONLY COURSE CODE/NAME (Image 1 & 2) */}
                   {pageIndex === 0 ? (
                     <div>
@@ -1771,21 +2062,29 @@ export default function InternalMarkSheet() {
                           >
                             Name
                           </th>
-                          {visibleColumns.map((col, idx) => (
-                            <th key={idx} className="col-mark">
-                              {col.title}
-                            </th>
-                          ))}
+                          {visibleColumns.map((col, idx) => {
+                            const isFormula = col.type === "formula" || col.type === "calculation";
+                            const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
+                            return (
+                              <th key={idx} className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""}`}>
+                                {col.title}
+                              </th>
+                            );
+                          })}
                         </tr>
 
                         {/* HEADER ROW 2 (MAX MARKS ROW) */}
                         {hasSubHeaders && (
-                          <tr>
-                            {visibleColumns.map((col, idx) => (
-                              <th key={idx} className="col-mark">
-                                {col.maxMark}
-                              </th>
-                            ))}
+                          <tr className="max-mark-row">
+                            {visibleColumns.map((col, idx) => {
+                              const isFormula = col.type === "formula" || col.type === "calculation";
+                              const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
+                              return (
+                                <th key={idx} className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""}`}>
+                                  {col.maxMark}
+                                </th>
+                              );
+                            })}
                           </tr>
                         )}
                       </thead>
@@ -1812,6 +2111,7 @@ export default function InternalMarkSheet() {
 
                               {visibleColumns.map((col, colIdx) => {
                                 const isFormula = col.type === "formula" || col.type === "calculation";
+                                const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
                                 const rawVal = st[col.colKey] !== undefined ? st[col.colKey] : st[col.heading];
 
                                 let displayVal = "";
@@ -1820,11 +2120,12 @@ export default function InternalMarkSheet() {
                                 } else {
                                   displayVal = (rawVal !== undefined && rawVal !== null) ? rawVal : "";
                                 }
+                                const isAbsent = String(displayVal).trim().toUpperCase() === "AB";
 
                                 return (
                                   <td 
                                     key={colIdx} 
-                                    className="col-mark"
+                                    className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
                                     style={{ fontWeight: isFormula ? "bold" : "normal" }}
                                   >
                                     {isEditingMarks && !isFormula && !st.isPlaceholder ? (
