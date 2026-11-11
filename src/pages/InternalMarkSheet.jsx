@@ -160,6 +160,7 @@ export default function InternalMarkSheet() {
       const payload = {
         templateName: activeTemplate.templateName,
         regulation: activeTemplate.regulation,
+        passMark: activeTemplate.passMark ?? 0,
         isActive: activeTemplate.isActive,
         headerImage: activeTemplate.headerImage,
         columns: updatedColumns
@@ -763,12 +764,14 @@ export default function InternalMarkSheet() {
 
     const mode = formData.pageSplitMode || "2pages";
 
-    // Balanced 2 Pages: Small classes (<= 24) fit cleanly on 1 page; larger classes split evenly across 2 pages
+    // Balanced 2 Pages: Small classes (<= 24) fit cleanly on 1 page; larger classes balance header space so Page 1 won't spill 1 row onto extra page
     if (mode === "2pages") {
       if (baseList.length <= 24 && !formData.padTo60) {
         return [baseList];
       }
-      const splitIdx = Math.ceil(baseList.length / 2);
+      const splitIdx = baseList.length > 40
+        ? Math.max(1, Math.floor((baseList.length - 3) / 2))
+        : Math.ceil(baseList.length / 2);
       return [
         baseList.slice(0, splitIdx),
         baseList.slice(splitIdx)
@@ -817,23 +820,31 @@ export default function InternalMarkSheet() {
       || null;
   }, [currentColumns]);
 
+  // Minimum Internal Pass Mark configured in Admin Template for this Regulation (0 = disabled)
+  const internalPassMark = useMemo(() => {
+    const val = Number(activeTemplate?.passMark);
+    return !isNaN(val) && val > 0 ? val : 0;
+  }, [activeTemplate]);
+
   // Derived screen-only KPI stats for visual overview
   const screenSummaryStats = useMemo(() => {
     if (!studentsData.length || !finalSummaryColumn) {
-      return { total: studentsData.length, highest: 0, average: "0.0", maxMark: finalSummaryColumn?.maxMark || "" };
+      return { total: studentsData.length, highest: 0, average: "0.0", maxMark: finalSummaryColumn?.maxMark || "", belowPassCount: 0 };
     }
     const vals = studentsData
       .map(st => Number(st[finalSummaryColumn.colKey] ?? st[finalSummaryColumn.heading]))
       .filter(n => !isNaN(n));
     const highest = vals.length ? Math.max(...vals) : 0;
     const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : "0.0";
+    const belowPassCount = internalPassMark > 0 ? vals.filter(n => n < internalPassMark).length : 0;
     return {
       total: studentsData.length,
       highest,
       average: avg,
-      maxMark: finalSummaryColumn.maxMark || ""
+      maxMark: finalSummaryColumn.maxMark || "",
+      belowPassCount
     };
-  }, [studentsData, finalSummaryColumn]);
+  }, [studentsData, finalSummaryColumn, internalPassMark]);
 
   const handlePrint = () => {
     window.print();
@@ -1385,19 +1396,34 @@ export default function InternalMarkSheet() {
 
             {/* Template Badge */}
             {activeTemplate ? (
-              <div style={{ 
-                background: "linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.15))", 
-                border: "1px solid rgba(34, 197, 94, 0.3)", 
-                padding: "6px 14px", 
-                borderRadius: "30px", 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "8px" 
-              }}>
-                <CheckCircle2 size={16} color="#16a34a" />
-                <span style={{ fontWeight: "700", color: "#15803d", fontSize: "0.85rem" }}>
-                  Active Template: {activeTemplate.templateName} ({currentColumns.length} columns)
-                </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <div style={{ 
+                  background: "linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.15))", 
+                  border: "1px solid rgba(34, 197, 94, 0.3)", 
+                  padding: "6px 14px", 
+                  borderRadius: "30px", 
+                  display: "flex", 
+                  alignItems: "center", 
+                  gap: "8px" 
+                }}>
+                  <CheckCircle2 size={16} color="#16a34a" />
+                  <span style={{ fontWeight: "700", color: "#15803d", fontSize: "0.85rem" }}>
+                    Active Template: {activeTemplate.templateName} ({currentColumns.length} columns)
+                  </span>
+                </div>
+                {internalPassMark > 0 && (
+                  <div style={{
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    padding: "6px 12px",
+                    borderRadius: "30px",
+                    fontSize: "0.8rem",
+                    fontWeight: "700",
+                    color: "#dc2626"
+                  }}>
+                    Pass Mark: {internalPassMark}
+                  </div>
+                )}
               </div>
             ) : (
               <div style={{ 
@@ -1707,13 +1733,24 @@ export default function InternalMarkSheet() {
 
             <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.95rem 1.2rem", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 10px rgba(15,23,42,0.03)" }}>
               <div>
-                <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Print Layout</div>
-                <div style={{ fontSize: "1.1rem", fontWeight: "800", color: "#0f172a", marginTop: "4px" }}>
-                  {studentPages.length} Landscape {studentPages.length > 1 ? "Pages" : "Page"}
+                <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {internalPassMark > 0 ? `Below Pass (< ${internalPassMark})` : "Print Layout"}
                 </div>
+                {internalPassMark > 0 ? (
+                  <div style={{ fontSize: "1.45rem", fontWeight: "800", color: screenSummaryStats.belowPassCount > 0 ? "#dc2626" : "#059669", marginTop: "2px" }}>
+                    {screenSummaryStats.belowPassCount}
+                    <span style={{ fontSize: "0.8rem", fontWeight: "600", color: "#64748b", marginLeft: "6px" }}>
+                      ({studentPages.length}p Print)
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "1.1rem", fontWeight: "800", color: "#0f172a", marginTop: "4px" }}>
+                    {studentPages.length} Landscape {studentPages.length > 1 ? "Pages" : "Page"}
+                  </div>
+                )}
               </div>
-              <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "#fff7ed", color: "#ea580c", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Printer size={20} />
+              <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: internalPassMark > 0 ? "#fee2e2" : "#fff7ed", color: internalPassMark > 0 ? "#dc2626" : "#ea580c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {internalPassMark > 0 ? <AlertCircle size={20} /> : <Printer size={20} />}
               </div>
             </div>
           </div>
@@ -1853,6 +1890,18 @@ export default function InternalMarkSheet() {
             background: rgba(254, 226, 226, 0.45);
             font-weight: 700;
           }
+          .print-sheet .mec-official-table tbody tr.row-fail-mark {
+            background: rgba(254, 242, 242, 0.72) !important;
+          }
+          .print-sheet .mec-official-table tbody tr.row-fail-mark:hover {
+            background: rgba(254, 226, 226, 0.9) !important;
+          }
+          .print-sheet .mec-official-table tbody td.cell-fail-mark {
+            background: #fee2e2 !important;
+            color: #dc2626 !important;
+            font-weight: 800 !important;
+            box-shadow: inset 0 0 0 2px #ef4444, 0 0 14px rgba(239, 68, 68, 0.6) !important;
+          }
           .editable-cell-input {
             width: 100%;
             height: 28px;
@@ -1874,7 +1923,16 @@ export default function InternalMarkSheet() {
         @media print {
           @page {
             size: A4 landscape;
-            margin: 5mm 7mm;
+            margin: 5mm 7mm 11mm 7mm;
+            @bottom-center {
+              content: "Page " counter(page) " of " counter(pages);
+              font-size: 10px;
+              font-family: "Times New Roman", Times, serif;
+              color: #000000;
+            }
+          }
+          .mec-official-table thead {
+            display: table-header-group !important;
           }
           html, body {
             background: #ffffff !important;
@@ -1982,11 +2040,16 @@ export default function InternalMarkSheet() {
           .mec-official-table thead th.col-formula,
           .mec-official-table thead th.col-total,
           .mec-official-table thead tr.max-mark-row th,
+          .mec-official-table tbody tr.row-fail-mark,
+          .mec-official-table tbody tr.row-fail-mark:nth-child(even),
+          .mec-official-table tbody tr.row-fail-mark:hover,
           .mec-official-table tbody td.col-formula,
           .mec-official-table tbody td.col-total,
-          .mec-official-table tbody td.cell-absent {
+          .mec-official-table tbody td.cell-absent,
+          .mec-official-table tbody td.cell-fail-mark {
             background: #ffffff !important;
             color: #000000 !important;
+            box-shadow: none !important;
             border: 1px solid #000000 !important;
             padding: ${printMetrics.paddingY}px 2px !important;
             font-size: ${printMetrics.fontSize}px !important;
@@ -2236,9 +2299,12 @@ export default function InternalMarkSheet() {
                         {pageStudents.map((st, i) => {
                           const sNo = st.sNo || (startSno + i);
                           const globalIndex = startSno - 1 + i;
+                          const finalScoreRaw = finalSummaryColumn ? (st[finalSummaryColumn.colKey] ?? st[finalSummaryColumn.heading]) : undefined;
+                          const finalScoreVal = Number(finalScoreRaw);
+                          const isBelowPass = Boolean(!st.isPlaceholder && internalPassMark > 0 && !isNaN(finalScoreVal) && finalScoreVal < internalPassMark);
 
                           return (
-                            <tr key={st.regNo || i}>
+                            <tr key={st.regNo || i} className={isBelowPass ? "row-fail-mark" : ""}>
                               <td className="col-sno">{sNo}</td>
                               <td className="col-reg">{st.regNo || ""}</td>
                               <td 
@@ -2264,11 +2330,12 @@ export default function InternalMarkSheet() {
                                   displayVal = (rawVal !== undefined && rawVal !== null) ? rawVal : "";
                                 }
                                 const isAbsent = String(displayVal).trim().toUpperCase() === "AB";
+                                const highlightFailBox = isTotal && isBelowPass;
 
                                 return (
                                   <td 
                                     key={colIdx} 
-                                    className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
+                                    className={`col-mark ${highlightFailBox ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
                                     style={{ fontWeight: isFormula ? "bold" : "normal" }}
                                   >
                                     {isEditingMarks && !isFormula && !st.isPlaceholder ? (
@@ -2315,8 +2382,8 @@ export default function InternalMarkSheet() {
                     </div>
                   ) : null}
 
-                  {/* Centered Page Footer */}
-                  <div style={{ textAlign: "center", fontSize: "10.5px", fontFamily: '"Times New Roman", Times, serif', marginTop: isLastPage ? "2px" : "8px" }}>
+                  {/* Screen-only footer (Print renders automatic "Page X of Y" via @page @bottom-center) */}
+                  <div className="no-print" style={{ textAlign: "center", fontSize: "10.5px", fontFamily: '"Times New Roman", Times, serif', marginTop: isLastPage ? "2px" : "8px" }}>
                     Page {pageNum} of {totalPages}
                   </div>
                 </div>

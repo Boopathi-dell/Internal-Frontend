@@ -106,6 +106,7 @@ export default function InternalMarkTemplateSetup() {
     setEditingTemplate({
       templateName: "Theory Internal Mark Format",
       regulation: "2023",
+      passMark: 20,
       isActive: false,
       columns: [
         { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false }
@@ -118,6 +119,7 @@ export default function InternalMarkTemplateSetup() {
     setEditingTemplate({
       templateName: "MEC Official Theory Internal Mark Format (40 Marks)",
       regulation: "2023",
+      passMark: 20,
       isActive: true,
       columns: [
         { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
@@ -140,7 +142,12 @@ export default function InternalMarkTemplateSetup() {
 
   const handleSaveTemplate = async () => {
     try {
-      const dataToSave = { ...editingTemplate };
+      const dataToSave = {
+        ...editingTemplate,
+        passMark: editingTemplate.passMark === "" || editingTemplate.passMark === undefined
+          ? 0
+          : Math.max(0, Number(editingTemplate.passMark) || 0)
+      };
       dataToSave.columns = dataToSave.columns.map(col => {
         if (col.type === "calculation") {
           const sumPart = col.calcSources.map(s => `#[${s}]`).join(" + ");
@@ -392,6 +399,7 @@ export default function InternalMarkTemplateSetup() {
               <tr>
                 <th>Template Name</th>
                 <th>Regulation</th>
+                <th>Pass Mark</th>
                 <th>Status</th>
                 <th>Columns</th>
                 <th>Actions</th>
@@ -402,6 +410,15 @@ export default function InternalMarkTemplateSetup() {
                 <tr key={t._id}>
                   <td style={{ fontWeight: "bold" }}>{t.templateName}</td>
                   <td>{t.regulation || "N/A"}</td>
+                  <td>
+                    {Number(t.passMark) > 0 ? (
+                      <span style={{ background: "rgba(239, 68, 68, 0.1)", color: "#dc2626", padding: "3px 10px", borderRadius: "99px", fontWeight: "700", fontSize: "0.82rem" }}>
+                        {t.passMark}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>Not Set</span>
+                    )}
+                  </td>
                   <td>
                     {t.isActive ? 
                       <span style={{ background: "rgba(34, 197, 94, 0.2)", color: "#16a34a", padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", fontSize: "0.8rem" }}>Active</span> 
@@ -416,7 +433,7 @@ export default function InternalMarkTemplateSetup() {
               ))}
               {templates.length === 0 && (
                 <tr>
-                  <td colSpan="4" style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>No templates created yet. Click above to make one!</td>
+                  <td colSpan="6" style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>No templates created yet. Click above to make one!</td>
                 </tr>
               )}
             </tbody>
@@ -425,18 +442,18 @@ export default function InternalMarkTemplateSetup() {
       ) : (
         <div className="fade-in">
           <div style={{ background: "var(--bg-secondary)", padding: "1.5rem", borderRadius: "12px", marginBottom: "1.5rem", border: "1px solid var(--border-color)" }}>
-            <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
-              <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", gap: "1.25rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <div style={{ flex: "1 1 240px" }}>
                 <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Template Name (E.g. ODD SEM 2026)</label>
                 <input 
                   type="text" 
                   className="input-field" 
                   value={editingTemplate.templateName}
                   onChange={(e) => setEditingTemplate({ ...editingTemplate, templateName: e.target.value })}
-                  style={{ fontSize: "1.1rem", padding: "10px" }}
+                  style={{ fontSize: "1.05rem", padding: "10px", width: "100%", boxSizing: "border-box" }}
                 />
               </div>
-              <div style={{ width: "200px" }}>
+              <div style={{ width: "170px" }}>
                 <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.5rem" }}>Regulation</label>
                 <input 
                   type="text"
@@ -444,14 +461,31 @@ export default function InternalMarkTemplateSetup() {
                   className="input-field" 
                   value={editingTemplate.regulation || ""}
                   onChange={(e) => setEditingTemplate({ ...editingTemplate, regulation: e.target.value })}
-                  style={{ fontSize: "1.1rem", padding: "10px" }}
+                  style={{ fontSize: "1.05rem", padding: "10px", width: "100%", boxSizing: "border-box" }}
                   placeholder="Enter Regulation"
                 />
                 <datalist id="reg-options-admin">
-                  {["2019", "2021", "2025"].map(r => <option key={r} value={r}>{r}</option>)}
+                  {["2019", "2021", "2023", "2025"].map(r => <option key={r} value={r}>{r}</option>)}
                 </datalist>
               </div>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "rgba(99, 102, 241, 0.1)", padding: "10px 15px", borderRadius: "8px", cursor: "pointer", border: "1px solid var(--primary)", color: "var(--primary)", fontWeight: "bold", marginTop: "20px" }}>
+              <div style={{ width: "190px" }}>
+                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "0.5rem", color: "#dc2626" }}>
+                  Internal Pass Mark
+                </label>
+                <input 
+                  type="number"
+                  min="0"
+                  className="input-field" 
+                  value={editingTemplate.passMark ?? 0}
+                  onChange={(e) => setEditingTemplate({ ...editingTemplate, passMark: e.target.value })}
+                  style={{ fontSize: "1.05rem", padding: "10px", width: "100%", boxSizing: "border-box" }}
+                  placeholder="e.g. 20 (out of 40)"
+                />
+                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                  Students below this highlight red on screen (Print remains B&amp;W)
+                </div>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "rgba(99, 102, 241, 0.1)", padding: "10px 15px", borderRadius: "8px", cursor: "pointer", border: "1px solid var(--primary)", color: "var(--primary)", fontWeight: "bold", marginTop: "24px" }}>
                 <input 
                   type="checkbox" 
                   checked={editingTemplate.isActive} 
