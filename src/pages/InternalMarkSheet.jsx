@@ -77,7 +77,8 @@ export default function InternalMarkSheet() {
 
   const getTemplateHiddenSignature = (template) => {
     if (!template || !Array.isArray(template.columns)) return "default";
-    return template.columns.map((c, idx) => `${idx}:${c.heading}:${Boolean(c.isHidden)}`).join("|");
+    const colsSig = template.columns.map((c, idx) => `${idx}:${c.heading}:${Boolean(c.isHidden)}`).join("|");
+    return `${template.updatedAt || ""}::${colsSig}`;
   };
 
   const getHiddenStorageKey = (reg, template) => {
@@ -207,7 +208,7 @@ export default function InternalMarkSheet() {
 
   const fetchTemplatesAndRegulations = async () => {
     try {
-      const res = await API.get("/api/internal-marks");
+      const res = await API.get("/api/internal-marks", { params: { _ts: Date.now() } });
       const templates = res.data || [];
       setAllTemplates(templates);
 
@@ -1434,6 +1435,26 @@ export default function InternalMarkSheet() {
                     Pass Mark: {internalPassMark}
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={fetchTemplatesAndRegulations}
+                  title="Sync latest template settings from Admin Panel"
+                  style={{
+                    background: "#ffffff",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "30px",
+                    padding: "5px 10px",
+                    fontSize: "0.75rem",
+                    fontWeight: "700",
+                    color: "#475569",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}
+                >
+                  <RefreshCw size={12} /> Sync
+                </button>
               </div>
             ) : (
               <div style={{ 

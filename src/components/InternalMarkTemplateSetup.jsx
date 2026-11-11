@@ -149,16 +149,17 @@ export default function InternalMarkTemplateSetup() {
           : Math.max(0, Number(editingTemplate.passMark) || 0)
       };
       dataToSave.columns = dataToSave.columns.map(col => {
-        if (col.type === "calculation") {
-          const sumPart = col.calcSources.map(s => `#[${s}]`).join(" + ");
-          if (col.calcType === "sum") {
-            col.formula = `(${sumPart || '0'})`;
+        const nextCol = { ...col, isHidden: Boolean(col.isHidden) };
+        if (nextCol.type === "calculation") {
+          const sumPart = (nextCol.calcSources || []).map(s => `#[${s}]`).join(" + ");
+          if (nextCol.calcType === "sum") {
+            nextCol.formula = `(${sumPart || '0'})`;
           } else {
-            col.formula = `(${sumPart || '0'}) / ${col.calcOutof || 1} * ${col.calcWeightage || 1}`;
+            nextCol.formula = `(${sumPart || '0'}) / ${nextCol.calcOutof || 1} * ${nextCol.calcWeightage || 1}`;
           }
-          col.type = "formula"; 
+          nextCol.type = "formula";
         }
-        return col;
+        return nextCol;
       });
 
       if (editingTemplate._id) {
@@ -166,6 +167,18 @@ export default function InternalMarkTemplateSetup() {
       } else {
         await API.post("/api/internal-marks", dataToSave);
       }
+
+      // Clear any local browser column-visibility overrides so Admin template visibility takes immediate effect
+      try {
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith("internalMarkHiddenCols_")) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch {
+        // Ignore storage errors
+      }
+
       setEditingTemplate(null);
       fetchTemplates();
     } catch (err) {
