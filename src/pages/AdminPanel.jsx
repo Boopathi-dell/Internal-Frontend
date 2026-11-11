@@ -1116,6 +1116,17 @@ export default function AdminPanel() {
 
 
 
+  const stripMarksFromStudents = (list = []) => (list || []).map(std => ({
+    regNo: std.regNo || "",
+    name: std.name || "",
+    dob: std.dob || "",
+    gender: std.gender || "Boy",
+    studentType: std.studentType || "Day Scholar"
+  }));
+
+  const isSpecialOrLabExam = (examName = "") =>
+    /lab|practical|observation|seminar|project|mkc/i.test(String(examName || ""));
+
   // Build the unique key for a class: yearSemSec + examName
   const buildClassName = (year, semester, section, examName, programme, department) => {
     return `${programme || formData.programme}-${department || formData.department} - ${year}/${semester}/${section} - ${examName}`;
@@ -1162,39 +1173,33 @@ export default function AdminPanel() {
         }));
 
         // Search for existing cohort match (same programme, department, yearSemSec)
+        const targetIsSpecial = isSpecialOrLabExam(exam);
         const cohortMatch = list.find(c =>
+          c.programme === currentProg &&
+          c.department === currentDept &&
+          c.yearSemSec === targetYSS &&
+          isSpecialOrLabExam(c.examName) === targetIsSpecial
+        ) || list.find(c =>
           c.programme === currentProg &&
           c.department === currentDept &&
           c.yearSemSec === targetYSS
         );
 
-        // Auto-load student roster from Master Roster or fallback to cohort
+        // Auto-load student roster ONLY (never carry marks from another exam)
         const rosterMatch = currentRosters.find(r => r.cohortName === `${currentProg}-${currentDept} - ${targetYSS}`);
         if (rosterMatch && rosterMatch.students && rosterMatch.students.length > 0) {
-          setStudents(rosterMatch.students.map(std => ({
-            regNo: std.regNo,
-            name: std.name,
-            dob: std.dob || "",
-            gender: std.gender || "Boy",
-            studentType: std.studentType || "Day Scholar"
-          })));
+          setStudents(stripMarksFromStudents(rosterMatch.students));
           setAutoLoadedFrom("Master Roster");
         } else if (cohortMatch && cohortMatch.students && cohortMatch.students.length > 0) {
-          setStudents(cohortMatch.students.map(std => ({
-            regNo: std.regNo,
-            name: std.name,
-            dob: std.dob || "",
-            gender: std.gender || "Boy",
-            studentType: std.studentType || "Day Scholar"
-          })));
+          setStudents(stripMarksFromStudents(cohortMatch.students));
           setAutoLoadedFrom(cohortMatch.className);
         } else {
           setStudents([]);
           setAutoLoadedFrom("");
         }
 
-        // 1. Try to find a class with the exact same examName in the same year/sem (e.g. to copy ESE credits across sections)
-        const exactExamYearSemMatch = list.find(c => 
+        // 1. Exact same examName in the same year/sem across sections (e.g. III/V/B - CIA - I -> III/V/A - CIA - I)
+        const exactExamYearSemMatch = list.find(c =>
           c.programme === currentProg &&
           c.department === currentDept &&
           c.examName === exam &&
@@ -1202,15 +1207,24 @@ export default function AdminPanel() {
           c.courseDetails && c.courseDetails.length > 0
         );
 
-        // 2. Fallback to same year/sem (any exam)
-        const yearSemMatch = list.find(c =>
+        // 2. Fallback ONLY from compatible exam category (do not auto-load Lab Observation subjects into CIA/ESE theory exams)
+        const cohortSameCategoryCourseMatch = list.find(c =>
+          c.programme === currentProg &&
+          c.department === currentDept &&
+          c.yearSemSec === targetYSS &&
+          isSpecialOrLabExam(c.examName) === targetIsSpecial &&
+          c.courseDetails && c.courseDetails.length > 0
+        );
+
+        const yearSemSameCategoryMatch = list.find(c =>
           c.programme === currentProg &&
           c.department === currentDept &&
           c.yearSemSec && c.yearSemSec.startsWith(`${y}/${validatedSem}/`) &&
+          isSpecialOrLabExam(c.examName) === targetIsSpecial &&
           c.courseDetails && c.courseDetails.length > 0
         );
-        
-        const bestCourseMatch = exactExamYearSemMatch || (cohortMatch && cohortMatch.courseDetails && cohortMatch.courseDetails.length > 0 ? cohortMatch : yearSemMatch);
+
+        const bestCourseMatch = exactExamYearSemMatch || cohortSameCategoryCourseMatch || yearSemSameCategoryMatch;
 
         if (bestCourseMatch) {
           const isSameSection = bestCourseMatch.yearSemSec === `${y}/${validatedSem}/${sec}`;
@@ -1224,8 +1238,8 @@ export default function AdminPanel() {
           });
           setCourseDetails(loadedCourses);
           setCourseAutoLoadedFrom(bestCourseMatch.className);
-        } else if (cohortMatch && cohortMatch.subjects && cohortMatch.subjects.length > 0) {
-          // Fallback: load from subjects array
+        } else if (cohortMatch && isSpecialOrLabExam(cohortMatch.examName) === targetIsSpecial && cohortMatch.subjects && cohortMatch.subjects.length > 0) {
+          // Fallback: load from subjects array of compatible category
           const loadedCourses = cohortMatch.subjects.map(s => {
             if (s.includes(' & ')) {
               const parts = s.split(' & ');
@@ -1240,7 +1254,7 @@ export default function AdminPanel() {
           setCourseAutoLoadedFrom("");
         }
 
-        const bestDateMatch = exactExamYearSemMatch || cohortMatch || yearSemMatch;
+        const bestDateMatch = exactExamYearSemMatch || cohortSameCategoryCourseMatch || yearSemSameCategoryMatch || cohortMatch;
         
         const defaults = getDefaultMarks(exam);
         setFormData(prev => ({
@@ -1316,7 +1330,7 @@ export default function AdminPanel() {
       }
       setCourseDetails(loadedCourseDetails);
       setTargetPassPercentage(String(cls.targetPassPercentage || 85));
-      setStudents(cls.students || []);
+      setStudents(stripMarksFromStudents(cls.students || []));
       setSelectedClassId(cls.className);
       setShowCustomExamInput(false);
       setShowAllClassesDropdown(false);
@@ -1344,6 +1358,14 @@ export default function AdminPanel() {
   };
 
   const handleManualClassSelect = (name) => {
+    if (!name) {
+      setSelectedClassId("");
+      setShowCustomExamInput(false);
+      setAutoLoadedFrom("");
+      setCourseAutoLoadedFrom("");
+      setStudents(prev => stripMarksFromStudents(prev));
+      return;
+    }
     handleManualClassSelectLocal(name, classes);
   };
 
@@ -1594,7 +1616,7 @@ export default function AdminPanel() {
         passMark: Number(formData.passMark),
         examName: trimmedExam,
         markPerSubject: Number(formData.markPerSubject),
-        students,
+        students: stripMarksFromStudents(students),
         date: formData.date,
         department: trimmedDept,
         yearSemSec: `${formData.year}/${formData.semester}/${formData.section}`,
@@ -2787,6 +2809,10 @@ export default function AdminPanel() {
                     onChange={e => {
                       if (e.target.value === "CREATE_CUSTOM") {
                         setShowCustomExamInput(true);
+                        setSelectedClassId("");
+                        setAutoLoadedFrom("");
+                        setCourseAutoLoadedFrom("");
+                        setStudents(prev => stripMarksFromStudents(prev));
                         setFormData({ ...formData, examName: "" });
                       } else {
                         checkAndLoadExistingLocal(formData.year, formData.semester, formData.section, e.target.value, classes);
@@ -2802,23 +2828,49 @@ export default function AdminPanel() {
                   </select>
                 </div>
               ) : (
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <input
-                    type="text"
-                    value={formData.examName}
-                    onChange={e => setFormData({ ...formData, examName: e.target.value })}
-                    className="text-input"
-                    placeholder="Enter Custom Exam Name (e.g. Seminar 1)"
-                    style={{ flex: 1 }}
-                    autoFocus
-                  />
-                  <button 
-                    className="btn btn-secondary" 
-                    onClick={() => setShowCustomExamInput(false)}
-                    style={{ whiteSpace: "nowrap" }}
-                  >
-                    Back to List
-                  </button>
+                <div>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <input
+                      type="text"
+                      value={formData.examName}
+                      onChange={e => {
+                        setSelectedClassId("");
+                        setStudents(prev => stripMarksFromStudents(prev));
+                        setFormData({ ...formData, examName: e.target.value });
+                      }}
+                      className="text-input"
+                      placeholder="Enter Custom Exam Name (e.g. Seminar 1)"
+                      style={{ flex: 1 }}
+                      autoFocus
+                    />
+                    <button 
+                      className="btn btn-secondary" 
+                      onClick={() => setShowCustomExamInput(false)}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      Back to List
+                    </button>
+                  </div>
+                  {(() => {
+                    const trimmed = String(formData.examName || "").trim();
+                    if (!trimmed) return null;
+                    const candidate = buildClassName(formData.year, formData.semester, formData.section, trimmed, formData.programme, formData.department);
+                    const matchCls = classes.find(c => c.className.toLowerCase() === candidate.toLowerCase());
+                    if (!matchCls) return null;
+                    return (
+                      <div style={{ marginTop: "8px", padding: "8px 12px", borderRadius: "8px", background: "rgba(245, 158, 11, 0.12)", border: "1px solid #f59e0b", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", fontSize: "0.78rem", color: "#b45309" }}>
+                        <span>⚠️ <strong>"{matchCls.className}"</strong> already exists! Saving will overwrite its courses.</span>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{ padding: "3px 8px", fontSize: "0.75rem", whiteSpace: "nowrap" }}
+                          onClick={() => handleManualClassSelect(matchCls.className)}
+                        >
+                          Load Existing
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -2921,7 +2973,7 @@ export default function AdminPanel() {
                 style={{ width: "18px", height: "18px", cursor: "pointer" }}
               />
               <label htmlFor="propagateRoster" style={{ fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)", userSelect: "none" }}>
-                Apply this student roster &amp; course details to all other exams of this cohort
+                Apply this student roster only to all other exams of this section (keeps each exam&apos;s own subjects &amp; marks)
               </label>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>

@@ -128,6 +128,7 @@ export default function MarkEntry() {
   };
 
   const inputRefs = useRef({});
+  const loadRequestIdRef = useRef(0);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
@@ -387,9 +388,14 @@ export default function MarkEntry() {
   const loadSpecificClassData = async (name, allClasses) => {
     const cls = allClasses ? allClasses.find(c => c.className === name) : classes.find(c => c.className === name);
     if (!cls) return;
+    const reqId = ++loadRequestIdRef.current;
+    setUnsavedChanges(false);
+    setFocusedSubjectIndices([]);
     try {
       const res = await API.get(`/api/classes/${encodeURIComponent(name)}`);
+      if (reqId !== loadRequestIdRef.current) return;
       setClearSubjectIdx(0);
+      setUnsavedChanges(false);
       setClassData(normalizeLoadedClassData(res.data));
     } catch (err) {
       console.error(err);
@@ -538,6 +544,9 @@ export default function MarkEntry() {
       else if (year === "IV" && !["VII", "VIII"].includes(sem)) validatedSem = "VII";
       newFilters.semester = validatedSem;
     }
+    setUnsavedChanges(false);
+    setFocusedSubjectIndices([]);
+    setClassData(null);
     setFilters(newFilters);
     applyFilters(classes, newFilters);
   };
