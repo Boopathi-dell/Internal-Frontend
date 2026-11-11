@@ -506,72 +506,227 @@ export default function InternalMarkSheet() {
     });
   };
 
-  // Helper to evaluate row formulas (strictly executes Admin-configured formulas when an Admin template is active)
+  // Helper: Resolve effective formula string & detect broken/unlinked calculation columns in a template
+  const stripTrailingImLabel = (text) =>
+    String(text || "")
+      .replace(/\(.*?\)/g, "")
+      .replace(/\b(internal\s*marks?|im)\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const findColumnByToken = (cols, candidateCols, rawToken, usageCursor = null) => {
+    const token = String(rawToken || "").trim();
+    if (!token) return null;
+
+    const cleanPlain = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const stripParens = (s) => parseHeading(String(s || "")).title;
+    const tokenBase = stripParens(token);
+    const tokenNormExam = normalizeExam(tokenBase);
+    const tokenNormStr = normStr(tokenBase);
+
+    const searchPools = (poolList) => {
+      for (const poolSource of poolList) {
+        if (!poolSource || poolSource.length === 0) continue;
+
+        // 1. Exact trimmed heading / title
+        let pool = poolSource.filter(c => String(c.heading || "").trim() === token || String(c.title || "").trim() === token);
+        // 2. Case-insensitive heading / paren-stripped title
+        if (pool.length === 0) {
+          pool = poolSource.filter(c =>
+            cleanPlain(c.heading) === cleanPlain(token) ||
+            cleanPlain(c.title) === cleanPlain(tokenBase) ||
+            cleanPlain(stripParens(c.heading)) === cleanPlain(tokenBase)
+          );
+        }
+        // 3. Normalized exam/code match (e.g. "CIA 2" / "CIA-II" / "CIA - II" <-> "CIA II")
+        if (pool.length === 0 && (tokenNormExam || tokenNormStr)) {
+          pool = poolSource.filter(c => {
+            const cTitle = stripParens(c.heading || c.title || "");
+            const cExam = normalizeExam(c.examName || "");
+            const cHeadExam = normalizeExam(cTitle);
+            return (
+              (tokenNormExam && ((cHeadExam && cHeadExam === tokenNormExam) || (cExam && cExam === tokenNormExam))) ||
+              (tokenNormStr && (normStr(cTitle) === tokenNormStr || normStr(c.examName) === tokenNormStr))
+            );
+          });
+        }
+        if (pool.length > 0) return pool;
+      }
+      return [];
+    };
+
+    // Explicit occurrence token e.g. "IM (10) ::2"
+    const occMatch = token.match(/^(.*?)\s*::(\d+)$/);
+    if (occMatch) {
+      const baseName = occMatch[1].trim();
+      const occNum = parseInt(occMatch[2], 10);
+      const baseNoParens = stripParens(baseName);
+      const matchFn = (c) =>
+        String(c.heading || "").trim() === baseName ||
+        String(c.title || "").trim() === baseName ||
+        cleanPlain(stripParens(c.heading)) === cleanPlain(baseNoParens);
+      const candMatch = candidateCols.filter(matchFn);
+      const allMatch = candMatch.length >= occNum ? candMatch : cols.filter(matchFn);
+      return allMatch[occNum - 1] || null;
+    }
+
+    // Direct colKey lookup
+    const byKey = candidateCols.find(c => c.colKey === token) || cols.find(c => c.colKey === token);
+    if (byKey) return byKey;
+
+    const matchedPool = searchPools([candidateCols, cols]);
+    if (matchedPool.length === 0) return null;
+
+    if (!usageCursor) return matchedPool[0];
+    const usedIdx = usageCursor[token] || 0;
+    const picked = matchedPool[Math.min(usedIdx, matchedPool.length - 1)];
+    usageCursor[token] = usedIdx + 1;
+    return picked;
+  };
+
+  const getEffectiveFormulaString = (col) => {
+    const raw = (col?.formula || "").trim();
+    if (raw) return raw;
+    if (Array.isArray(col?.calcSources) && col.calcSources.length > 0) {
+      const sumPart = col.calcSources.map(s => `#[${s}]`).join(" + ");
+      if (col.calcType === "sum") return `(${sumPart})`;
+      const safeOut = Number(col.calcOutof) > 0 ? Number(col.calcOutof) : 1;
+      const safeW = col.calcWeightage !== undefined && col.calcWeightage !== "" ? Number(col.calcWeightage) : 1;
+      return `(${sumPart}) / ${safeOut} * ${safeW}`;
+    }
+    return "";
+  };
+
+  const inferDefaultExamMaxMark = (srcCol) => {
+    const explicitMax = parseFloat(srcCol?.maxMark || parseHeading(srcCol?.heading || "").maxMark);
+    if (!isNaN(explicitMax) && explicitMax > 0) return explicitMax;
+    const ex = normalizeExam(srcCol?.examName || srcCol?.title || srcCol?.heading || "");
+    if (ex.includes("cia3") || ex.includes("model")) return 100;
+    if (ex.includes("cia1") || ex.includes("cia2")) return 50;
+    if (ex.includes("ut")) return 30;
+    if (ex.includes("mkc") || ex.includes("sm") || ex.includes("seminar")) return 5;
+    return 50;
+  };
+
+  const isBrokenFormulaColumn = (col, colIdx, cols) => {
+    if (!(col.type === "formula" || col.type === "calculation")) return false;
+    const fStr = getEffectiveFormulaString(col);
+    if (!fStr) return true;
+    const tokens = [...fStr.matchAll(/#\[(.*?)\]/g)].map(m => m[1]);
+    if (tokens.length === 0) return true;
+    const candidateCols = cols.slice(0, colIdx);
+    const cursor = {};
+    return tokens.some(tok => !findColumnByToken(cols, candidateCols, tok, cursor));
+  };
+
+  // Helper to evaluate row formulas (strictly executes Admin formulas + smart alias & auto-repair for unlinked IM columns)
   const evaluateRowFormulas = (row, cols, isUsingAdminTemplate = false) => {
-    // 1. Process every formula/calculation column using sequential + occurrence-safe token matching
-    cols.forEach((col, colIdx) => {
-      if ((col.type === "formula" || col.type === "calculation") && col.formula) {
-        try {
+    const isFormulaCol = (c) => c && (c.type === "formula" || c.type === "calculation");
+    const evaluatedSet = new Set();
+
+    const getColValue = (targetCol, visiting) => {
+      if (!targetCol) return 0;
+      const tIdx = cols.indexOf(targetCol);
+      if (isFormulaCol(targetCol) && tIdx !== -1 && !evaluatedSet.has(tIdx) && !visiting.has(tIdx)) {
+        evalColAtIndex(tIdx, visiting);
+      }
+      return parseNum(row[targetCol.colKey] !== undefined ? row[targetCol.colKey] : row[targetCol.heading]);
+    };
+
+    const computeFallbackForBrokenIm = (col, colIdx, visiting) => {
+      const headingText = col.title || parseHeading(col.heading || "").title || col.heading || "";
+      if (/\btotal\b/i.test(headingText)) {
+        const priorCols = cols.slice(0, colIdx);
+        const formulaCols = priorCols.filter(isFormulaCol);
+        if (formulaCols.length > 0) {
+          return Math.round(formulaCols.reduce((sum, fc) => sum + getColValue(fc, visiting), 0));
+        }
+        return Math.round(priorCols.reduce((sum, ec) => sum + getColValue(ec, visiting), 0));
+      }
+
+      const prefix = stripTrailingImLabel(headingText);
+      const nonFormulaCols = cols.filter(c => !isFormulaCol(c));
+      const matchedSource = findColumnByToken(nonFormulaCols, nonFormulaCols.filter(c => cols.indexOf(c) < colIdx), prefix);
+      if (!matchedSource) return 0;
+
+      const srcVal = getColValue(matchedSource, visiting);
+      const srcMax = inferDefaultExamMaxMark(matchedSource);
+      const targetExplicit = parseFloat(col.maxMark || parseHeading(col.heading || "").maxMark);
+      const targetMax = (!isNaN(targetExplicit) && targetExplicit > 0)
+        ? targetExplicit
+        : (/\b(mkc|sem|sm|seminar)\b/i.test(prefix) ? 5 : 10);
+
+      if (srcMax <= 0) return 0;
+      return Math.round((srcVal / srcMax) * targetMax);
+    };
+
+    const evalColAtIndex = (colIdx, visiting = new Set()) => {
+      if (evaluatedSet.has(colIdx)) return;
+      const col = cols[colIdx];
+      if (!isFormulaCol(col)) return;
+
+      visiting.add(colIdx);
+      const fStr = getEffectiveFormulaString(col);
+      const candidateCols = cols.slice(0, colIdx);
+
+      let computedVal = 0;
+      let usedAutoFallback = false;
+
+      if (!fStr) {
+        usedAutoFallback = true;
+      } else {
+        const tokens = [...fStr.matchAll(/#\[(.*?)\]/g)].map(m => m[1]);
+        if (tokens.length === 0) {
+          usedAutoFallback = true;
+        } else {
           const usageCursor = {};
-          const candidateCols = cols.slice(0, colIdx);
-
-          const resolveTokenValue = (rawToken) => {
-            const token = (rawToken || "").trim();
-            // Explicit occurrence token e.g. "IM (10) ::2"
-            const occMatch = token.match(/^(.*?)\s*::(\d+)$/);
-            if (occMatch) {
-              const baseName = occMatch[1].trim();
-              const occNum = parseInt(occMatch[2], 10);
-              const pool = (candidateCols.length ? candidateCols : cols).filter(
-                c => c.heading === baseName || c.title === baseName
-              );
-              const picked = pool[occNum - 1];
-              if (!picked) return 0;
-              return parseNum(row[picked.colKey] !== undefined ? row[picked.colKey] : row[picked.heading]);
+          let unresolved = false;
+          const expr = fStr.replace(/#\[(.*?)\]/g, (_, rawToken) => {
+            const picked = findColumnByToken(cols, candidateCols, rawToken, usageCursor);
+            if (!picked) {
+              unresolved = true;
+              return "0";
             }
+            return getColValue(picked, visiting);
+          });
 
-            // Direct colKey lookup
-            const byKey = (candidateCols.length ? candidateCols : cols).find(c => c.colKey === token);
-            if (byKey) {
-              return parseNum(row[byKey.colKey] !== undefined ? row[byKey.colKey] : row[byKey.heading]);
-            }
-
-            // Match by heading or stripped title (sequentially consumes duplicate headings like 3x "IM (10)")
-            let pool = candidateCols.filter(c => c.heading === token);
-            if (pool.length === 0) {
-              pool = candidateCols.filter(c => c.title && c.title === token);
-            }
-            if (pool.length === 0) {
-              pool = cols.filter(c => c.heading === token || (c.title && c.title === token));
-            }
-            if (pool.length > 0) {
-              const usedIdx = usageCursor[token] || 0;
-              const picked = pool[Math.min(usedIdx, pool.length - 1)];
-              usageCursor[token] = usedIdx + 1;
-              return parseNum(row[picked.colKey] !== undefined ? row[picked.colKey] : row[picked.heading]);
-            }
-
-            return 0;
-          };
-
-          const f = col.formula.replace(/#\[(.*?)\]/g, (_, token) => resolveTokenValue(token));
-          if (/^[\d+\-*/().\s]+$/.test(f)) {
-            const res = Function(`"use strict"; return (${f})`)();
-            const val = !isFinite(res) || isNaN(res) ? 0 : Math.round(res);
-            row[col.colKey] = val;
-            if (col.heading) row[col.heading] = val;
+          if (unresolved) {
+            usedAutoFallback = true;
           } else {
-            row[col.colKey] = 0;
-            if (col.heading) row[col.heading] = 0;
+            try {
+              if (/^[\d+\-*/().\s]+$/.test(expr)) {
+                const res = Function(`"use strict"; return (${expr})`)();
+                computedVal = !isFinite(res) || isNaN(res) ? 0 : Math.round(res);
+              } else {
+                usedAutoFallback = true;
+              }
+            } catch {
+              usedAutoFallback = true;
+            }
           }
-        } catch {
-          row[col.colKey] = 0;
-          if (col.heading) row[col.heading] = 0;
         }
       }
-    });
 
-    // 2. Fallback MEC calculations ONLY when no Admin template is configured
+      if (usedAutoFallback) {
+        computedVal = computeFallbackForBrokenIm(col, colIdx, visiting);
+      }
+
+      row[col.colKey] = computedVal;
+      if (col.heading) row[col.heading] = computedVal;
+      evaluatedSet.add(colIdx);
+      visiting.delete(colIdx);
+    };
+
+    // 1. Evaluate every configured formula/calculation column left-to-right (resolving dependencies seamlessly)
+    if (isUsingAdminTemplate) {
+      cols.forEach((col, colIdx) => {
+        if (isFormulaCol(col)) {
+          evalColAtIndex(colIdx, new Set());
+        }
+      });
+    }
+
+    // 2. Default MEC Calculations ONLY when no Admin template is configured
     if (!isUsingAdminTemplate) {
       const ut1 = parseNum(row.ut1 ?? row["UT-1 (30)"] ?? row["UT-1"]);
       const ut2 = parseNum(row.ut2 ?? row["UT-2 (30)"] ?? row["UT-2"]);
@@ -584,21 +739,13 @@ export default function InternalMarkSheet() {
       const sm = parseNum(row.sm ?? row["SM (5)"] ?? row["SM"]);
       const mkc = parseNum(row.mkc ?? row["MKC (5)"] ?? row["MKC"]);
 
-      if (row.im1 === undefined) {
-        row.im1 = Math.round(((ut1 + ut2 + cia1) / 110) * 10);
-      }
-      if (row.im2 === undefined) {
-        row.im2 = Math.round(((ut3 + ut4 + cia2) / 110) * 10);
-      }
-      if (row.im3 === undefined) {
-        row.im3 = Math.round(((ut5 + cia3) / 130) * 10);
-      }
-      if (row.total === undefined) {
-        row.total = Math.min(40, Math.round(row.im1 + row.im2 + row.im3 + sm + mkc));
-      }
+      row.im1 = Math.round(((ut1 + ut2 + cia1) / 110) * 10);
+      row.im2 = Math.round(((ut3 + ut4 + cia2) / 110) * 10);
+      row.im3 = Math.round(((ut5 + cia3) / 130) * 10);
+      row.total = Math.min(40, Math.round(row.im1 + row.im2 + row.im3 + sm + mkc));
     }
 
-    // Sync headings for non-duplicate reference fallback
+    // Sync headings for downstream read fallback
     cols.forEach(col => {
       if (col.heading && row[col.colKey] !== undefined) {
         row[col.heading] = row[col.colKey];
@@ -652,7 +799,7 @@ export default function InternalMarkSheet() {
 
       columnsToUse.forEach(col => {
         if (col.type === "exam") {
-          const mark = findExamMarkForStudent(student, col.examName, targetSubject, classesList || [], targetSubjName);
+          const mark = findExamMarkForStudent(student, col.examName || col.title || col.heading, targetSubject, classesList || [], targetSubjName);
           row[col.colKey] = mark;
           row[col.heading] = mark;
         }
@@ -697,13 +844,18 @@ export default function InternalMarkSheet() {
     setStudentsData(prev => {
       if (!prev[studentIndex]) return prev;
       const updated = [...prev];
-      const row = { ...updated[studentIndex], [colKeyOrHeading]: value };
-
       const hasAdminTemplate = Boolean(activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0);
       const rawCols = hasAdminTemplate
         ? activeTemplate.columns
         : defaultMecColumns;
       const columnsToUse = getColumnsWithKeys(rawCols);
+
+      const matchedCol = columnsToUse.find(c => c.colKey === colKeyOrHeading || c.heading === colKeyOrHeading);
+      const row = { ...updated[studentIndex], [colKeyOrHeading]: value };
+      if (matchedCol) {
+        row[matchedCol.colKey] = value;
+        if (matchedCol.heading) row[matchedCol.heading] = value;
+      }
 
       evaluateRowFormulas(row, columnsToUse, hasAdminTemplate);
 
@@ -726,6 +878,14 @@ export default function InternalMarkSheet() {
       : defaultMecColumns;
     return getColumnsWithKeys(rawCols);
   }, [activeTemplate]);
+
+  // Detect any Admin formula column with missing/broken links that triggered automatic sibling inference
+  const autoRepairedColumns = useMemo(() => {
+    if (!activeTemplate || !Array.isArray(activeTemplate.columns) || activeTemplate.columns.length === 0) {
+      return [];
+    }
+    return currentColumns.filter((col, idx) => isBrokenFormulaColumn(col, idx, currentColumns));
+  }, [activeTemplate, currentColumns]);
 
   // Visible Columns (Filters out hidden columns while calculations still run for all columns in background)
   const visibleColumns = useMemo(() => {
@@ -1681,6 +1841,32 @@ export default function InternalMarkSheet() {
             </div>
           )}
         </div>
+
+        {/* BROKEN/UNLINKED ADMIN FORMULA AUTO-REPAIR NOTICE (HIDDEN IN PRINT) */}
+        {!loading && autoRepairedColumns.length > 0 && (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            flexWrap: "wrap",
+            padding: "0.75rem 1.1rem",
+            marginBottom: "1rem",
+            borderRadius: "12px",
+            background: "rgba(254, 243, 199, 0.75)",
+            border: "1px solid rgba(245, 158, 11, 0.4)",
+            color: "#92400e",
+            fontSize: "0.83rem",
+            fontWeight: "600"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <AlertCircle size={17} style={{ color: "#d97706", flexShrink: 0 }} />
+              <span>
+                Auto-calculated <strong>{autoRepairedColumns.map(c => c.heading || c.title).join(", ")}</strong> from matching exam marks because its Admin template formula was missing or unlinked. Open <em>Admin Panel → Internal Mark Templates → Edit Format</em> to verify and save permanently.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* SCREEN KPI OVERVIEW STRIP (HIDDEN IN PRINT) */}
         {!loading && studentsData.length > 0 && (

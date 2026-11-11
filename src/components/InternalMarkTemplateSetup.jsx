@@ -142,25 +142,47 @@ export default function InternalMarkTemplateSetup() {
 
   const handleSaveTemplate = async () => {
     try {
-      const dataToSave = {
-        ...editingTemplate,
-        passMark: editingTemplate.passMark === "" || editingTemplate.passMark === undefined
-          ? 0
-          : Math.max(0, Number(editingTemplate.passMark) || 0)
-      };
-      dataToSave.columns = dataToSave.columns.map(col => {
+      const brokenCalcCols = [];
+      const preparedColumns = (editingTemplate.columns || []).map((col, idx) => {
         const nextCol = { ...col, isHidden: Boolean(col.isHidden) };
         if (nextCol.type === "calculation") {
-          const sumPart = (nextCol.calcSources || []).map(s => `#[${s}]`).join(" + ");
+          if (nextCol.calcType === "custom" && nextCol.formula && nextCol.formula.trim()) {
+            nextCol.type = "formula";
+            return nextCol;
+          }
+          const validSources = Array.isArray(nextCol.calcSources) ? nextCol.calcSources.filter(Boolean) : [];
+          if (validSources.length === 0) {
+            brokenCalcCols.push(nextCol.heading || `Column ${idx + 1}`);
+          }
+          const sumPart = validSources.map(s => `#[${s}]`).join(" + ");
+          const safeOutof = Number(nextCol.calcOutof) > 0 ? Number(nextCol.calcOutof) : 1;
+          const safeWeightage = Number(nextCol.calcWeightage) >= 0 && nextCol.calcWeightage !== "" ? Number(nextCol.calcWeightage) : 1;
           if (nextCol.calcType === "sum") {
-            nextCol.formula = `(${sumPart || '0'})`;
+            nextCol.formula = `(${sumPart || "0"})`;
           } else {
-            nextCol.formula = `(${sumPart || '0'}) / ${nextCol.calcOutof || 1} * ${nextCol.calcWeightage || 1}`;
+            nextCol.formula = `(${sumPart || "0"}) / ${safeOutof} * ${safeWeightage}`;
+            nextCol.calcOutof = safeOutof;
+            nextCol.calcWeightage = safeWeightage;
           }
           nextCol.type = "formula";
         }
         return nextCol;
       });
+
+      if (brokenCalcCols.length > 0) {
+        const proceed = window.confirm(
+          `Warning: The following calculated column(s) have NO source columns selected and will evaluate to 0:\n\n• ${brokenCalcCols.join("\n• ")}\n\nClick Cancel to pick source columns first, or OK to save anyway.`
+        );
+        if (!proceed) return;
+      }
+
+      const dataToSave = {
+        ...editingTemplate,
+        columns: preparedColumns,
+        passMark: editingTemplate.passMark === "" || editingTemplate.passMark === undefined
+          ? 0
+          : Math.max(0, Number(editingTemplate.passMark) || 0)
+      };
 
       if (editingTemplate._id) {
         await API.put(`/api/internal-marks/${editingTemplate._id}`, dataToSave);
@@ -296,47 +318,73 @@ export default function InternalMarkTemplateSetup() {
     const normalizeParsedSources = (rawSources, colsBefore) => {
       const seenLegacy = {};
       return rawSources.map(raw => {
-        if (/::\d+$/.test(raw)) return raw;
-        const dupCount = colsBefore.filter(c => c.heading === raw).length;
-        if (dupCount > 1) {
-          seenLegacy[raw] = (seenLegacy[raw] || 0) + 1;
-          return `${raw} ::${Math.min(seenLegacy[raw], dupCount)}`;
+        const cleanedRaw = (raw || "").trim();
+        if (/::\d+$/.test(cleanedRaw)) {
+          const base = cleanedRaw.replace(/\s*::\d+$/, "").trim();
+          const occ = cleanedRaw.match(/::(\d+)$/)[1];
+          const matched = colsBefore.find(c => (c.heading || "").trim().toLowerCase() === base.toLowerCase());
+          return matched ? `${matched.heading} ::${occ}` : cleanedRaw;
         }
-        return raw;
+        const matchedCols = colsBefore.filter(c => (c.heading || "").trim().toLowerCase() === cleanedRaw.toLowerCase());
+        const exactHeading = matchedCols[0]?.heading || cleanedRaw;
+        if (matchedCols.length > 1) {
+          seenLegacy[exactHeading] = (seenLegacy[exactHeading] || 0) + 1;
+          return `${exactHeading} ::${Math.min(seenLegacy[exactHeading], matchedCols.length)}`;
+        }
+        return exactHeading;
       });
     };
+
+    const extractTokens = (str) => [...(str || "").matchAll(/#\[(.*?)\]/g)].map(m => m[1]);
 
     cloned.columns = cloned.columns.map((col, colIdx) => {
       const nextCol = { ...col };
       if (nextCol.type === "formula" || nextCol.type === "calculation") {
         nextCol.type = "calculation";
         const colsBefore = cloned.columns.slice(0, colIdx);
-        // If calcSources and calcType are already populated, keep them directly!
-        if (nextCol.calcSources && nextCol.calcSources.length > 0) {
+        if (Array.isArray(nextCol.calcSources) && nextCol.calcSources.length > 0 && nextCol.calcType !== "custom") {
           nextCol.calcSources = normalizeParsedSources(nextCol.calcSources, colsBefore);
-          nextCol.calcOutof = nextCol.calcOutof || 110;
-          nextCol.calcWeightage = nextCol.calcWeightage || 10;
+          nextCol.calcOutof = nextCol.calcOutof || 50;
+          nextCol.calcWeightage = nextCol.calcWeightage ?? 10;
           return nextCol;
         }
 
-        // Otherwise parse from formula string: e.g. (#[A] + #[B]) / 110 * 10
-        const scaleMatch = (nextCol.formula || "").match(/\((.*?)\)\s*\/\s*([\d.]+)\s*\*\s*([\d.]+)/);
-        const sumMatch = (nextCol.formula || "").match(/^\((.*?)\)$/);
-        
-        if (scaleMatch) {
-          nextCol.calcSources = normalizeParsedSources([...scaleMatch[1].matchAll(/#\[(.*?)\]/g)].map(m => m[1]), colsBefore);
+        const rawFormula = (nextCol.formula || "").trim();
+        const scaleDivMul = rawFormula.match(/^\(?([\s\S]*?)\)?\s*\/\s*([\d.]+)\s*\*\s*([\d.]+)$/);
+        const scaleMulDiv = rawFormula.match(/^\(?([\s\S]*?)\)?\s*\*\s*([\d.]+)\s*\/\s*([\d.]+)$/);
+        const scaleDivOnly = rawFormula.match(/^\(?([\s\S]*?)\)?\s*\/\s*([\d.]+)$/);
+        const tokensAll = extractTokens(rawFormula);
+        const isPureSumExpr = tokensAll.length > 0 && /^[\s()+]*$/.test(rawFormula.replace(/#\[.*?\]/g, ""));
+
+        if (scaleDivMul && extractTokens(scaleDivMul[1]).length > 0) {
+          nextCol.calcSources = normalizeParsedSources(extractTokens(scaleDivMul[1]), colsBefore);
           nextCol.calcType = "scale";
-          nextCol.calcOutof = parseFloat(scaleMatch[2]);
-          nextCol.calcWeightage = parseFloat(scaleMatch[3]);
-        } else if (sumMatch) {
-          nextCol.calcSources = normalizeParsedSources([...sumMatch[1].matchAll(/#\[(.*?)\]/g)].map(m => m[1]), colsBefore);
+          nextCol.calcOutof = parseFloat(scaleDivMul[2]);
+          nextCol.calcWeightage = parseFloat(scaleDivMul[3]);
+        } else if (scaleMulDiv && extractTokens(scaleMulDiv[1]).length > 0) {
+          nextCol.calcSources = normalizeParsedSources(extractTokens(scaleMulDiv[1]), colsBefore);
+          nextCol.calcType = "scale";
+          nextCol.calcOutof = parseFloat(scaleMulDiv[3]);
+          nextCol.calcWeightage = parseFloat(scaleMulDiv[2]);
+        } else if (scaleDivOnly && extractTokens(scaleDivOnly[1]).length > 0) {
+          nextCol.calcSources = normalizeParsedSources(extractTokens(scaleDivOnly[1]), colsBefore);
+          nextCol.calcType = "scale";
+          nextCol.calcOutof = parseFloat(scaleDivOnly[2]);
+          nextCol.calcWeightage = 1;
+        } else if (isPureSumExpr) {
+          nextCol.calcSources = normalizeParsedSources(tokensAll, colsBefore);
           nextCol.calcType = "sum";
+          nextCol.calcOutof = 100;
+          nextCol.calcWeightage = 10;
+        } else if (tokensAll.length > 0) {
+          nextCol.calcSources = normalizeParsedSources(tokensAll, colsBefore);
+          nextCol.calcType = "custom";
           nextCol.calcOutof = 100;
           nextCol.calcWeightage = 10;
         } else {
           nextCol.calcSources = [];
           nextCol.calcType = "scale";
-          nextCol.calcOutof = 110;
+          nextCol.calcOutof = 50;
           nextCol.calcWeightage = 10;
         }
       }
@@ -582,64 +630,97 @@ export default function InternalMarkTemplateSetup() {
 
                 {col.type === "calculation" && (
                   <div style={{ background: "var(--bg-main)", padding: "1rem", borderRadius: "8px", borderLeft: "4px solid #10b981" }}>
-                    <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem" }}>
+                    <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
                       <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontWeight: "bold" }}>
                         <input type="radio" name={`calcType-${index}`} checked={col.calcType === "scale" || !col.calcType} onChange={() => handleColumnChange(index, 'calcType', 'scale')} />
-                        Convert & Scale (E.g. Convert to 10 marks)
+                        Convert &amp; Scale (E.g. Convert to 10 marks)
                       </label>
                       <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontWeight: "bold", color: "var(--primary)" }}>
                         <input type="radio" name={`calcType-${index}`} checked={col.calcType === "sum"} onChange={() => handleColumnChange(index, 'calcType', 'sum')} />
                         <Sigma size={16} /> Direct Sum (Final Total)
                       </label>
+                      {col.calcType === "custom" && (
+                        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", fontWeight: "bold", color: "#d97706" }}>
+                          <input type="radio" name={`calcType-${index}`} checked={col.calcType === "custom"} onChange={() => handleColumnChange(index, 'calcType', 'custom')} />
+                          Custom Formula
+                        </label>
+                      )}
                     </div>
 
-                    <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>1. Which columns should be added together?</label>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
-                      {editingTemplate.columns.slice(0, index).map((prevCol, i) => {
-                        const colsBefore = editingTemplate.columns.slice(0, index);
-                        const { token, label } = getColSourceInfo(colsBefore, i);
-                        const isSelected = (col.calcSources || []).includes(token);
-                        return (
-                          <label key={i} style={{ 
-                            padding: "6px 12px", 
-                            background: isSelected ? "var(--primary)" : "var(--bg-secondary)", 
-                            color: isSelected ? "white" : "inherit",
-                            borderRadius: "20px", cursor: "pointer", fontSize: "0.85rem", border: "1px solid var(--border-color)",
-                            display: "flex", alignItems: "center", gap: "0.5rem"
-                          }}>
-                            <input 
-                              type="checkbox" 
-                              checked={isSelected}
-                              onChange={() => toggleCalcSource(index, token)}
-                              style={{ display: "none" }}
-                            />
-                            {isSelected && <Check size={14} />}
-                            {label}
-                          </label>
-                        );
-                      })}
-                      {index === 0 && <span style={{ fontSize: "0.85rem", color: "var(--danger)" }}>No previous columns available to add!</span>}
-                    </div>
-
-                    {(!col.calcType || col.calcType === "scale") && (
-                      <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", marginTop: "1rem" }}>
-                        <div>
-                          <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>2. Total Max Marks of selected</label>
-                          <input type="number" className="input-field" value={col.calcOutof} onChange={(e) => handleColumnChange(index, 'calcOutof', e.target.value)} style={{ width: "150px" }} />
-                        </div>
-                        <div style={{ fontSize: "1.5rem", color: "var(--text-muted)", marginTop: "1.5rem" }}>👉</div>
-                        <div>
-                          <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>3. Convert to Weightage</label>
-                          <input type="number" className="input-field" value={col.calcWeightage} onChange={(e) => handleColumnChange(index, 'calcWeightage', e.target.value)} style={{ width: "150px" }} />
-                        </div>
+                    {col.calcType === "custom" ? (
+                      <div style={{ marginBottom: "1rem" }}>
+                        <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.4rem" }}>Custom Expression (`#[Column Heading]`)</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={col.formula || ""}
+                          onChange={(e) => handleColumnChange(index, 'formula', e.target.value)}
+                          placeholder="e.g. (#[CIA I] * 0.2)"
+                        />
                       </div>
+                    ) : (
+                      <>
+                        <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>1. Which columns should be added together?</label>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
+                          {editingTemplate.columns.slice(0, index).map((prevCol, i) => {
+                            const colsBefore = editingTemplate.columns.slice(0, index);
+                            const { token, label } = getColSourceInfo(colsBefore, i);
+                            const isSelected = (col.calcSources || []).includes(token);
+                            return (
+                              <label key={i} style={{ 
+                                padding: "6px 12px", 
+                                background: isSelected ? "var(--primary)" : "var(--bg-secondary)", 
+                                color: isSelected ? "white" : "inherit",
+                                borderRadius: "20px", cursor: "pointer", fontSize: "0.85rem", border: "1px solid var(--border-color)",
+                                display: "flex", alignItems: "center", gap: "0.5rem"
+                              }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={isSelected}
+                                  onChange={() => toggleCalcSource(index, token)}
+                                  style={{ display: "none" }}
+                                />
+                                {isSelected && <Check size={14} />}
+                                {label}
+                              </label>
+                            );
+                          })}
+                          {index === 0 && <span style={{ fontSize: "0.85rem", color: "var(--danger)" }}>No previous columns available to add!</span>}
+                        </div>
+
+                        {(!col.calcType || col.calcType === "scale") && (
+                          <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", marginTop: "1rem" }}>
+                            <div>
+                              <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>2. Total Max Marks of selected</label>
+                              <input type="number" className="input-field" value={col.calcOutof} onChange={(e) => handleColumnChange(index, 'calcOutof', e.target.value)} style={{ width: "150px" }} />
+                            </div>
+                            <div style={{ fontSize: "1.5rem", color: "var(--text-muted)", marginTop: "1.5rem" }}>👉</div>
+                            <div>
+                              <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>3. Convert to Weightage</label>
+                              <input type="number" className="input-field" value={col.calcWeightage} onChange={(e) => handleColumnChange(index, 'calcWeightage', e.target.value)} style={{ width: "150px" }} />
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                     
-                    <div style={{ marginTop: "1rem", padding: "10px", background: "rgba(16, 185, 129, 0.1)", color: "#10b981", borderRadius: "6px", fontSize: "0.85rem", fontWeight: "bold" }}>
-                      {col.calcType === "sum" ? (
-                        <>Formula: Sum of Selected Columns</>
+                    <div style={{
+                      marginTop: "1rem",
+                      padding: "10px",
+                      background: (col.calcType !== "custom" && (!col.calcSources || col.calcSources.length === 0)) ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+                      color: (col.calcType !== "custom" && (!col.calcSources || col.calcSources.length === 0)) ? "#dc2626" : "#10b981",
+                      borderRadius: "6px",
+                      fontSize: "0.85rem",
+                      fontWeight: "bold"
+                    }}>
+                      {col.calcType === "custom" ? (
+                        <>Formula: {col.formula || "(empty)"}</>
+                      ) : (!col.calcSources || col.calcSources.length === 0) ? (
+                        <>⚠ Select at least 1 column above — otherwise this column will calculate as 0!</>
+                      ) : col.calcType === "sum" ? (
+                        <>Formula: Sum of ({col.calcSources.join(" + ")})</>
                       ) : (
-                        <>Formula: ( Sum of Selected ) / {col.calcOutof} × {col.calcWeightage}</>
+                        <>Formula: ({col.calcSources.join(" + ")}) / {col.calcOutof} × {col.calcWeightage}</>
                       )}
                     </div>
                   </div>
