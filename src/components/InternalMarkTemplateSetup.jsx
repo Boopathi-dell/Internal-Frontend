@@ -63,7 +63,9 @@ export default function InternalMarkTemplateSetup() {
     localStorage.removeItem("internalMarkHeaderImage");
     try {
       await API.post("/api/internal-marks/header-image", { headerImage: "" });
-    } catch (e) {}
+    } catch (err) {
+      console.error("Failed to remove header image:", err);
+    }
   };
 
   const fetchTemplates = async () => {
@@ -131,7 +133,7 @@ export default function InternalMarkTemplateSetup() {
         { heading: "IM (10)", type: "calculation", examName: "", formula: "(#[UT-5 (30)] + #[CIA3 (100)]) / 130 * 10", calcSources: ["UT-5 (30)", "CIA3 (100)"], calcType: "scale", calcOutof: 130, calcWeightage: 10, isHidden: false },
         { heading: "SM (5)", type: "exam", examName: "Seminar", formula: "", calcSources: [], calcType: "scale", calcOutof: 5, calcWeightage: 5, isHidden: false },
         { heading: "MKC (5)", type: "exam", examName: "MKC", formula: "", calcSources: [], calcType: "scale", calcOutof: 5, calcWeightage: 5, isHidden: false },
-        { heading: "TOTAL (40)", type: "calculation", examName: "", formula: "(#[IM (10)] + #[IM (10)] + #[IM (10)] + #[SM (5)] + #[MKC (5)])", calcSources: ["IM (10)", "IM (10)", "IM (10)", "SM (5)", "MKC (5)"], calcType: "sum", calcOutof: 40, calcWeightage: 40, isHidden: false }
+        { heading: "TOTAL (40)", type: "calculation", examName: "", formula: "(#[IM (10) ::1] + #[IM (10) ::2] + #[IM (10) ::3] + #[SM (5)] + #[MKC (5)])", calcSources: ["IM (10) ::1", "IM (10) ::2", "IM (10) ::3", "SM (5)", "MKC (5)"], calcType: "sum", calcOutof: 40, calcWeightage: 40, isHidden: false }
       ]
     });
   };
@@ -193,63 +195,132 @@ export default function InternalMarkTemplateSetup() {
     }));
   };
 
-  const handleColumnChange = (index, field, value) => {
-    const newColumns = [...editingTemplate.columns];
-    newColumns[index][field] = value;
-    setEditingTemplate(prev => ({ ...prev, columns: newColumns }));
+  // Builds a unique token when duplicate column headings exist (e.g., multiple "IM (10)")
+  const getColSourceInfo = (colsBefore, targetIdx) => {
+    const targetHeading = colsBefore[targetIdx]?.heading || "";
+    const matchingAll = colsBefore.filter(c => c.heading === targetHeading);
+    if (matchingAll.length <= 1) {
+      return { token: targetHeading, label: targetHeading || `Column ${targetIdx + 1}` };
+    }
+    const occ = colsBefore.slice(0, targetIdx + 1).filter(c => c.heading === targetHeading).length;
+    return {
+      token: `${targetHeading} ::${occ}`,
+      label: `${targetHeading} (#${occ})`
+    };
   };
 
-  const toggleCalcSource = (colIndex, sourceHeading) => {
+  // Remaps existing calcSources tokens after a column heading edit or deletion without index drift
+  const remapCalcSources = (oldColumns, newColumns, removedIdx = -1) => {
+    const resolveOldIndex = (colsBefore, token) => {
+      for (let i = 0; i < colsBefore.length; i++) {
+        if (getColSourceInfo(colsBefore, i).token === token) return i;
+      }
+      return colsBefore.findIndex(c => c.heading === token);
+    };
+
+    const resolvedPerCol = oldColumns.map((col, j) => {
+      if (!Array.isArray(col.calcSources)) return null;
+      const colsBefore = oldColumns.slice(0, j);
+      return col.calcSources.map(src => ({ raw: src, oldIdx: resolveOldIndex(colsBefore, src) }));
+    });
+
+    return newColumns.map((col, newJ) => {
+      const oldJ = removedIdx !== -1 && newJ >= removedIdx ? newJ + 1 : newJ;
+      const refs = resolvedPerCol[oldJ];
+      if (!refs) return col;
+
+      const updatedColsBefore = newColumns.slice(0, newJ);
+      const nextSources = [];
+      refs.forEach(({ raw, oldIdx }) => {
+        if (oldIdx === -1) {
+          nextSources.push(raw);
+          return;
+        }
+        if (removedIdx !== -1 && oldIdx === removedIdx) return;
+        const mappedIdx = removedIdx !== -1 && oldIdx > removedIdx ? oldIdx - 1 : oldIdx;
+        if (mappedIdx >= 0 && mappedIdx < newJ) {
+          nextSources.push(getColSourceInfo(updatedColsBefore, mappedIdx).token);
+        }
+      });
+      return { ...col, calcSources: nextSources };
+    });
+  };
+
+  const handleColumnChange = (index, field, value) => {
+    const oldColumns = editingTemplate.columns;
+    const newColumns = oldColumns.map((c, idx) => (idx === index ? { ...c, [field]: value } : { ...c }));
+    const updated = field === "heading" ? remapCalcSources(oldColumns, newColumns) : newColumns;
+    setEditingTemplate(prev => ({ ...prev, columns: updated }));
+  };
+
+  const toggleCalcSource = (colIndex, sourceToken) => {
     const newColumns = [...editingTemplate.columns];
     const sources = newColumns[colIndex].calcSources || [];
-    if (sources.includes(sourceHeading)) {
-      newColumns[colIndex].calcSources = sources.filter(s => s !== sourceHeading);
+    if (sources.includes(sourceToken)) {
+      newColumns[colIndex].calcSources = sources.filter(s => s !== sourceToken);
     } else {
-      newColumns[colIndex].calcSources = [...sources, sourceHeading];
+      newColumns[colIndex].calcSources = [...sources, sourceToken];
     }
     setEditingTemplate(prev => ({ ...prev, columns: newColumns }));
   };
 
   const handleRemoveColumn = (index) => {
-    const newColumns = [...editingTemplate.columns];
-    newColumns.splice(index, 1);
-    setEditingTemplate(prev => ({ ...prev, columns: newColumns }));
+    const oldColumns = editingTemplate.columns;
+    const newColumns = oldColumns.filter((_, i) => i !== index).map(c => ({ ...c }));
+    const updated = remapCalcSources(oldColumns, newColumns, index);
+    setEditingTemplate(prev => ({ ...prev, columns: updated }));
   };
 
   const parseExistingFormula = (template) => {
     const cloned = { ...template };
-    cloned.columns = cloned.columns.map(col => {
-      if (col.type === "formula" || col.type === "calculation") {
-        col.type = "calculation";
+    const normalizeParsedSources = (rawSources, colsBefore) => {
+      const seenLegacy = {};
+      return rawSources.map(raw => {
+        if (/::\d+$/.test(raw)) return raw;
+        const dupCount = colsBefore.filter(c => c.heading === raw).length;
+        if (dupCount > 1) {
+          seenLegacy[raw] = (seenLegacy[raw] || 0) + 1;
+          return `${raw} ::${Math.min(seenLegacy[raw], dupCount)}`;
+        }
+        return raw;
+      });
+    };
+
+    cloned.columns = cloned.columns.map((col, colIdx) => {
+      const nextCol = { ...col };
+      if (nextCol.type === "formula" || nextCol.type === "calculation") {
+        nextCol.type = "calculation";
+        const colsBefore = cloned.columns.slice(0, colIdx);
         // If calcSources and calcType are already populated, keep them directly!
-        if (col.calcSources && col.calcSources.length > 0) {
-          col.calcOutof = col.calcOutof || 110;
-          col.calcWeightage = col.calcWeightage || 10;
-          return col;
+        if (nextCol.calcSources && nextCol.calcSources.length > 0) {
+          nextCol.calcSources = normalizeParsedSources(nextCol.calcSources, colsBefore);
+          nextCol.calcOutof = nextCol.calcOutof || 110;
+          nextCol.calcWeightage = nextCol.calcWeightage || 10;
+          return nextCol;
         }
 
         // Otherwise parse from formula string: e.g. (#[A] + #[B]) / 110 * 10
-        const scaleMatch = (col.formula || "").match(/\((.*?)\)\s*\/\s*([\d.]+)\s*\*\s*([\d.]+)/);
-        const sumMatch = (col.formula || "").match(/^\((.*?)\)$/);
+        const scaleMatch = (nextCol.formula || "").match(/\((.*?)\)\s*\/\s*([\d.]+)\s*\*\s*([\d.]+)/);
+        const sumMatch = (nextCol.formula || "").match(/^\((.*?)\)$/);
         
         if (scaleMatch) {
-          col.calcSources = [...scaleMatch[1].matchAll(/#\[(.*?)\]/g)].map(m => m[1]);
-          col.calcType = "scale";
-          col.calcOutof = parseFloat(scaleMatch[2]);
-          col.calcWeightage = parseFloat(scaleMatch[3]);
+          nextCol.calcSources = normalizeParsedSources([...scaleMatch[1].matchAll(/#\[(.*?)\]/g)].map(m => m[1]), colsBefore);
+          nextCol.calcType = "scale";
+          nextCol.calcOutof = parseFloat(scaleMatch[2]);
+          nextCol.calcWeightage = parseFloat(scaleMatch[3]);
         } else if (sumMatch) {
-          col.calcSources = [...sumMatch[1].matchAll(/#\[(.*?)\]/g)].map(m => m[1]);
-          col.calcType = "sum";
-          col.calcOutof = 100;
-          col.calcWeightage = 10;
+          nextCol.calcSources = normalizeParsedSources([...sumMatch[1].matchAll(/#\[(.*?)\]/g)].map(m => m[1]), colsBefore);
+          nextCol.calcType = "sum";
+          nextCol.calcOutof = 100;
+          nextCol.calcWeightage = 10;
         } else {
-          col.calcSources = [];
-          col.calcType = "scale";
-          col.calcOutof = 110;
-          col.calcWeightage = 10;
+          nextCol.calcSources = [];
+          nextCol.calcType = "scale";
+          nextCol.calcOutof = 110;
+          nextCol.calcWeightage = 10;
         }
       }
-      return col;
+      return nextCol;
     });
     setEditingTemplate(cloned);
   };
@@ -477,24 +548,29 @@ export default function InternalMarkTemplateSetup() {
 
                     <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>1. Which columns should be added together?</label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: "1rem" }}>
-                      {editingTemplate.columns.slice(0, index).map((prevCol, i) => (
-                        <label key={i} style={{ 
-                          padding: "6px 12px", 
-                          background: (col.calcSources || []).includes(prevCol.heading) ? "var(--primary)" : "var(--bg-secondary)", 
-                          color: (col.calcSources || []).includes(prevCol.heading) ? "white" : "inherit",
-                          borderRadius: "20px", cursor: "pointer", fontSize: "0.85rem", border: "1px solid var(--border-color)",
-                          display: "flex", alignItems: "center", gap: "0.5rem"
-                        }}>
-                          <input 
-                            type="checkbox" 
-                            checked={(col.calcSources || []).includes(prevCol.heading)}
-                            onChange={() => toggleCalcSource(index, prevCol.heading)}
-                            style={{ display: "none" }}
-                          />
-                          {(col.calcSources || []).includes(prevCol.heading) && <Check size={14} />}
-                          {prevCol.heading || `Column ${i+1}`}
-                        </label>
-                      ))}
+                      {editingTemplate.columns.slice(0, index).map((prevCol, i) => {
+                        const colsBefore = editingTemplate.columns.slice(0, index);
+                        const { token, label } = getColSourceInfo(colsBefore, i);
+                        const isSelected = (col.calcSources || []).includes(token);
+                        return (
+                          <label key={i} style={{ 
+                            padding: "6px 12px", 
+                            background: isSelected ? "var(--primary)" : "var(--bg-secondary)", 
+                            color: isSelected ? "white" : "inherit",
+                            borderRadius: "20px", cursor: "pointer", fontSize: "0.85rem", border: "1px solid var(--border-color)",
+                            display: "flex", alignItems: "center", gap: "0.5rem"
+                          }}>
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={() => toggleCalcSource(index, token)}
+                              style={{ display: "none" }}
+                            />
+                            {isSelected && <Check size={14} />}
+                            {label}
+                          </label>
+                        );
+                      })}
                       {index === 0 && <span style={{ fontSize: "0.85rem", color: "var(--danger)" }}>No previous columns available to add!</span>}
                     </div>
 

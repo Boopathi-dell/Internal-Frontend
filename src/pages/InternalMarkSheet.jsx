@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import API from "../api";
 import * as XLSX from "xlsx";
 import { 
@@ -43,8 +43,8 @@ export default function InternalMarkSheet() {
     iqacRef: "MEC/IQAC/2026-27/COE/022",
     date: new Date().toLocaleDateString("en-GB").replace(/\//g, "."),
     semesterSession: "EVEN SEM APRIL - 2027",
-    pageSplitMode: "2pages", // "2pages" (default: Strict 2 Pages MEC format), "1page", "30", "25"
-    padTo60: true, // Pad blank rows to 60 to match official MEC 2-page print grid (Image 1 & 2)
+    pageSplitMode: "2pages", // "2pages" (default: Split all students across max 2 pages), "1page", "30", "25"
+    padTo60: false, // Default to enrolled students only (optional 60-row blank grid padding toggle)
     tableWidthMode: "full", // "full" (100% Stretch - standard MEC landscape), "autoFit"
     nameColWidth: "auto" // "auto" (default: Auto-Fit to student names), "160px", "200px", "240px"
   });
@@ -59,6 +59,18 @@ export default function InternalMarkSheet() {
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [userHiddenColumns, setUserHiddenColumns] = useState([]);
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const [showExcelMenu, setShowExcelMenu] = useState(false);
+  const excelMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (excelMenuRef.current && !excelMenuRef.current.contains(event.target)) {
+        setShowExcelMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
 
   // Sync hidden columns when active template changes
   useEffect(() => {
@@ -113,9 +125,12 @@ export default function InternalMarkSheet() {
       const regs = [...new Set(templates.map(t => t.regulation).filter(Boolean))];
       setAvailableRegulations(regs);
 
-      // If regulations exist in DB, default to first available regulation or match 2023 / 2025
+      // Prioritize whichever regulation has an Active template set by Admin first
       if (regs.length > 0) {
-        const defaultReg = regs.includes("2023") ? "2023" : (regs.includes("2025") ? "2025" : regs[0]);
+        const activeAny = templates.find(t => t.isActive);
+        const defaultReg = (activeAny && activeAny.regulation)
+          ? activeAny.regulation
+          : (regs.includes("2023") ? "2023" : (regs.includes("2025") ? "2025" : regs[0]));
         setFormData(prev => ({ ...prev, regulation: defaultReg }));
         const matched = templates.find(t => t.regulation === defaultReg && t.isActive) || templates.find(t => t.regulation === defaultReg);
         setActiveTemplate(matched || null);
@@ -358,60 +373,99 @@ export default function InternalMarkSheet() {
     });
   };
 
-  // Helper to evaluate row formulas (dynamically executes Admin-configured formulas from active template)
-  const evaluateRowFormulas = (row, cols) => {
-    // 1. Process any column that has a custom formula defined by the Admin in the active template
-    cols.forEach(col => {
+  // Helper to evaluate row formulas (strictly executes Admin-configured formulas when an Admin template is active)
+  const evaluateRowFormulas = (row, cols, isUsingAdminTemplate = false) => {
+    // 1. Process every formula/calculation column using sequential + occurrence-safe token matching
+    cols.forEach((col, colIdx) => {
       if ((col.type === "formula" || col.type === "calculation") && col.formula) {
         try {
-          let f = col.formula;
-          cols.forEach(inner => {
-            const val = parseNum(row[inner.colKey] ?? row[inner.heading] ?? row[inner.title]);
-            f = f.split(`#[${inner.heading}]`).join(val);
-            f = f.split(`#[${inner.colKey}]`).join(val);
-            if (inner.title) f = f.split(`#[${inner.title}]`).join(val);
-          });
-          // Replace any remaining unresolved #[...] with 0
-          f = f.replace(/#\[.*?\]/g, "0");
+          const usageCursor = {};
+          const candidateCols = cols.slice(0, colIdx);
+
+          const resolveTokenValue = (rawToken) => {
+            const token = (rawToken || "").trim();
+            // Explicit occurrence token e.g. "IM (10) ::2"
+            const occMatch = token.match(/^(.*?)\s*::(\d+)$/);
+            if (occMatch) {
+              const baseName = occMatch[1].trim();
+              const occNum = parseInt(occMatch[2], 10);
+              const pool = (candidateCols.length ? candidateCols : cols).filter(
+                c => c.heading === baseName || c.title === baseName
+              );
+              const picked = pool[occNum - 1];
+              if (!picked) return 0;
+              return parseNum(row[picked.colKey] !== undefined ? row[picked.colKey] : row[picked.heading]);
+            }
+
+            // Direct colKey lookup
+            const byKey = (candidateCols.length ? candidateCols : cols).find(c => c.colKey === token);
+            if (byKey) {
+              return parseNum(row[byKey.colKey] !== undefined ? row[byKey.colKey] : row[byKey.heading]);
+            }
+
+            // Match by heading or stripped title (sequentially consumes duplicate headings like 3x "IM (10)")
+            let pool = candidateCols.filter(c => c.heading === token);
+            if (pool.length === 0) {
+              pool = candidateCols.filter(c => c.title && c.title === token);
+            }
+            if (pool.length === 0) {
+              pool = cols.filter(c => c.heading === token || (c.title && c.title === token));
+            }
+            if (pool.length > 0) {
+              const usedIdx = usageCursor[token] || 0;
+              const picked = pool[Math.min(usedIdx, pool.length - 1)];
+              usageCursor[token] = usedIdx + 1;
+              return parseNum(row[picked.colKey] !== undefined ? row[picked.colKey] : row[picked.heading]);
+            }
+
+            return 0;
+          };
+
+          const f = col.formula.replace(/#\[(.*?)\]/g, (_, token) => resolveTokenValue(token));
           if (/^[\d+\-*/().\s]+$/.test(f)) {
             const res = Function(`"use strict"; return (${f})`)();
-            const val = isNaN(res) ? 0 : Math.round(res);
+            const val = !isFinite(res) || isNaN(res) ? 0 : Math.round(res);
             row[col.colKey] = val;
             if (col.heading) row[col.heading] = val;
+          } else {
+            row[col.colKey] = 0;
+            if (col.heading) row[col.heading] = 0;
           }
-        } catch (e) {
+        } catch {
           row[col.colKey] = 0;
           if (col.heading) row[col.heading] = 0;
         }
       }
     });
 
-    // 2. Standard MEC calculations if column was not already calculated by custom Admin formula:
-    const ut1 = parseNum(row.ut1 ?? row["UT-1 (30)"] ?? row["UT-1"]);
-    const ut2 = parseNum(row.ut2 ?? row["UT-2 (30)"] ?? row["UT-2"]);
-    const cia1 = parseNum(row.cia1 ?? row["CIA1 (50)"] ?? row["CIA1"]);
-    const ut3 = parseNum(row.ut3 ?? row["UT-3 (30)"] ?? row["UT-3"]);
-    const ut4 = parseNum(row.ut4 ?? row["UT-4 (30)"] ?? row["UT-4"]);
-    const cia2 = parseNum(row.cia2 ?? row["CIA2 (50)"] ?? row["CIA2"]);
-    const ut5 = parseNum(row.ut5 ?? row["UT-5 (30)"] ?? row["UT-5"]);
-    const cia3 = parseNum(row.cia3 ?? row["CIA3 (100)"] ?? row["CIA3"]);
-    const sm = parseNum(row.sm ?? row["SM (5)"] ?? row["SM"]);
-    const mkc = parseNum(row.mkc ?? row["MKC (5)"] ?? row["MKC"]);
+    // 2. Fallback MEC calculations ONLY when no Admin template is configured
+    if (!isUsingAdminTemplate) {
+      const ut1 = parseNum(row.ut1 ?? row["UT-1 (30)"] ?? row["UT-1"]);
+      const ut2 = parseNum(row.ut2 ?? row["UT-2 (30)"] ?? row["UT-2"]);
+      const cia1 = parseNum(row.cia1 ?? row["CIA1 (50)"] ?? row["CIA1"]);
+      const ut3 = parseNum(row.ut3 ?? row["UT-3 (30)"] ?? row["UT-3"]);
+      const ut4 = parseNum(row.ut4 ?? row["UT-4 (30)"] ?? row["UT-4"]);
+      const cia2 = parseNum(row.cia2 ?? row["CIA2 (50)"] ?? row["CIA2"]);
+      const ut5 = parseNum(row.ut5 ?? row["UT-5 (30)"] ?? row["UT-5"]);
+      const cia3 = parseNum(row.cia3 ?? row["CIA3 (100)"] ?? row["CIA3"]);
+      const sm = parseNum(row.sm ?? row["SM (5)"] ?? row["SM"]);
+      const mkc = parseNum(row.mkc ?? row["MKC (5)"] ?? row["MKC"]);
 
-    if (row.im1 === undefined) {
-      row.im1 = Math.round(((ut1 + ut2 + cia1) / 110) * 10);
-    }
-    if (row.im2 === undefined) {
-      row.im2 = Math.round(((ut3 + ut4 + cia2) / 110) * 10);
-    }
-    if (row.im3 === undefined) {
-      row.im3 = Math.round(((ut5 + cia3) / 130) * 10);
-    }
-    if (row.total === undefined) {
-      row.total = Math.min(40, Math.round(row.im1 + row.im2 + row.im3 + sm + mkc));
+      if (row.im1 === undefined) {
+        row.im1 = Math.round(((ut1 + ut2 + cia1) / 110) * 10);
+      }
+      if (row.im2 === undefined) {
+        row.im2 = Math.round(((ut3 + ut4 + cia2) / 110) * 10);
+      }
+      if (row.im3 === undefined) {
+        row.im3 = Math.round(((ut5 + cia3) / 130) * 10);
+      }
+      if (row.total === undefined) {
+        row.total = Math.min(40, Math.round(row.im1 + row.im2 + row.im3 + sm + mkc));
+      }
     }
 
-    // Sync all headings
+    // Sync headings for non-duplicate reference fallback
     cols.forEach(col => {
       if (col.heading && row[col.colKey] !== undefined) {
         row[col.heading] = row[col.colKey];
@@ -421,13 +475,9 @@ export default function InternalMarkSheet() {
     return row;
   };
 
-  // Pure in-memory student marks & formulas calculation (Instant 0ms update, Zero API calls)
-  const calculateStudentsMarks = (classesList, rosterObj, targetSubj, template) => {
-    const targetSubject = targetSubj || (formData.isCustomSubject ? formData.customSubject : formData.selectedSubject);
-    if (!targetSubject) {
-      setStudentsData([]);
-      return;
-    }
+  // Builds evaluated student mark rows for any given subject (reused by UI & multi-subject Excel export)
+  const buildEvaluatedRowsForSubject = (classesList, rosterObj, targetSubject, template) => {
+    if (!targetSubject) return [];
 
     const studentMap = {};
 
@@ -457,7 +507,8 @@ export default function InternalMarkSheet() {
       }
     });
 
-    const rawCols = (template && template.columns && template.columns.length > 0)
+    const hasAdminTemplate = Boolean(template && template.columns && template.columns.length > 0);
+    const rawCols = hasAdminTemplate
       ? template.columns
       : defaultMecColumns;
     const columnsToUse = getColumnsWithKeys(rawCols);
@@ -474,11 +525,22 @@ export default function InternalMarkSheet() {
         }
       });
 
-      evaluateRowFormulas(row, columnsToUse);
+      evaluateRowFormulas(row, columnsToUse, hasAdminTemplate);
       return row;
     });
 
     evaluatedStudents.sort((a, b) => (a.regNo || "").localeCompare(b.regNo || "", undefined, { numeric: true }));
+    return evaluatedStudents;
+  };
+
+  // Pure in-memory student marks & formulas calculation (Instant 0ms update, Zero API calls)
+  const calculateStudentsMarks = (classesList, rosterObj, targetSubj, template) => {
+    const targetSubject = targetSubj || (formData.isCustomSubject ? formData.customSubject : formData.selectedSubject);
+    if (!targetSubject) {
+      setStudentsData([]);
+      return;
+    }
+    const evaluatedStudents = buildEvaluatedRowsForSubject(classesList, rosterObj, targetSubject, template);
     setStudentsData(evaluatedStudents);
   };
 
@@ -502,12 +564,13 @@ export default function InternalMarkSheet() {
       const updated = [...prev];
       const row = { ...updated[studentIndex], [colKeyOrHeading]: value };
 
-      const rawCols = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
+      const hasAdminTemplate = Boolean(activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0);
+      const rawCols = hasAdminTemplate
         ? activeTemplate.columns
         : defaultMecColumns;
       const columnsToUse = getColumnsWithKeys(rawCols);
 
-      evaluateRowFormulas(row, columnsToUse);
+      evaluateRowFormulas(row, columnsToUse, hasAdminTemplate);
 
       updated[studentIndex] = row;
       return updated;
@@ -539,11 +602,11 @@ export default function InternalMarkSheet() {
     return visibleColumns.some(c => c.maxMark || (c.heading && c.heading.includes("(") && c.heading.includes(")")));
   }, [visibleColumns]);
 
-  // Multi-page chunking: Strict 2 Pages (MEC Official Format: Page 1 = 28, Page 2 = 32 / remaining)
+  // Multi-page chunking: Balanced 2 Pages (Fit all enrolled students cleanly into max 2 pages)
   const studentPages = useMemo(() => {
     let baseList = [...studentsData];
 
-    // If padTo60 is true (MEC official 2-page print grid as shown in user's Excel images)
+    // Optional 60-row blank grid padding (off by default so only enrolled students print)
     if (formData.padTo60) {
       const targetCount = Math.max(60, baseList.length);
       const rawCols = currentColumns;
@@ -553,14 +616,11 @@ export default function InternalMarkSheet() {
           isPlaceholder: true,
           sNo: dummySno,
           regNo: "",
-          name: "",
-          ut1: "", ut2: "", cia1: "", im1: 0,
-          ut3: "", ut4: "", cia2: "", im2: 0,
-          ut5: "", cia3: "", im3: 0,
-          sm: "", mkc: "", total: 0
+          name: ""
         };
         rawCols.forEach(c => {
-          if (["im1", "im2", "im3", "total"].includes(c.colKey)) {
+          const isFormulaCol = c.type === "formula" || c.type === "calculation";
+          if (isFormulaCol) {
             placeholderRow[c.colKey] = 0;
             placeholderRow[c.heading] = 0;
           } else {
@@ -578,14 +638,15 @@ export default function InternalMarkSheet() {
 
     const mode = formData.pageSplitMode || "2pages";
 
-    // Strict 2 Pages (MEC Official Format): Page 1 has exactly 28 rows, Page 2 has rows 29 to 60 (or end)
+    // Balanced 2 Pages: Small classes (<= 24) fit cleanly on 1 page; larger classes split evenly across 2 pages
     if (mode === "2pages") {
-      if (baseList.length <= 28 && !formData.padTo60) {
+      if (baseList.length <= 24 && !formData.padTo60) {
         return [baseList];
       }
+      const splitIdx = Math.ceil(baseList.length / 2);
       return [
-        baseList.slice(0, 28),
-        baseList.slice(28)
+        baseList.slice(0, splitIdx),
+        baseList.slice(splitIdx)
       ];
     }
 
@@ -594,8 +655,8 @@ export default function InternalMarkSheet() {
       return [baseList];
     }
 
-    // Fixed rows per page (e.g. 25, 30, 35)
-    const chunkSize = parseInt(mode) || 28;
+    // Fixed rows per page (e.g. 25, 30)
+    const chunkSize = parseInt(mode) || 30;
     const pages = [];
     for (let i = 0; i < baseList.length; i += chunkSize) {
       pages.push(baseList.slice(i, i + chunkSize));
@@ -603,51 +664,95 @@ export default function InternalMarkSheet() {
     return pages;
   }, [studentsData, formData.pageSplitMode, formData.padTo60, currentColumns]);
 
+  // Dynamically scale row height & font in print so all students strictly fit within max 2 A4 Landscape pages
+  const printMetrics = useMemo(() => {
+    const maxRows = Math.max(1, ...studentPages.map(p => p.length));
+    if (maxRows <= 25) return { rowHeight: 20, fontSize: 10, paddingY: 2 };
+    if (maxRows <= 30) return { rowHeight: 17, fontSize: 9.5, paddingY: 1 };
+    if (maxRows <= 34) return { rowHeight: 15, fontSize: 9, paddingY: 1 };
+    if (maxRows <= 38) return { rowHeight: 14, fontSize: 8.5, paddingY: 0 };
+    const fitted = Math.max(11, Math.floor(540 / maxRows));
+    return { rowHeight: fitted, fontSize: Math.max(7.5, fitted - 4), paddingY: 0 };
+  }, [studentPages]);
+
+  // Auto-fit student Name column width to longest enrolled name while keeping mark columns roomy in Landscape
+  const resolvedNameColWidth = useMemo(() => {
+    if (formData.nameColWidth !== "auto") return formData.nameColWidth;
+    const maxChars = studentsData.reduce((mx, st) => Math.max(mx, (st.name || "").length), 14);
+    const reservedForMarks = Math.max(240, visibleColumns.length * 40);
+    const maxAllowedForName = Math.max(145, Math.min(270, 920 - reservedForMarks));
+    const desired = Math.max(145, Math.ceil(maxChars * 6.8 + 16));
+    return `${Math.min(maxAllowedForName, desired)}px`;
+  }, [formData.nameColWidth, studentsData, visibleColumns.length]);
+
   const handlePrint = () => {
     window.print();
   };
 
-  // Export to Excel (.xlsx) matching exact template columns (Images 1 & 2)
-  const handleExportExcel = () => {
-    const wb = XLSX.utils.book_new();
-    const rows = [];
+  // Normalizes cell values so numeric marks export as real Excel numbers without breaking "AB"/blank cells
+  const normalizeExcelCellValue = (val, isFormula) => {
+    if (isFormula) {
+      if (val === undefined || val === null || val === "") return 0;
+      const n = Number(val);
+      return isNaN(n) ? 0 : n;
+    }
+    if (val === undefined || val === null || val === "") return "";
+    const str = String(val).trim();
+    if (str !== "" && !isNaN(Number(str)) && typeof val !== "boolean") {
+      return Number(str);
+    }
+    return str;
+  };
 
-    // Header info rows matching Image 1 & 2
-    // Row 1: IQAC Reference Code on the top right
-    const refRow = new Array(17).fill("");
-    refRow[16] = formData.iqacRef;
+  // Builds a valid, unique Excel sheet tab name (max 31 chars, no invalid characters)
+  const makeSafeSheetName = (rawName, usedNames = new Set()) => {
+    const cleaned = (rawName || "Sheet").replace(/[:\\/?*[\]]/g, " ").trim() || "Sheet";
+    let candidate = cleaned.slice(0, 31);
+    let suffix = 2;
+    while (usedNames.has(candidate)) {
+      const tag = `_${suffix}`;
+      candidate = `${cleaned.slice(0, 31 - tag.length)}${tag}`;
+      suffix += 1;
+    }
+    usedNames.add(candidate);
+    return candidate;
+  };
+
+  // Constructs a formatted, merged, landscape-ready SheetJS worksheet matching Admin template columns
+  const buildSubjectWorksheet = (listToExport, subjectDisplay) => {
+    const rows = [];
+    const totalCols = Math.max(6, 3 + visibleColumns.length);
+    const lastColIdx = totalCols - 1;
+    const iqacStartCol = Math.max(0, lastColIdx - 2);
+
+    const refRow = new Array(totalCols).fill("");
+    refRow[iqacStartCol] = formData.iqacRef;
     rows.push(refRow);
 
-    // Row 2: College Name
-    const collegeRow = new Array(17).fill("");
-    collegeRow[3] = "MUTHAYAMMAL ENGINEERING COLLEGE (AUTONOMOUS)";
+    const collegeRow = new Array(totalCols).fill("");
+    collegeRow[0] = "MUTHAYAMMAL ENGINEERING COLLEGE (AUTONOMOUS)";
     rows.push(collegeRow);
 
-    // Row 3: Address
-    const addressRow = new Array(17).fill("");
-    addressRow[3] = "Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.";
+    const addressRow = new Array(totalCols).fill("");
+    addressRow[0] = "Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.";
     rows.push(addressRow);
     rows.push([]);
 
-    // Row 4: Metadata Line 1
-    const meta1Row = new Array(17).fill("");
+    const meta1Row = new Array(totalCols).fill("");
     meta1Row[0] = `Dept: ${formData.department}`;
     meta1Row[2] = `Year/Sem/Sec: ${formData.year}/${formData.semester}/${formData.section}`;
-    meta1Row[6] = formData.semesterSession;
-    meta1Row[14] = `Date: ${formData.date}`;
+    meta1Row[Math.min(Math.max(3, Math.floor(totalCols * 0.45)), Math.max(3, lastColIdx - 2))] = formData.semesterSession;
+    meta1Row[Math.max(0, lastColIdx - 1)] = `Date: ${formData.date}`;
     rows.push(meta1Row);
 
-    // Row 5: Metadata Line 2
-    const meta2Row = new Array(17).fill("");
-    meta2Row[0] = `Course Code/ Name : ${getDisplaySubject()}`;
+    const meta2Row = new Array(totalCols).fill("");
+    meta2Row[0] = `Course Code/ Name : ${subjectDisplay}`;
     rows.push(meta2Row);
     rows.push([]);
 
-    // Table Header Row 1
+    const headerRowIdx = rows.length;
     const row1 = ["S.No", "Reg.No.", "Name"];
-    // Table Header Row 2 (Max Marks)
     const row2 = ["", "", ""];
-
     visibleColumns.forEach(c => {
       row1.push(c.title);
       row2.push(c.maxMark);
@@ -656,44 +761,165 @@ export default function InternalMarkSheet() {
     rows.push(row1);
     if (hasSubHeaders) rows.push(row2);
 
-    // Student Data Rows
-    const listToExport = formData.padTo60 ? studentPages.flat() : studentsData;
+    let maxNameLen = 18;
     listToExport.forEach((st, idx) => {
+      if (st.name && st.name.length > maxNameLen) maxNameLen = st.name.length;
       const sNo = st.sNo || idx + 1;
-      const stRow = [
-        sNo,
-        st.regNo || "",
-        st.name || ""
-      ];
+      const stRow = [sNo, st.regNo || "", st.name || ""];
       visibleColumns.forEach(c => {
-        const isFormula = c.type === "formula" || c.type === "calculation" || ["im1", "im2", "im3", "total"].includes(c.colKey);
+        const isFormula = c.type === "formula" || c.type === "calculation";
         const val = st[c.colKey] !== undefined ? st[c.colKey] : st[c.heading];
-        if (isFormula) {
-          stRow.push(val !== undefined && val !== null && val !== "" ? val : 0);
-        } else {
-          stRow.push(val !== undefined && val !== null ? val : "");
-        }
+        stRow.push(normalizeExcelCellValue(val, isFormula));
       });
       rows.push(stRow);
     });
 
-    // Signature Block (matching Image 1)
     rows.push([]);
     rows.push([]);
-    const sigRow = new Array(17).fill("");
-    sigRow[1] = "Course Faculty";
-    sigRow[7] = "Year Co-ordinator";
-    sigRow[15] = "HoD";
+    const sigRow = new Array(totalCols).fill("");
+    sigRow[2] = "Course Faculty";
+    sigRow[Math.max(3, Math.floor(totalCols * 0.55))] = "Year Co-ordinator";
+    sigRow[Math.max(4, lastColIdx - 1)] = "HoD";
     rows.push(sigRow);
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, "Internal Marks");
-    const filename = `Internal_Mark_Sheet_${formData.department}_${formData.year}_Sem${formData.semester}_Sec${formData.section}.xlsx`;
+    const merges = [
+      { s: { r: 0, c: iqacStartCol }, e: { r: 0, c: lastColIdx } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: lastColIdx } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: lastColIdx } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: 1 } },
+      { s: { r: 5, c: 0 }, e: { r: 5, c: lastColIdx } }
+    ];
+    if (hasSubHeaders) {
+      merges.push(
+        { s: { r: headerRowIdx, c: 0 }, e: { r: headerRowIdx + 1, c: 0 } },
+        { s: { r: headerRowIdx, c: 1 }, e: { r: headerRowIdx + 1, c: 1 } },
+        { s: { r: headerRowIdx, c: 2 }, e: { r: headerRowIdx + 1, c: 2 } }
+      );
+    }
+    ws["!merges"] = merges;
+    ws["!cols"] = [
+      { wch: 6 },
+      { wch: 16 },
+      { wch: Math.min(36, Math.max(24, maxNameLen + 3)) },
+      ...visibleColumns.map(c => ({
+        wch: Math.max(8, String(c.title || "").length + 3, String(c.maxMark || "").length + 3)
+      }))
+    ];
+    ws["!pageSetup"] = { orientation: "landscape", paperSize: 9, fitToWidth: 1, fitToHeight: 2 };
+    return ws;
+  };
+
+  const getExportSubjectList = () => {
+    if (subjects.length > 0) return subjects;
+    const fallbackCode = (formData.isCustomSubject ? formData.customSubject : formData.selectedSubject) || "Course";
+    return [{ code: fallbackCode, name: "" }];
+  };
+
+  // Option 1: Export Currently Selected Subject (.xlsx)
+  const handleExportCurrentSubjectExcel = () => {
+    const wb = XLSX.utils.book_new();
+    const listToExport = formData.padTo60 ? studentPages.flat() : studentsData;
+    const ws = buildSubjectWorksheet(listToExport, getDisplaySubject());
+    const usedNames = new Set();
+    const rawSubj = formData.isCustomSubject ? (formData.customSubject || "Internal Marks") : (formData.selectedSubject || "Internal Marks");
+    const tabName = makeSafeSheetName(rawSubj, usedNames);
+    XLSX.utils.book_append_sheet(wb, ws, tabName);
+    const subjSlug = rawSubj.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const filename = `Internal_Mark_${formData.department}_${formData.year}_Sem${formData.semester}_Sec${formData.section}_${subjSlug}.xlsx`;
     XLSX.writeFile(wb, filename);
+    setShowExcelMenu(false);
+  };
+
+  // Option 2: Export ALL Subjects of Class in a Single Multi-Sheet Workbook (.xlsx)
+  const handleExportAllSubjectsExcel = () => {
+    const targetList = getExportSubjectList();
+    const wb = XLSX.utils.book_new();
+    const usedNames = new Set();
+
+    targetList.forEach(subj => {
+      const evalRows = (subj.code === formData.selectedSubject && !formData.isCustomSubject)
+        ? studentsData
+        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate);
+      const displaySubj = subj.name ? `${subj.code} - ${subj.name}` : subj.code;
+      const ws = buildSubjectWorksheet(evalRows, displaySubj);
+      XLSX.utils.book_append_sheet(wb, ws, makeSafeSheetName(subj.code, usedNames));
+    });
+
+    const filename = `Internal_Marks_All_Subjects_${formData.department}_${formData.year}_Sem${formData.semester}_Sec${formData.section}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    setShowExcelMenu(false);
+  };
+
+  // Option 3: Export Final Internal Total Consolidated Summary Across All Subjects (.xlsx)
+  const handleExportSummaryExcel = () => {
+    const targetList = getExportSubjectList();
+    const summaryCol = [...currentColumns].reverse().find(c => c.type === "formula" || c.type === "calculation")
+      || currentColumns[currentColumns.length - 1];
+    const isSummaryFormula = Boolean(summaryCol && (summaryCol.type === "formula" || summaryCol.type === "calculation"));
+
+    const perSubjectRows = {};
+    const masterStudents = {};
+
+    targetList.forEach(subj => {
+      const evalRows = (subj.code === formData.selectedSubject && !formData.isCustomSubject)
+        ? studentsData
+        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate);
+      perSubjectRows[subj.code] = {};
+      evalRows.forEach(st => {
+        if (!st.regNo) return;
+        masterStudents[st.regNo] = { regNo: st.regNo, name: st.name || masterStudents[st.regNo]?.name || "" };
+        const rawTotal = summaryCol ? (st[summaryCol.colKey] !== undefined ? st[summaryCol.colKey] : st[summaryCol.heading]) : "";
+        perSubjectRows[subj.code][st.regNo] = normalizeExcelCellValue(rawTotal, isSummaryFormula);
+      });
+    });
+
+    const sortedStudents = Object.values(masterStudents).sort((a, b) =>
+      (a.regNo || "").localeCompare(b.regNo || "", undefined, { numeric: true })
+    );
+
+    const totalCols = Math.max(5, 3 + targetList.length);
+    const lastColIdx = totalCols - 1;
+    const rows = [
+      ["MUTHAYAMMAL ENGINEERING COLLEGE (AUTONOMOUS)"],
+      [`Consolidated Internal Marks Summary (${summaryCol ? summaryCol.heading : "Total"})`],
+      [`Dept: ${formData.department}`, "", `Year/Sem/Sec: ${formData.year}/${formData.semester}/${formData.section}`, "", formData.semesterSession],
+      [],
+      ["S.No", "Reg.No.", "Name", ...targetList.map(s => s.code)]
+    ];
+
+    let maxNameLen = 20;
+    sortedStudents.forEach((st, idx) => {
+      if (st.name && st.name.length > maxNameLen) maxNameLen = st.name.length;
+      rows.push([
+        idx + 1,
+        st.regNo,
+        st.name,
+        ...targetList.map(subj => perSubjectRows[subj.code]?.[st.regNo] ?? 0)
+      ]);
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: lastColIdx } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: lastColIdx } }
+    ];
+    ws["!cols"] = [
+      { wch: 6 },
+      { wch: 16 },
+      { wch: Math.min(36, Math.max(24, maxNameLen + 3)) },
+      ...targetList.map(s => ({ wch: Math.max(12, String(s.code).length + 3) }))
+    ];
+    ws["!pageSetup"] = { orientation: "landscape", paperSize: 9, fitToWidth: 1, fitToHeight: 0 };
+    XLSX.utils.book_append_sheet(wb, ws, "Consolidated Summary");
+    const filename = `Internal_Marks_Summary_${formData.department}_${formData.year}_Sem${formData.semester}_Sec${formData.section}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    setShowExcelMenu(false);
   };
 
   return (
-    <div className="fade-in" style={{ padding: "1.2rem", maxWidth: "1600px", margin: "0 auto" }}>
+    <div className="fade-in internal-mark-root" style={{ padding: "1.2rem", maxWidth: "1600px", margin: "0 auto" }}>
       {/* SCREEN CONTROLS & HEADER (HIDDEN IN PRINT) */}
       <div className="no-print">
         {/* Top Header Bar */}
@@ -736,14 +962,109 @@ export default function InternalMarkSheet() {
               <Edit3 size={18} /> {isEditingMarks ? "Lock Editing" : "Edit Marks Inline"}
             </button>
 
-            <button
-              onClick={handleExportExcel}
-              className="btn btn-secondary"
-              style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", padding: "0.65rem 1.2rem", borderRadius: "10px", border: "1px solid #10b981", color: "#10b981" }}
-              title="Download Excel spreadsheet"
-            >
-              <Download size={18} /> Export Excel (.xlsx)
-            </button>
+            <div ref={excelMenuRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setShowExcelMenu(prev => !prev)}
+                disabled={studentsData.length === 0 && subjects.length === 0}
+                className="btn btn-secondary"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  fontWeight: "700",
+                  padding: "0.65rem 1.2rem",
+                  borderRadius: "10px",
+                  border: "1.5px solid #10b981",
+                  color: "#059669",
+                  background: "rgba(16, 185, 129, 0.08)"
+                }}
+                title="Download Internal Marks in Excel (.xlsx)"
+              >
+                <Download size={18} /> Download Excel (.xlsx) <ChevronDown size={16} />
+              </button>
+
+              {showExcelMenu && (
+                <div style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  right: 0,
+                  minWidth: "290px",
+                  background: "#ffffff",
+                  border: "1px solid rgba(16, 185, 129, 0.35)",
+                  borderRadius: "12px",
+                  boxShadow: "0 14px 32px rgba(15, 23, 42, 0.16)",
+                  padding: "8px",
+                  zIndex: 50,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px"
+                }}>
+                  <button
+                    type="button"
+                    onClick={handleExportCurrentSubjectExcel}
+                    disabled={studentsData.length === 0}
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      background: "rgba(16, 185, 129, 0.08)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <div style={{ fontWeight: "700", fontSize: "0.88rem", color: "#065f46" }}>
+                      1. Current Subject Sheet (.xlsx)
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "#475569", marginTop: "2px" }}>
+                      Download formatted table for {formData.selectedSubject || "selected subject"}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportAllSubjectsExcel}
+                    disabled={subjects.length === 0 && studentsData.length === 0}
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      background: "rgba(99, 102, 241, 0.08)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <div style={{ fontWeight: "700", fontSize: "0.88rem", color: "#3730a3" }}>
+                      2. All Subjects Workbook (.xlsx)
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "#475569", marginTop: "2px" }}>
+                      Separate formatted sheet for every subject ({subjects.length || 1} tabs)
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportSummaryExcel}
+                    disabled={subjects.length === 0 && studentsData.length === 0}
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      border: "none",
+                      background: "rgba(245, 158, 11, 0.09)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <div style={{ fontWeight: "700", fontSize: "0.88rem", color: "#92400e" }}>
+                      3. Consolidated Total Summary (.xlsx)
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "#475569", marginTop: "2px" }}>
+                      All subjects&apos; final total mark side-by-side per student
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={handlePrint}
@@ -1017,7 +1338,7 @@ export default function InternalMarkSheet() {
             <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.85rem", color: "#64748b", flexWrap: "wrap" }}>
               <span>Loaded Students: <strong style={{ color: "var(--primary)" }}>{studentsData.length}</strong></span>
               <span>•</span>
-              <span>Print Pages: <strong style={{ color: "#16a34a" }}>{formData.pageSplitMode === "2pages" ? "Strict 2 Pages (Balanced)" : `${formData.pageSplitMode} Mode`}</strong></span>
+              <span>Print Pages: <strong style={{ color: "#16a34a" }}>{formData.pageSplitMode === "2pages" ? `Fit All in ${studentPages.length} Page${studentPages.length > 1 ? "s" : ""} (Landscape)` : `${formData.pageSplitMode} Mode`}</strong></span>
               <span>•</span>
               <span>Table Layout: <strong style={{ color: "#6366f1" }}>{formData.tableWidthMode === "autoFit" ? "Auto-Fit Content (Snug)" : "Full Width (100%)"}</strong></span>
               <span>•</span>
@@ -1039,7 +1360,7 @@ export default function InternalMarkSheet() {
                 {/* Print Page Layout */}
                 <div>
                   <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
-                    Print Page Layout (Max 2 Pages)
+                    Print Page Layout (Landscape)
                   </label>
                   <select 
                     className="input-field" 
@@ -1047,7 +1368,7 @@ export default function InternalMarkSheet() {
                     onChange={e => setFormData({ ...formData, pageSplitMode: e.target.value })}
                     style={{ background: "#ffffff", padding: "6px 10px", fontWeight: "600", borderColor: "#6366f1" }}
                   >
-                    <option value="2pages">Strict 2 Pages (Balanced - Recommended)</option>
+                    <option value="2pages">Fit All Students in 2 Pages (Balanced - Recommended)</option>
                     <option value="1page">Single Page (All Students on 1 Sheet)</option>
                     <option value="30">Fixed 30 Students per Page</option>
                     <option value="25">Fixed 25 Students per Page</option>
@@ -1141,7 +1462,7 @@ export default function InternalMarkSheet() {
           Loading student marks for Regulation {formData.regulation}...
         </div>
       )}
-      {/* PRINT STYLES - ROBUST MULTI-PAGE LAYOUT WITHOUT EMPTY PAGES */}
+      {/* PRINT STYLES - LANDSCAPE, NO OUTER PAGE BORDER, FIT ALL STUDENTS IN 2 PAGES */}
       <style>{`
         @media screen {
           .print-container {
@@ -1155,15 +1476,18 @@ export default function InternalMarkSheet() {
             color: #000000;
             width: 100%;
             max-width: 1350px;
-            border: 1.5px solid #000000;
+            border: 1px solid #e2e8f0;
             padding: 20px 24px;
-            box-shadow: 0 10px 35px rgba(0,0,0,0.15);
-            border-radius: 4px;
+            box-shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+            border-radius: 6px;
             font-family: "Times New Roman", Times, serif;
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+          }
+          .mec-official-table tbody tr {
+            height: 20px;
           }
           .editable-cell-input {
             width: 100%;
@@ -1178,8 +1502,8 @@ export default function InternalMarkSheet() {
 
         @media print {
           @page {
-            size: landscape;
-            margin: 4mm 6mm;
+            size: A4 landscape;
+            margin: 5mm 7mm;
           }
           html, body {
             background: #ffffff !important;
@@ -1198,10 +1522,20 @@ export default function InternalMarkSheet() {
           .print-container, .print-container * {
             visibility: visible;
           }
+          .internal-mark-root {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
           .print-container {
             position: static !important;
             display: block !important;
             width: 100% !important;
+            max-width: 100% !important;
+            border: none !important;
             margin: 0 !important;
             padding: 0 !important;
           }
@@ -1212,18 +1546,20 @@ export default function InternalMarkSheet() {
             box-sizing: border-box !important;
             width: 100% !important;
             max-width: 100% !important;
-            height: 198mm !important;
-            max-height: 200mm !important;
-            border: 1.5px solid #000000 !important;
+            min-height: 186mm !important;
+            height: auto !important;
+            max-height: none !important;
+            border: none !important;
+            outline: none !important;
             border-radius: 0 !important;
-            padding: 5mm 8mm 4mm 8mm !important;
+            padding: 0 !important;
             margin: 0 auto !important;
             box-shadow: none !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             page-break-after: always !important;
             break-after: page !important;
-            overflow: hidden !important;
+            overflow: visible !important;
             background: #ffffff !important;
           }
           .print-sheet:last-child {
@@ -1239,10 +1575,10 @@ export default function InternalMarkSheet() {
             padding: 0 !important;
           }
           .print-sheet img.header-banner-img {
-            max-height: 48px !important;
+            max-height: 44px !important;
           }
           .print-sheet img.mec-crest-logo {
-            height: 44px !important;
+            height: 40px !important;
           }
           .print-bottom-block {
             margin-top: 4px !important;
@@ -1251,26 +1587,27 @@ export default function InternalMarkSheet() {
             break-inside: avoid !important;
           }
           .print-metadata-row {
-            margin: 3px 0 2px 0 !important;
-            font-size: 11px !important;
+            margin: 2px 0 2px 0 !important;
+            font-size: 10.5px !important;
           }
           .print-signatures {
+            padding-top: 10px !important;
             margin-bottom: 2px !important;
             font-size: 10px !important;
           }
-          .mec-official-table tr {
-            height: 16px !important;
+          .mec-official-table tbody tr {
+            height: ${printMetrics.rowHeight}px !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }
           .mec-official-table th, .mec-official-table td {
             border: 1px solid #000000 !important;
-            padding: 0 2px !important;
-            font-size: 9.5px !important;
-            line-height: 1.15 !important;
+            padding: ${printMetrics.paddingY}px 2px !important;
+            font-size: ${printMetrics.fontSize}px !important;
+            line-height: 1.1 !important;
           }
           .mec-official-table th {
-            font-size: 10px !important;
+            font-size: 9.5px !important;
           }
           .mec-official-table th.col-sno, .mec-official-table td.col-sno {
             width: 30px !important;
@@ -1279,8 +1616,6 @@ export default function InternalMarkSheet() {
             width: 85px !important;
           }
           .mec-official-table th.col-name, .mec-official-table td.col-name {
-            width: 170px !important;
-            max-width: 190px !important;
             padding-left: 4px !important;
           }
           .mec-official-table th.col-mark, .mec-official-table td.col-mark {
@@ -1300,7 +1635,9 @@ export default function InternalMarkSheet() {
           table-layout: fixed;
         }
         .mec-official-table.auto-fit-table {
-          width: 100% !important;
+          width: auto !important;
+          min-width: 75%;
+          margin: 0 auto;
         }
         .mec-official-table.full-width-table {
           width: 100% !important;
@@ -1418,7 +1755,7 @@ export default function InternalMarkSheet() {
 
                   {/* TABLE WRAPPER */}
                   <div className="table-responsive-wrapper" style={{ width: "100%", overflowX: "auto" }}>
-                    <table className="mec-official-table">
+                    <table className={`mec-official-table ${formData.tableWidthMode === "autoFit" ? "auto-fit-table" : "full-width-table"}`}>
                       <thead>
                         {/* HEADER ROW 1 */}
                         <tr>
@@ -1428,8 +1765,8 @@ export default function InternalMarkSheet() {
                             rowSpan={hasSubHeaders ? 2 : 1} 
                             className="col-name"
                             style={{
-                              width: formData.nameColWidth === "auto" ? "180px" : formData.nameColWidth,
-                              maxWidth: formData.nameColWidth === "auto" ? "220px" : formData.nameColWidth
+                              width: resolvedNameColWidth,
+                              maxWidth: resolvedNameColWidth
                             }}
                           >
                             Name
@@ -1459,22 +1796,22 @@ export default function InternalMarkSheet() {
                           const globalIndex = startSno - 1 + i;
 
                           return (
-                            <tr key={st.regNo || i} style={{ height: "18px" }}>
+                            <tr key={st.regNo || i}>
                               <td className="col-sno">{sNo}</td>
                               <td className="col-reg">{st.regNo || ""}</td>
                               <td 
                                 className="col-name name-col" 
                                 title={st.name}
                                 style={{
-                                  width: formData.nameColWidth === "auto" ? "180px" : formData.nameColWidth,
-                                  maxWidth: formData.nameColWidth === "auto" ? "220px" : formData.nameColWidth
+                                  width: resolvedNameColWidth,
+                                  maxWidth: resolvedNameColWidth
                                 }}
                               >
                                 {st.name || ""}
                               </td>
 
                               {visibleColumns.map((col, colIdx) => {
-                                const isFormula = col.type === "formula" || col.type === "calculation" || ["im1", "im2", "im3", "total"].includes(col.colKey);
+                                const isFormula = col.type === "formula" || col.type === "calculation";
                                 const rawVal = st[col.colKey] !== undefined ? st[col.colKey] : st[col.heading];
 
                                 let displayVal = "";
