@@ -8,7 +8,6 @@ import {
   Settings, 
   RefreshCw, 
   Edit3, 
-  Check, 
   Sparkles, 
   ChevronDown, 
   ChevronUp, 
@@ -45,7 +44,6 @@ export default function InternalMarkSheet() {
     date: new Date().toLocaleDateString("en-GB").replace(/\//g, "."),
     semesterSession: "EVEN SEM APRIL - 2027",
     pageSplitMode: "2pages", // "2pages" (default: Split all students across max 2 pages), "1page", "30", "25"
-    padTo60: false, // Default to enrolled students only (optional 60-row blank grid padding toggle)
     tableWidthMode: "full", // "full" (100% Stretch - standard MEC landscape), "autoFit"
     nameColWidth: "auto" // "auto" (default: Auto-Fit to student names), "160px", "200px", "240px"
   });
@@ -739,35 +737,9 @@ export default function InternalMarkSheet() {
     return visibleColumns.some(c => c.maxMark || (c.heading && c.heading.includes("(") && c.heading.includes(")")));
   }, [visibleColumns]);
 
-  // Multi-page chunking: Balanced 2 Pages (Fit all enrolled students cleanly into max 2 pages)
+  // Multi-page chunking: Balanced 2 Pages (Fit ONLY actual enrolled students cleanly into max 2 pages)
   const studentPages = useMemo(() => {
-    let baseList = [...studentsData];
-
-    // Optional 60-row blank grid padding (off by default so only enrolled students print)
-    if (formData.padTo60) {
-      const targetCount = Math.max(60, baseList.length);
-      const rawCols = currentColumns;
-      while (baseList.length < targetCount) {
-        const dummySno = baseList.length + 1;
-        const placeholderRow = {
-          isPlaceholder: true,
-          sNo: dummySno,
-          regNo: "",
-          name: ""
-        };
-        rawCols.forEach(c => {
-          const isFormulaCol = c.type === "formula" || c.type === "calculation";
-          if (isFormulaCol) {
-            placeholderRow[c.colKey] = 0;
-            placeholderRow[c.heading] = 0;
-          } else {
-            placeholderRow[c.colKey] = "";
-            placeholderRow[c.heading] = "";
-          }
-        });
-        baseList.push(placeholderRow);
-      }
-    }
+    const baseList = [...studentsData];
 
     if (baseList.length === 0) {
       return [[]];
@@ -777,7 +749,7 @@ export default function InternalMarkSheet() {
 
     // Balanced 2 Pages: Small classes (<= 24) fit cleanly on 1 page; larger classes balance header space so Page 1 won't spill 1 row onto extra page
     if (mode === "2pages") {
-      if (baseList.length <= 24 && !formData.padTo60) {
+      if (baseList.length <= 24) {
         return [baseList];
       }
       const splitIdx = baseList.length > 40
@@ -801,7 +773,7 @@ export default function InternalMarkSheet() {
       pages.push(baseList.slice(i, i + chunkSize));
     }
     return pages;
-  }, [studentsData, formData.pageSplitMode, formData.padTo60, currentColumns]);
+  }, [studentsData, formData.pageSplitMode]);
 
   // Dynamically scale row height & font in print so Header + Table + Page Number ALWAYS fit cleanly on 1 sheet per page (2 pages total)
   const printMetrics = useMemo(() => {
@@ -991,8 +963,7 @@ export default function InternalMarkSheet() {
   // Option 1: Export Currently Selected Subject (.xlsx)
   const handleExportCurrentSubjectExcel = () => {
     const wb = XLSX.utils.book_new();
-    const listToExport = formData.padTo60 ? studentPages.flat() : studentsData;
-    const ws = buildSubjectWorksheet(listToExport, getDisplaySubject());
+    const ws = buildSubjectWorksheet(studentsData, getDisplaySubject());
     const usedNames = new Set();
     const rawSubj = formData.isCustomSubject ? (formData.customSubject || "Internal Marks") : (formData.selectedSubject || "Internal Marks");
     const tabName = makeSafeSheetName(rawSubj, usedNames);
@@ -1145,15 +1116,6 @@ export default function InternalMarkSheet() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <button
-              onClick={() => setFormData(prev => ({ ...prev, padTo60: !prev.padTo60 }))}
-              className={`btn ${formData.padTo60 ? "btn-primary" : "btn-secondary"}`}
-              style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
-              title="Toggle 60-row official MEC grid padding"
-            >
-              <Check size={16} /> {formData.padTo60 ? "Official 60-Row Grid" : "Enrolled Only"}
-            </button>
-
             <button
               onClick={() => setShowColumnManager(!showColumnManager)}
               className={`btn ${userHiddenColumns.length > 0 ? "btn-warning" : "btn-secondary"}`}
@@ -2425,13 +2387,13 @@ export default function InternalMarkSheet() {
       )}
 
       {/* EMPTY STATE */}
-      {!loading && studentsData.length === 0 && !formData.padTo60 && (
+      {!loading && studentsData.length === 0 && (
         <div className="no-print" style={{ textAlign: "center", padding: "3rem", background: "var(--bg-secondary)", borderRadius: "16px", border: "1px dashed var(--border-color)", marginTop: "1rem" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "1.1rem", margin: "0 0 0.5rem 0" }}>
             No students found for {formData.department} {formData.year}/{formData.semester}/{formData.section}.
           </p>
           <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: 0 }}>
-            Ensure either a Student Roster or Exam marks have been uploaded in the system for this class, or turn on "Pad to 60 Rows".
+            Ensure either a Student Roster or Exam marks have been uploaded in the system for this class.
           </p>
         </div>
       )}
