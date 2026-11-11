@@ -34,7 +34,7 @@ export default function AdminPanel() {
 
   const AVAILABLE_ADMIN_TABS = [
     { id: "classes", label: "Class Setup" },
-    { id: "roster", label: "Roster Upload" },
+    { id: "roster", label: "Roster, Subjects & Staff" },
     { id: "access", label: "Mark Entry Access" },
     { id: "reports", label: "Mark Entry Reports" },
     { id: "users", label: "User Access" },
@@ -116,6 +116,8 @@ export default function AdminPanel() {
   const formDataRef = useRef(formData);
   const classesRef = useRef(classes);
   const rostersRef = useRef(rosters);
+  const masterSubjectsRef = useRef([]);
+  const sectionStaffRef = useRef([]);
 
   useEffect(() => {
     formDataRef.current = formData;
@@ -128,6 +130,21 @@ export default function AdminPanel() {
   useEffect(() => {
     rostersRef.current = rosters;
   }, [rosters]);
+
+  // Master Subjects & Section Staff Mapping states (Roster Hub sub-tabs)
+  const [rosterSubTab, setRosterSubTab] = useState("students"); // "students" | "subjects" | "staff"
+  const [masterSubjectsList, setMasterSubjectsList] = useState([]);
+  const [sectionStaffList, setSectionStaffList] = useState([]);
+  const [masterStaffOptions, setMasterStaffOptions] = useState([]);
+  const [currForm, setCurrForm] = useState({ programme: "B.E", department: "CSE", year: "III", semester: "V", section: "A" });
+  const [editingMasterSubjects, setEditingMasterSubjects] = useState([]);
+  const [syncMasterSubjectsToExams, setSyncMasterSubjectsToExams] = useState(true);
+  const [savingMasterSubjects, setSavingMasterSubjects] = useState(false);
+  const [importingFromTimetable, setImportingFromTimetable] = useState(false);
+  const [editingStaffMap, setEditingStaffMap] = useState({});
+  const [syncStaffToExams, setSyncStaffToExams] = useState(true);
+  const [savingSectionStaff, setSavingSectionStaff] = useState(false);
+  const [autoFillingStaff, setAutoFillingStaff] = useState(false);
 
   // Recycle bin states
   const [recycleClasses, setRecycleClasses] = useState([]);
@@ -350,15 +367,75 @@ export default function AdminPanel() {
     loadRosters();
     loadUsers();
     loadActivities();
+    loadMasterStaffOptions();
   }, []);
+
+  const ROMAN_TO_SEM_NUM = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8 };
+
+  const loadMasterStaffOptions = async () => {
+    try {
+      const res = await API.get("/api/timetable/staff");
+      setMasterStaffOptions(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      setMasterStaffOptions([]);
+    }
+  };
+
+  useEffect(() => {
+    const prog = String(currForm.programme || "B.E").trim();
+    const dept = String(currForm.department || "CSE").trim();
+    const yr = String(currForm.year || "").trim();
+    const sem = String(currForm.semester || "").trim();
+    const sec = String(currForm.section || "").trim();
+
+    const subjDoc = masterSubjectsList.find(m =>
+      m.programme === prog && m.department === dept && m.year === yr && m.semester === sem
+    );
+    setEditingMasterSubjects(
+      subjDoc && Array.isArray(subjDoc.subjects)
+        ? subjDoc.subjects.map(s => ({ ...s }))
+        : []
+    );
+
+    const staffDoc = sectionStaffList.find(m =>
+      m.programme === prog && m.department === dept && m.year === yr && m.semester === sem && m.section === sec
+    );
+    const nextMap = {};
+    (staffDoc?.staffAssignments || []).forEach(sa => {
+      const codeKey = String(sa.courseCode || "").trim().toUpperCase();
+      if (codeKey) nextMap[codeKey] = sa.facultyName || "";
+    });
+    setEditingStaffMap(nextMap);
+  }, [currForm, masterSubjectsList, sectionStaffList]);
+
+  const loadCurriculumData = async () => {
+    try {
+      const [subjRes, staffRes] = await Promise.all([
+        API.get("/api/curriculum/subjects").catch(() => ({ data: [] })),
+        API.get("/api/curriculum/staff-mappings").catch(() => ({ data: [] }))
+      ]);
+      const subjData = Array.isArray(subjRes.data) ? subjRes.data : [];
+      const staffData = Array.isArray(staffRes.data) ? staffRes.data : [];
+      masterSubjectsRef.current = subjData;
+      sectionStaffRef.current = staffData;
+      setMasterSubjectsList(subjData);
+      setSectionStaffList(staffData);
+      return { subjData, staffData };
+    } catch {
+      return { subjData: [], staffData: [] };
+    }
+  };
 
   const loadClasses = async (shouldSyncForm = false) => {
     try {
-      const rostersRes = await API.get("/api/rosters");
+      const [rostersRes, res, currData] = await Promise.all([
+        API.get("/api/rosters"),
+        API.get("/api/classes"),
+        loadCurriculumData()
+      ]);
       setRosters(rostersRes.data);
       rostersRef.current = rostersRes.data;
-      
-      const res = await API.get("/api/classes");
+
       setClasses(res.data);
       classesRef.current = res.data;
 
@@ -366,7 +443,18 @@ export default function AdminPanel() {
       // using the latest active formDataRef so background refetches never revert user selections!
       if (shouldSyncForm) {
         const cur = formDataRef.current || formData;
-        checkAndLoadExistingLocal(cur.year, cur.semester, cur.section, cur.examName, res.data, cur.programme, cur.department, rostersRes.data);
+        checkAndLoadExistingLocal(
+          cur.year,
+          cur.semester,
+          cur.section,
+          cur.examName,
+          res.data,
+          cur.programme,
+          cur.department,
+          rostersRes.data,
+          currData.subjData,
+          currData.staffData
+        );
       }
     } catch (err) { console.error(err); }
   };
@@ -1132,7 +1220,81 @@ export default function AdminPanel() {
     return `${programme || formData.programme}-${department || formData.department} - ${year}/${semester}/${section} - ${examName}`;
   };
 
-  const checkAndLoadExistingLocal = (y, s, sec, exam, allClasses, prog, dept, providedRosters) => {
+  const getMasterSubjectDoc = (prog, dept, yr, sem, providedSubjs) => {
+    const list = providedSubjs || (masterSubjectsRef?.current ? masterSubjectsRef.current : masterSubjectsList) || [];
+    const p = String(prog || "B.E").trim();
+    const d = String(dept || "CSE").trim();
+    return list.find(m => m.programme === p && m.department === d && m.year === yr && m.semester === sem) || null;
+  };
+
+  const getSectionStaffDoc = (prog, dept, yr, sem, sec, providedStaff) => {
+    const list = providedStaff || (sectionStaffRef?.current ? sectionStaffRef.current : sectionStaffList) || [];
+    const p = String(prog || "B.E").trim();
+    const d = String(dept || "CSE").trim();
+    return list.find(m => m.programme === p && m.department === d && m.year === yr && m.semester === sem && m.section === sec) || null;
+  };
+
+  const buildMasterStaffMap = (prog, dept, yr, sem, sec, providedStaff) => {
+    const doc = getSectionStaffDoc(prog, dept, yr, sem, sec, providedStaff);
+    const map = new Map();
+    (doc?.staffAssignments || []).forEach(sa => {
+      const codeUp = String(sa.courseCode || "").trim().toUpperCase();
+      if (codeUp) map.set(codeUp, String(sa.facultyName || "").trim());
+    });
+    return map;
+  };
+
+  const overlayMasterCoursesAndStaff = (courseList = [], prog, dept, yr, sem, sec, keepUnmappedFaculty = false, providedSubjs, providedStaff) => {
+    const masterDoc = getMasterSubjectDoc(prog, dept, yr, sem, providedSubjs);
+    const staffMap = buildMasterStaffMap(prog, dept, yr, sem, sec, providedStaff);
+    const masterByCode = new Map();
+    (masterDoc?.subjects || []).forEach(s => {
+      const key = String(s.courseCode || "").trim().toUpperCase();
+      if (key) masterByCode.set(key, s);
+    });
+
+    return (courseList || []).map(cd => {
+      let code = cd.courseCode || "";
+      let name = cd.courseName || "";
+      if (code.includes(" & ")) {
+        const parts = code.split(" & ");
+        code = parts[0].trim();
+        name = name || parts[1]?.trim() || "";
+      }
+      const codeUp = code.trim().toUpperCase();
+      const masterItem = masterByCode.get(codeUp);
+      const mappedFaculty = staffMap.has(codeUp) ? staffMap.get(codeUp) : undefined;
+      return {
+        courseCode: code.trim(),
+        courseName: masterItem?.courseName || name,
+        shortName: masterItem?.shortName !== undefined ? masterItem.shortName : (cd.shortName || ""),
+        facultyName: mappedFaculty !== undefined && mappedFaculty !== "" ? mappedFaculty : (keepUnmappedFaculty ? (cd.facultyName || "") : ""),
+        credits: masterItem?.credits !== undefined ? Number(masterItem.credits) : (cd.credits !== undefined ? cd.credits : 3),
+        category: masterItem?.category || cd.category || "Theory"
+      };
+    });
+  };
+
+  const buildCoursesFromMaster = (prog, dept, yr, sem, sec, categoryFilter = "All", providedSubjs, providedStaff) => {
+    const masterDoc = getMasterSubjectDoc(prog, dept, yr, sem, providedSubjs);
+    if (!masterDoc || !Array.isArray(masterDoc.subjects) || masterDoc.subjects.length === 0) return [];
+    const staffMap = buildMasterStaffMap(prog, dept, yr, sem, sec, providedStaff);
+    return masterDoc.subjects
+      .filter(s => categoryFilter === "All" || (s.category || "Theory") === categoryFilter)
+      .map(s => {
+        const codeUp = String(s.courseCode || "").trim().toUpperCase();
+        return {
+          courseCode: String(s.courseCode || "").trim(),
+          courseName: String(s.courseName || "").trim(),
+          shortName: String(s.shortName || "").trim(),
+          facultyName: staffMap.get(codeUp) || "",
+          credits: s.credits !== undefined ? Number(s.credits) : 3,
+          category: s.category || "Theory"
+        };
+      });
+  };
+
+  const checkAndLoadExistingLocal = (y, s, sec, exam, allClasses, prog, dept, providedRosters, providedSubjs, providedStaff) => {
     let validatedSem = s;
     if (y === "I" && !["I", "II"].includes(s)) validatedSem = "I";
     else if (y === "II" && !["III", "IV"].includes(s)) validatedSem = "III";
@@ -1207,7 +1369,10 @@ export default function AdminPanel() {
           c.courseDetails && c.courseDetails.length > 0
         );
 
-        // 2. Fallback ONLY from compatible exam category (do not auto-load Lab Observation subjects into CIA/ESE theory exams)
+        // 2. Master Subjects + Section Staff Mapping (Priority source for all exams!)
+        const masterCourses = buildCoursesFromMaster(currentProg, currentDept, y, validatedSem, sec, "All", providedSubjs, providedStaff);
+
+        // 3. Fallback from compatible exam category if Master Subjects isn't configured yet
         const cohortSameCategoryCourseMatch = list.find(c =>
           c.programme === currentProg &&
           c.department === currentDept &&
@@ -1224,34 +1389,54 @@ export default function AdminPanel() {
           c.courseDetails && c.courseDetails.length > 0
         );
 
-        const bestCourseMatch = exactExamYearSemMatch || cohortSameCategoryCourseMatch || yearSemSameCategoryMatch;
-
-        if (bestCourseMatch) {
-          const isSameSection = bestCourseMatch.yearSemSec === `${y}/${validatedSem}/${sec}`;
-          const loadedCourses = bestCourseMatch.courseDetails.map(cd => {
-            const facultyNameToKeep = isSameSection ? (cd.facultyName || "") : "";
-            if (cd.courseCode && cd.courseCode.includes(' & ')) {
-              const parts = cd.courseCode.split(' & ');
-              return { courseCode: parts[0].trim(), courseName: cd.courseName || parts[1]?.trim() || "", shortName: cd.shortName || "", facultyName: facultyNameToKeep, credits: cd.credits !== undefined ? cd.credits : 3 };
-            }
-            return { courseCode: cd.courseCode || "", courseName: cd.courseName || "", shortName: cd.shortName || "", facultyName: facultyNameToKeep, credits: cd.credits !== undefined ? cd.credits : 3 };
-          });
-          setCourseDetails(loadedCourses);
-          setCourseAutoLoadedFrom(bestCourseMatch.className);
-        } else if (cohortMatch && isSpecialOrLabExam(cohortMatch.examName) === targetIsSpecial && cohortMatch.subjects && cohortMatch.subjects.length > 0) {
-          // Fallback: load from subjects array of compatible category
-          const loadedCourses = cohortMatch.subjects.map(s => {
-            if (s.includes(' & ')) {
-              const parts = s.split(' & ');
-              return { courseCode: parts[0].trim(), courseName: parts[1]?.trim() || "", shortName: "", facultyName: "", credits: 3 };
-            }
-            return { courseCode: s, courseName: "", shortName: "", facultyName: "", credits: 3 };
-          });
-          setCourseDetails(loadedCourses);
-          setCourseAutoLoadedFrom(cohortMatch.className);
+        if (exactExamYearSemMatch) {
+          const isSameSection = exactExamYearSemMatch.yearSemSec === `${y}/${validatedSem}/${sec}`;
+          const overlaid = overlayMasterCoursesAndStaff(
+            exactExamYearSemMatch.courseDetails,
+            currentProg,
+            currentDept,
+            y,
+            validatedSem,
+            sec,
+            isSameSection,
+            providedSubjs,
+            providedStaff
+          );
+          setCourseDetails(overlaid);
+          setCourseAutoLoadedFrom(
+            masterCourses.length > 0
+              ? `Master Subjects & Sec ${sec} Staff (${exactExamYearSemMatch.examName} subset)`
+              : exactExamYearSemMatch.className
+          );
+        } else if (masterCourses.length > 0) {
+          setCourseDetails(masterCourses);
+          setCourseAutoLoadedFrom(`Master Subjects & Sec ${sec} Staff (${currentProg}-${currentDept} ${y}/${validatedSem})`);
         } else {
-          setCourseDetails([]);
-          setCourseAutoLoadedFrom("");
+          const bestCourseMatch = cohortSameCategoryCourseMatch || yearSemSameCategoryMatch;
+          if (bestCourseMatch) {
+            const isSameSection = bestCourseMatch.yearSemSec === `${y}/${validatedSem}/${sec}`;
+            const overlaid = overlayMasterCoursesAndStaff(
+              bestCourseMatch.courseDetails,
+              currentProg,
+              currentDept,
+              y,
+              validatedSem,
+              sec,
+              isSameSection,
+              providedSubjs,
+              providedStaff
+            );
+            setCourseDetails(overlaid);
+            setCourseAutoLoadedFrom(bestCourseMatch.className);
+          } else if (cohortMatch && isSpecialOrLabExam(cohortMatch.examName) === targetIsSpecial && cohortMatch.subjects && cohortMatch.subjects.length > 0) {
+            const rawCourses = cohortMatch.subjects.map(subStr => ({ courseCode: subStr, courseName: "", shortName: "", facultyName: "", credits: 3 }));
+            const overlaid = overlayMasterCoursesAndStaff(rawCourses, currentProg, currentDept, y, validatedSem, sec, false, providedSubjs, providedStaff);
+            setCourseDetails(overlaid);
+            setCourseAutoLoadedFrom(cohortMatch.className);
+          } else {
+            setCourseDetails([]);
+            setCourseAutoLoadedFrom("");
+          }
         }
 
         const bestDateMatch = exactExamYearSemMatch || cohortSameCategoryCourseMatch || yearSemSameCategoryMatch || cohortMatch;
@@ -1473,8 +1658,7 @@ export default function AdminPanel() {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleCourseFileUpload = (e) => {
-    const file = e.target.files[0];
+  const parseCourseExcelFile = (file, onParsed) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -1486,38 +1670,307 @@ export default function AdminPanel() {
       const headerRow = json[0] || [];
       const headerLower = headerRow.map(h => (h || "").toString().toLowerCase().trim());
 
-      let codeIdx = -1, nameIdx = -1, shortIdx = -1, facultyIdx = -1;
+      let codeIdx = -1, nameIdx = -1, shortIdx = -1, facultyIdx = -1, creditsIdx = -1, categoryIdx = -1;
       headerLower.forEach((h, i) => {
         const val = (h || "").toString().toLowerCase().trim();
         if (val.includes("code") || val.includes("subject code") || val.includes("course code")) codeIdx = i;
         if ((val.includes("name") || val.includes("title") || val.includes("subject name") || val.includes("course name")) && !val.includes("faculty") && !val.includes("short")) nameIdx = i;
         if (val.includes("short") || val.includes("acronym") || val.includes("abbreviation") || val.includes("alias")) shortIdx = i;
         if (val.includes("faculty") || val.includes("staff") || val.includes("teacher")) facultyIdx = i;
+        if (val.includes("credit")) creditsIdx = i;
+        if (val.includes("type") || val.includes("category")) categoryIdx = i;
       });
 
-      // Positional fallbacks if not found
       if (codeIdx === -1) codeIdx = 0;
       if (nameIdx === -1) nameIdx = 1;
-      
-      const newCourses = json.slice(1)
+
+      const parsed = json.slice(1)
         .filter(r => r[codeIdx] || r[nameIdx])
-        .map(r => ({
-          courseCode: (r[codeIdx] || "").toString().trim(),
-          courseName: (r[nameIdx] || "").toString().trim(),
-          shortName: shortIdx !== -1 ? (r[shortIdx] || "").toString().trim() : "",
-          facultyName: facultyIdx !== -1 ? (r[facultyIdx] || "").toString().trim() : "",
-          credits: 3
-        }));
-      
+        .map(r => {
+          const rawCat = categoryIdx !== -1 ? String(r[categoryIdx] || "").trim().toLowerCase() : "";
+          const rawName = String(r[nameIdx] || "").trim();
+          const category = rawCat.includes("lab") || (!rawCat && /\blab\b|laboratory|practical/i.test(rawName))
+            ? "Lab"
+            : (rawCat.includes("other") || rawCat.includes("seminar") || rawCat.includes("project") ? "Other" : "Theory");
+          const parsedCredits = creditsIdx !== -1 && !isNaN(Number(r[creditsIdx])) && r[creditsIdx] !== ""
+            ? Number(r[creditsIdx])
+            : 3;
+          return {
+            courseCode: String(r[codeIdx] || "").trim(),
+            courseName: rawName,
+            shortName: shortIdx !== -1 ? String(r[shortIdx] || "").trim() : "",
+            facultyName: facultyIdx !== -1 ? String(r[facultyIdx] || "").trim() : "",
+            credits: parsedCredits,
+            category
+          };
+        });
+
+      onParsed(parsed);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleCourseFileUpload = (e) => {
+    const file = e.target.files[0];
+    parseCourseExcelFile(file, (newCourses) => {
       if (newCourses.length > 0) {
-        setCourseDetails(newCourses);
+        const overlaid = overlayMasterCoursesAndStaff(
+          newCourses,
+          formData.programme,
+          formData.department,
+          formData.year,
+          formData.semester,
+          formData.section,
+          true
+        );
+        setCourseDetails(overlaid);
         setCourseAutoLoadedFrom(""); // Manual upload clears the auto-load banner
         alert(`${newCourses.length} Courses Uploaded Successfully!`);
       } else {
         alert("No valid course data found. Ensure your Excel has columns like 'Course Code', 'Course Name', and 'Faculty Name'.");
       }
-    };
-    reader.readAsArrayBuffer(file);
+    });
+    e.target.value = null;
+  };
+
+  const handleUploadMasterSubjectsExcel = (e) => {
+    const file = e.target.files[0];
+    parseCourseExcelFile(file, (newCourses) => {
+      if (newCourses.length > 0) {
+        setEditingMasterSubjects(newCourses.map(({ courseCode, courseName, shortName, credits, category }) => ({
+          courseCode,
+          courseName,
+          shortName,
+          credits,
+          category
+        })));
+        alert(`${newCourses.length} Subject(s) loaded into Master editor! Click Save to publish.`);
+      } else {
+        alert("No valid subjects found. Ensure your Excel has 'Course Code' and 'Course Name' columns.");
+      }
+    });
+    e.target.value = null;
+  };
+
+  const handleCurrFilterChange = (field, val) => {
+    setCurrForm(prev => {
+      const next = { ...prev, [field]: val };
+      if (field === "year") {
+        const validSems = getSemOptionsForYear(val);
+        if (!validSems.includes(next.semester)) next.semester = validSems[0];
+      }
+      return next;
+    });
+  };
+
+  const handleImportTimetableSubjects = async () => {
+    setImportingFromTimetable(true);
+    try {
+      const semNum = ROMAN_TO_SEM_NUM[currForm.semester] || 5;
+      const semesterType = ["I", "III", "V", "VII"].includes(currForm.semester) ? "Odd" : "Even";
+      const [smRes, allocRes] = await Promise.all([
+        API.get(`/api/timetable/subjects?department=${encodeURIComponent(currForm.department || "CSE")}&year=${encodeURIComponent(currForm.year)}&semester=${semNum}`).catch(() => ({ data: [] })),
+        API.get(`/api/timetable/allocation?department=${encodeURIComponent(currForm.department || "CSE")}&semesterType=${semesterType}`).catch(() => ({ data: { allocations: [] } }))
+      ]);
+
+      const importedByCode = new Map();
+      const mapCat = (typeStr = "", nameStr = "") => {
+        const t = String(typeStr || "").toLowerCase();
+        const n = String(nameStr || "").toLowerCase();
+        if (t.includes("lab") || /\blab\b|laboratory|practical/.test(n)) return "Lab";
+        if (t.includes("library") || t.includes("seminar") || t.includes("project") || t.includes("custom")) return "Other";
+        return "Theory";
+      };
+
+      (smRes.data || []).forEach(doc => {
+        (doc.subjects || []).forEach(s => {
+          const code = String(s.code || "").trim();
+          if (!code || importedByCode.has(code.toUpperCase())) return;
+          importedByCode.set(code.toUpperCase(), {
+            courseCode: code,
+            courseName: String(s.name || "").trim(),
+            shortName: String(s.shortName || "").trim(),
+            credits: s.credits !== undefined ? Number(s.credits) : 3,
+            category: mapCat(s.type, s.name)
+          });
+        });
+      });
+
+      if (importedByCode.size === 0) {
+        (allocRes.data?.allocations || []).forEach(a => {
+          if (String(a.year).toUpperCase() !== String(currForm.year).toUpperCase() || Number(a.semester) !== Number(semNum)) return;
+          const code = String(a.subjectCode || "").trim();
+          if (!code || importedByCode.has(code.toUpperCase())) return;
+          importedByCode.set(code.toUpperCase(), {
+            courseCode: code,
+            courseName: String(a.subjectName || "").trim(),
+            shortName: String(a.shortName || "").trim(),
+            credits: 3,
+            category: mapCat(a.type, a.subjectName)
+          });
+        });
+      }
+
+      if (importedByCode.size === 0) {
+        alert(`No subjects found in Timetable for ${currForm.department} Year ${currForm.year} Sem ${currForm.semester}. You can add them manually or via Excel.`);
+        return;
+      }
+
+      const importedList = Array.from(importedByCode.values());
+      setEditingMasterSubjects(importedList);
+      alert(`Imported ${importedList.length} subject(s) from Timetable! Review and click Save.`);
+    } catch (err) {
+      alert("Failed to import from Timetable: " + (err.response?.data?.error || err.message));
+    } finally {
+      setImportingFromTimetable(false);
+    }
+  };
+
+  const handleSaveMasterSubjects = async () => {
+    if (savingMasterSubjects) return;
+    setSavingMasterSubjects(true);
+    try {
+      const cleaned = (editingMasterSubjects || [])
+        .map(s => ({
+          courseCode: String(s.courseCode || "").trim(),
+          courseName: String(s.courseName || "").trim(),
+          shortName: String(s.shortName || "").trim(),
+          credits: s.credits !== undefined && s.credits !== "" ? Number(s.credits) : 3,
+          category: ["Theory", "Lab", "Other"].includes(s.category) ? s.category : "Theory"
+        }))
+        .filter(s => s.courseCode || s.courseName);
+
+      if (cleaned.length === 0) {
+        alert("Please add at least 1 subject with Course Code and Name before saving.");
+        return;
+      }
+
+      const res = await API.post("/api/curriculum/subjects", {
+        programme: currForm.programme,
+        department: currForm.department,
+        year: currForm.year,
+        semester: currForm.semester,
+        subjects: cleaned,
+        syncToExistingClasses: syncMasterSubjectsToExams
+      });
+
+      await loadClasses(false);
+      if (formData.programme === currForm.programme && formData.department === currForm.department && formData.year === currForm.year && formData.semester === currForm.semester) {
+        setCourseDetails(prev => overlayMasterCoursesAndStaff(prev, formData.programme, formData.department, formData.year, formData.semester, formData.section, true));
+      }
+      alert(res.data?.message || "Year/Sem subjects saved!");
+    } catch (err) {
+      alert("Failed to save subjects: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSavingMasterSubjects(false);
+    }
+  };
+
+  const handleAutoFillStaffFromTimetable = async () => {
+    setAutoFillingStaff(true);
+    try {
+      const semesterType = ["I", "III", "V", "VII"].includes(currForm.semester) ? "Odd" : "Even";
+      const allocRes = await API.get(`/api/timetable/allocation?department=${encodeURIComponent(currForm.department || "CSE")}&semesterType=${semesterType}`);
+      const allocs = allocRes.data?.allocations || [];
+      if (allocs.length === 0) {
+        alert("No Timetable Workload Allocations found for this department & semester.");
+        return;
+      }
+
+      const nextMap = { ...editingStaffMap };
+      let filledCount = 0;
+      editingMasterSubjects.forEach(subj => {
+        const codeUp = String(subj.courseCode || "").trim().toUpperCase();
+        if (!codeUp) return;
+        const matchedAlloc = allocs.find(a =>
+          a.section === currForm.section &&
+          String(a.year).toUpperCase() === String(currForm.year).toUpperCase() &&
+          (
+            String(a.subjectCode || "").trim().toUpperCase() === codeUp ||
+            (subj.shortName && a.shortName && a.shortName.trim().toLowerCase() === subj.shortName.trim().toLowerCase()) ||
+            (a.subjectName && subj.courseName && a.subjectName.trim().toLowerCase() === subj.courseName.trim().toLowerCase())
+          )
+        );
+        if (matchedAlloc && Array.isArray(matchedAlloc.facultyNames) && matchedAlloc.facultyNames.length > 0) {
+          const facStr = matchedAlloc.facultyNames.filter(f => f && f !== "-").join(", ");
+          if (facStr) {
+            nextMap[codeUp] = facStr;
+            filledCount++;
+          }
+        }
+      });
+
+      setEditingStaffMap(nextMap);
+      alert(filledCount > 0 ? `Auto-filled ${filledCount} staff assignment(s) from Timetable for Sec ${currForm.section}! Click Save to apply.` : `No matching Timetable allocations found for Year ${currForm.year} Sec ${currForm.section}.`);
+    } catch (err) {
+      alert("Failed to load Timetable allocations: " + (err.response?.data?.error || err.message));
+    } finally {
+      setAutoFillingStaff(false);
+    }
+  };
+
+  const handleSaveSectionStaff = async () => {
+    if (savingSectionStaff) return;
+    setSavingSectionStaff(true);
+    try {
+      if (editingMasterSubjects.length === 0) {
+        alert("No subjects found for this Year & Semester. Please save subjects in 'Subjects (Year & Sem)' first.");
+        return;
+      }
+
+      const staffAssignments = editingMasterSubjects
+        .filter(s => String(s.courseCode || "").trim())
+        .map(s => {
+          const code = String(s.courseCode || "").trim();
+          return {
+            courseCode: code,
+            facultyName: String(editingStaffMap[code.toUpperCase()] || "").trim()
+          };
+        });
+
+      const res = await API.post("/api/curriculum/staff-mappings", {
+        programme: currForm.programme,
+        department: currForm.department,
+        year: currForm.year,
+        semester: currForm.semester,
+        section: currForm.section,
+        staffAssignments,
+        syncToExistingClasses: syncStaffToExams
+      });
+
+      await loadClasses(false);
+      if (
+        formData.programme === currForm.programme &&
+        formData.department === currForm.department &&
+        formData.year === currForm.year &&
+        formData.semester === currForm.semester &&
+        formData.section === currForm.section
+      ) {
+        setCourseDetails(prev => overlayMasterCoursesAndStaff(prev, formData.programme, formData.department, formData.year, formData.semester, formData.section, true));
+      }
+      alert(res.data?.message || `Section ${currForm.section} staff mapping saved!`);
+    } catch (err) {
+      alert("Failed to save section staff mapping: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSavingSectionStaff(false);
+    }
+  };
+
+  const handlePullMasterIntoClassSetup = (categoryFilter = "All") => {
+    const courses = buildCoursesFromMaster(formData.programme, formData.department, formData.year, formData.semester, formData.section, categoryFilter);
+    if (courses.length === 0) {
+      alert(`No saved Master Subjects (${categoryFilter}) found for ${formData.programme}-${formData.department} ${formData.year}/${formData.semester}. Please configure them in 'Roster, Subjects & Staff'.`);
+      return;
+    }
+    setCourseDetails(courses);
+    setCourseAutoLoadedFrom(`Master Subjects (${categoryFilter}) & Sec ${formData.section} Staff`);
+  };
+
+  const handleSyncOpenClassStaffAndNames = () => {
+    if (courseDetails.length === 0) return;
+    const synced = overlayMasterCoursesAndStaff(courseDetails, formData.programme, formData.department, formData.year, formData.semester, formData.section, true);
+    setCourseDetails(synced);
+    setCourseAutoLoadedFrom(`Synced Names & Sec ${formData.section} Staff from Master`);
   };
 
   const updateStudent = (index, field, val) => {
@@ -1533,11 +1986,13 @@ export default function AdminPanel() {
   };
 
   // Resolve smart faculty assignments per target section:
-  // Priority 1) Existing saved ClassData in same prog/dept/year/sem/sec
-  // Priority 2) Timetable Workload Allocation matching (department, year, semesterType, section)
-  // Priority 3) Optional fallback to source faculty (when fallbackToSource = true)
+  // Priority 1) Master Section Staff Mapping (CohortCourse collection)
+  // Priority 2) Existing saved ClassData in same prog/dept/year/sem/sec
+  // Priority 3) Timetable Workload Allocation matching (department, year, semesterType, section)
+  // Priority 4) Optional fallback to source faculty (when fallbackToSource = true)
   const buildSectionFacultyMap = (targetSec, targetExam, allocs, prog, dept, yr, sem, fallbackToSource = true) => {
     const targetYSS = `${yr}/${sem}/${targetSec}`;
+    const sectionStaffMap = buildMasterStaffMap(prog, dept, yr, sem, targetSec);
     const sectionClasses = (classesRef?.current || classes || []).filter(c =>
       c.yearSemSec === targetYSS &&
       (c.department || "CSE") === (dept || "CSE") &&
@@ -1552,7 +2007,11 @@ export default function AdminPanel() {
       const codeUp = String(cd.courseCode || "").trim().toUpperCase();
       let resolved = "";
 
-      if (anySectionClass) {
+      if (codeUp && sectionStaffMap.has(codeUp) && sectionStaffMap.get(codeUp)) {
+        resolved = sectionStaffMap.get(codeUp);
+      }
+
+      if (!resolved && anySectionClass) {
         const peerCd = anySectionClass.courseDetails.find(pc =>
           (codeUp && String(pc.courseCode || "").trim().toUpperCase() === codeUp) ||
           (cd.courseName && pc.courseName && pc.courseName.trim().toLowerCase() === cd.courseName.trim().toLowerCase())
@@ -2707,6 +3166,12 @@ export default function AdminPanel() {
         )}
       </div>
 
+      <datalist id="master-staff-datalist">
+        {masterStaffOptions.map((st, idx) => (
+          <option key={st._id || idx} value={st.name} />
+        ))}
+      </datalist>
+
       {/* CLASS SETUP TAB */}
       {activeTab === "classes" && (
         <div className="admin-grid-2col">
@@ -2907,11 +3372,49 @@ export default function AdminPanel() {
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2rem 0 1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", margin: "2rem 0 1rem" }}>
               <h3 style={{ margin: 0 }}>Course Details</h3>
-              <div style={{ position: "relative", overflow: "hidden" }}>
-                <button className="btn btn-primary" style={{ padding: "0.5rem 1rem", fontSize: "0.85rem" }}>📂 Upload Course Data</button>
-                <input type="file" onChange={handleCourseFileUpload} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: "0.42rem 0.7rem", fontSize: "0.78rem" }}
+                  onClick={() => handlePullMasterIntoClassSetup("All")}
+                  title="Load all courses & Sec staff from Master Subjects & Staff Setup"
+                >
+                  📚 All Master
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: "0.42rem 0.7rem", fontSize: "0.78rem" }}
+                  onClick={() => handlePullMasterIntoClassSetup("Theory")}
+                  title="Load only Theory subjects & Sec staff from Master Setup"
+                >
+                  Theory Only
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: "0.42rem 0.7rem", fontSize: "0.78rem" }}
+                  onClick={() => handlePullMasterIntoClassSetup("Lab")}
+                  title="Load only Lab subjects & Sec staff from Master Setup"
+                >
+                  Lab Only
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: "0.42rem 0.7rem", fontSize: "0.78rem" }}
+                  onClick={handleSyncOpenClassStaffAndNames}
+                  title="Keep current subject list and update Staff Names & Subject metadata from Master Setup"
+                >
+                  🔄 Sync Staff
+                </button>
+                <div style={{ position: "relative", overflow: "hidden" }}>
+                  <button type="button" className="btn btn-primary" style={{ padding: "0.45rem 0.9rem", fontSize: "0.82rem" }}>📂 Upload Course Data</button>
+                  <input type="file" onChange={handleCourseFileUpload} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                </div>
               </div>
             </div>
 
@@ -2953,7 +3456,7 @@ export default function AdminPanel() {
                       <td><input value={c.courseCode} onChange={e => updateCourseDetail(i, 'courseCode', e.target.value)} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
                       <td><input value={c.courseName} onChange={e => updateCourseDetail(i, 'courseName', e.target.value)} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
                       <td><input value={c.shortName || ""} onChange={e => updateCourseDetail(i, 'shortName', e.target.value)} placeholder="e.g. OS, DM" className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
-                      <td><input value={c.facultyName} onChange={e => updateCourseDetail(i, 'facultyName', e.target.value)} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
+                      <td><input list="master-staff-datalist" value={c.facultyName} onChange={e => updateCourseDetail(i, 'facultyName', e.target.value)} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
                       {formData.examName === "ESE" && (
                         <td><input type="number" min="0" step="0.5" value={c.credits !== undefined ? c.credits : 3} onChange={e => updateCourseDetail(i, 'credits', Number(e.target.value))} className="text-input" style={{ padding: "0.4rem", fontSize: "0.85rem" }} /></td>
                       )}
@@ -3198,15 +3701,44 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* ROSTER UPLOAD TAB */}
+      {/* ROSTER, SUBJECTS & STAFF MASTER HUB */}
       {activeTab === "roster" && (
-        <div className="glass-card" style={{ padding: "2.5rem", maxWidth: "1000px", margin: "0 auto" }}>
-          <h2 style={{ marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            👥 Bulk Roster Upload
-          </h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "2rem" }}>
-            Select a class configuration below to upload or update its student roster via an Excel/CSV file.
-          </p>
+        <div className="glass-card" style={{ padding: "2.5rem", maxWidth: "1050px", margin: "0 auto" }}>
+          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "2rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "1rem" }}>
+            <button
+              type="button"
+              className={`btn ${rosterSubTab === "students" ? "btn-primary" : "btn-secondary"}`}
+              style={{ padding: "0.65rem 1.2rem", fontSize: "0.9rem", fontWeight: "600" }}
+              onClick={() => setRosterSubTab("students")}
+            >
+              👥 1. Student Roster
+            </button>
+            <button
+              type="button"
+              className={`btn ${rosterSubTab === "subjects" ? "btn-primary" : "btn-secondary"}`}
+              style={{ padding: "0.65rem 1.2rem", fontSize: "0.9rem", fontWeight: "600" }}
+              onClick={() => setRosterSubTab("subjects")}
+            >
+              📚 2. Subjects (Year &amp; Sem)
+            </button>
+            <button
+              type="button"
+              className={`btn ${rosterSubTab === "staff" ? "btn-primary" : "btn-secondary"}`}
+              style={{ padding: "0.65rem 1.2rem", fontSize: "0.9rem", fontWeight: "600" }}
+              onClick={() => setRosterSubTab("staff")}
+            >
+              👩‍🏫 3. Section Staff Mapping
+            </button>
+          </div>
+
+          {rosterSubTab === "students" && (
+            <>
+              <h2 style={{ marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                👥 Bulk Roster Upload
+              </h2>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "2rem" }}>
+                Select a class configuration below to upload or update its student roster via an Excel/CSV file.
+              </p>
 
           <div style={{ marginBottom: "2rem", padding: "1.5rem", background: "rgba(255,255,255,0.02)", borderRadius: "12px", border: "1px dashed var(--border-color)" }}>
             <label className="input-label" style={{ fontWeight: "600" }}>Quick Load Saved Configuration</label>
@@ -3446,6 +3978,356 @@ export default function AdminPanel() {
               {isPromoting ? "Promoting Class..." : "Migrate / Promote Students"}
             </button>
           </div>
+            </>
+          )}
+
+          {rosterSubTab !== "students" && (
+            <div>
+              <h2 style={{ marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {rosterSubTab === "subjects" ? "📚 Subjects Master (Year & Semester)" : "👩‍🏫 Section-Wise Staff Mapping"}
+              </h2>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
+                {rosterSubTab === "subjects"
+                  ? "Configure all Subject Codes, Names, Short Forms, Types, and Credits once per Year & Semester. Class Setup will auto-load these across all exams."
+                  : "Assign faculty members per Section for the configured subjects. Saving automatically updates Staff Name across all existing & new Exam Models of this section."}
+              </p>
+
+              {/* Quick Saved Master Cohorts */}
+              {masterSubjectsList.length > 0 && (
+                <div style={{ marginBottom: "1.25rem", padding: "0.9rem 1rem", background: "rgba(99, 102, 241, 0.05)", borderRadius: "10px", border: "1px dashed rgba(99, 102, 241, 0.35)" }}>
+                  <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "var(--primary)", marginBottom: "0.5rem" }}>
+                    ⚡ Saved Subject Master Sets:
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    {masterSubjectsList.map(m => {
+                      const active = m.programme === currForm.programme && m.department === currForm.department && m.year === currForm.year && m.semester === currForm.semester;
+                      return (
+                        <button
+                          key={m.cohortKey}
+                          type="button"
+                          className={`btn ${active ? "btn-primary" : "btn-secondary"}`}
+                          style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                          onClick={() => setCurrForm(prev => ({
+                            ...prev,
+                            programme: m.programme || "B.E",
+                            department: m.department || "CSE",
+                            year: m.year,
+                            semester: m.semester
+                          }))}
+                        >
+                          {m.programme}-{m.department} {m.year}/{m.semester} ({m.subjects?.length || 0})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Shared Cohort Filter */}
+              <div className="input-row-3col" style={{ marginBottom: "1rem" }}>
+                <div className="input-group">
+                  <label className="input-label">Year</label>
+                  <select value={currForm.year} onChange={e => handleCurrFilterChange("year", e.target.value)} className="select-input">
+                    {["I", "II", "III", "IV"].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Semester</label>
+                  <select value={currForm.semester} onChange={e => handleCurrFilterChange("semester", e.target.value)} className="select-input">
+                    {getSemOptionsForYear(currForm.year).map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                {rosterSubTab === "staff" ? (
+                  <div className="input-group">
+                    <label className="input-label">Section</label>
+                    <select value={currForm.section} onChange={e => handleCurrFilterChange("section", e.target.value)} className="select-input">
+                      {getSectionsForCohort(currForm.year, currForm.semester, currForm.department, currForm.programme).map(sec => (
+                        <option key={sec} value={sec}>{sec}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="input-group">
+                    <label className="input-label">Total Subjects</label>
+                    <input readOnly value={`${editingMasterSubjects.length} subject(s)`} className="text-input" style={{ opacity: 0.8 }} />
+                  </div>
+                )}
+              </div>
+
+              <div className="input-row-2col" style={{ marginBottom: "1.5rem" }}>
+                <div className="input-group">
+                  <label className="input-label">Programme</label>
+                  <input value={currForm.programme} onChange={e => handleCurrFilterChange("programme", e.target.value)} placeholder="e.g. B.E" className="text-input" />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Department</label>
+                  <input value={currForm.department} onChange={e => handleCurrFilterChange("department", e.target.value)} placeholder="e.g. CSE" className="text-input" />
+                </div>
+              </div>
+
+              {rosterSubTab === "subjects" && (
+                <div>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "1.25rem" }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={handleImportTimetableSubjects}
+                      disabled={importingFromTimetable}
+                    >
+                      {importingFromTimetable ? "⏳ Importing..." : "⚡ Import from Timetable"}
+                    </button>
+                    <div style={{ position: "relative", overflow: "hidden", display: "inline-block" }}>
+                      <button type="button" className="btn btn-primary">📂 Upload Subjects Excel</button>
+                      <input type="file" onChange={handleUploadMasterSubjectsExcel} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                    </div>
+                  </div>
+
+                  <div className="table-container">
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "40px" }}>#</th>
+                          <th style={{ minWidth: "130px" }}>Course Code</th>
+                          <th style={{ minWidth: "240px" }}>Subject Name</th>
+                          <th style={{ minWidth: "110px" }}>Short Form</th>
+                          <th style={{ minWidth: "110px" }}>Type</th>
+                          <th style={{ width: "85px" }}>Credits</th>
+                          <th style={{ width: "40px" }}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editingMasterSubjects.map((sub, idx) => (
+                          <tr key={idx}>
+                            <td>{idx + 1}</td>
+                            <td>
+                              <input
+                                value={sub.courseCode || ""}
+                                onChange={e => {
+                                  const next = [...editingMasterSubjects];
+                                  next[idx] = { ...next[idx], courseCode: e.target.value };
+                                  setEditingMasterSubjects(next);
+                                }}
+                                placeholder="e.g. 23CSE01"
+                                className="text-input"
+                                style={{ padding: "0.4rem", fontSize: "0.85rem" }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                value={sub.courseName || ""}
+                                onChange={e => {
+                                  const next = [...editingMasterSubjects];
+                                  next[idx] = { ...next[idx], courseName: e.target.value };
+                                  setEditingMasterSubjects(next);
+                                }}
+                                placeholder="e.g. Internet of Things"
+                                className="text-input"
+                                style={{ padding: "0.4rem", fontSize: "0.85rem" }}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                value={sub.shortName || ""}
+                                onChange={e => {
+                                  const next = [...editingMasterSubjects];
+                                  next[idx] = { ...next[idx], shortName: e.target.value };
+                                  setEditingMasterSubjects(next);
+                                }}
+                                placeholder="IoT"
+                                className="text-input"
+                                style={{ padding: "0.4rem", fontSize: "0.85rem" }}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={sub.category || "Theory"}
+                                onChange={e => {
+                                  const next = [...editingMasterSubjects];
+                                  next[idx] = { ...next[idx], category: e.target.value };
+                                  setEditingMasterSubjects(next);
+                                }}
+                                className="select-input"
+                                style={{ padding: "0.4rem", fontSize: "0.85rem" }}
+                              >
+                                <option value="Theory">Theory</option>
+                                <option value="Lab">Lab</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={sub.credits !== undefined ? sub.credits : 3}
+                                onChange={e => {
+                                  const next = [...editingMasterSubjects];
+                                  next[idx] = { ...next[idx], credits: Number(e.target.value) };
+                                  setEditingMasterSubjects(next);
+                                }}
+                                className="text-input"
+                                style={{ padding: "0.4rem", fontSize: "0.85rem" }}
+                              />
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn-icon"
+                                onClick={() => setEditingMasterSubjects(editingMasterSubjects.filter((_, i) => i !== idx))}
+                              >
+                                ❌
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {editingMasterSubjects.length === 0 && (
+                          <tr>
+                            <td colSpan="7" style={{ textAlign: "center", padding: "1.5rem", color: "var(--text-muted)" }}>
+                              No subjects configured for {currForm.programme}-{currForm.department} {currForm.year}/{currForm.semester}. Click <strong>Import from Timetable</strong>, <strong>Upload Subjects Excel</strong>, or <strong>Add Subject</strong>.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ width: "100%", marginTop: "1rem" }}
+                    onClick={() => setEditingMasterSubjects([
+                      ...editingMasterSubjects,
+                      { courseCode: "", courseName: "", shortName: "", credits: 3, category: "Theory" }
+                    ])}
+                  >
+                    ➕ Add Subject
+                  </button>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.25rem" }}>
+                    <input
+                      type="checkbox"
+                      id="syncMasterSubjectsToExams"
+                      checked={syncMasterSubjectsToExams}
+                      onChange={e => setSyncMasterSubjectsToExams(e.target.checked)}
+                      style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                    />
+                    <label htmlFor="syncMasterSubjectsToExams" style={{ fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)", userSelect: "none" }}>
+                      Automatically update Subject Name, Short Form &amp; Credits in existing Exam Models of Year {currForm.year} Sem {currForm.semester}
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: "100%", marginTop: "1.25rem", padding: "1rem", fontSize: "1rem", fontWeight: "700", opacity: savingMasterSubjects ? 0.7 : 1 }}
+                    onClick={handleSaveMasterSubjects}
+                    disabled={savingMasterSubjects}
+                  >
+                    {savingMasterSubjects ? "⏳ Saving Master Subjects..." : `💾 Save Subjects for ${currForm.programme}-${currForm.department} ${currForm.year}/${currForm.semester}`}
+                  </button>
+                </div>
+              )}
+
+              {rosterSubTab === "staff" && (
+                <div>
+                  {editingMasterSubjects.length === 0 ? (
+                    <div style={{ padding: "2rem", textAlign: "center", background: "rgba(245, 158, 11, 0.08)", borderRadius: "12px", border: "1px dashed #f59e0b" }}>
+                      <p style={{ margin: "0 0 1rem 0", fontWeight: "600", color: "#b45309" }}>
+                        No subjects found for {currForm.programme}-{currForm.department} Year {currForm.year} Sem {currForm.semester}.
+                      </p>
+                      <button type="button" className="btn btn-primary" onClick={() => setRosterSubTab("subjects")}>
+                        📚 Go to Subjects (Year &amp; Sem) Tab
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "1rem" }}>
+                        <span style={{ fontWeight: "700", color: "var(--primary)", fontSize: "0.95rem" }}>
+                          Section {currForm.section} — {editingMasterSubjects.length} Subject(s)
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={handleAutoFillStaffFromTimetable}
+                          disabled={autoFillingStaff}
+                        >
+                          {autoFillingStaff ? "⏳ Filling..." : `⚡ Auto-Fill Sec ${currForm.section} Staff from Timetable`}
+                        </button>
+                      </div>
+
+                      <div className="table-container">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: "40px" }}>#</th>
+                              <th style={{ minWidth: "130px" }}>Course Code</th>
+                              <th style={{ minWidth: "220px" }}>Subject Name</th>
+                              <th style={{ minWidth: "90px" }}>Type</th>
+                              <th style={{ minWidth: "240px" }}>Assigned Staff Name (Sec {currForm.section})</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {editingMasterSubjects.map((sub, idx) => {
+                              const codeUp = String(sub.courseCode || "").trim().toUpperCase();
+                              const currentFac = editingStaffMap[codeUp] || "";
+                              return (
+                                <tr key={`${codeUp}_${idx}`}>
+                                  <td>{idx + 1}</td>
+                                  <td><strong>{sub.courseCode}</strong></td>
+                                  <td>
+                                    {sub.courseName}
+                                    {sub.shortName ? <span style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginLeft: "6px" }}>({sub.shortName})</span> : null}
+                                  </td>
+                                  <td>
+                                    <span className="badge" style={{ padding: "2px 8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: "700", background: sub.category === "Lab" ? "rgba(236, 72, 153, 0.12)" : "rgba(99, 102, 241, 0.12)", color: sub.category === "Lab" ? "#db2777" : "#4f46e5" }}>
+                                      {sub.category || "Theory"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <input
+                                      list="master-staff-datalist"
+                                      value={currentFac}
+                                      onChange={e => setEditingStaffMap(prev => ({ ...prev, [codeUp]: e.target.value }))}
+                                      placeholder={`Select or type Sec ${currForm.section} Staff...`}
+                                      className="text-input"
+                                      style={{ padding: "0.45rem", fontSize: "0.85rem" }}
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.25rem" }}>
+                        <input
+                          type="checkbox"
+                          id="syncStaffToExams"
+                          checked={syncStaffToExams}
+                          onChange={e => setSyncStaffToExams(e.target.checked)}
+                          style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                        />
+                        <label htmlFor="syncStaffToExams" style={{ fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)", userSelect: "none" }}>
+                          Automatically update Staff Name across ALL Exam Models of {currForm.programme}-{currForm.department} {currForm.year}/{currForm.semester}/{currForm.section} (CIA, Lab, Model, Seminar, ESE...)
+                        </label>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{ width: "100%", marginTop: "1.25rem", padding: "1rem", fontSize: "1rem", fontWeight: "700", opacity: savingSectionStaff ? 0.7 : 1 }}
+                        onClick={handleSaveSectionStaff}
+                        disabled={savingSectionStaff}
+                      >
+                        {savingSectionStaff ? "⏳ Saving & Syncing Exam Models..." : `💾 Save Sec ${currForm.section} Staff Mapping & Sync Exams`}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
