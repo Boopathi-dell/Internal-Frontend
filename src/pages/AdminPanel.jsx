@@ -100,8 +100,7 @@ export default function AdminPanel() {
   const [students, setStudents] = useState([]);
   const [autoLoadedFrom, setAutoLoadedFrom] = useState("");
   const [courseAutoLoadedFrom, setCourseAutoLoadedFrom] = useState("");
-  const [propagateRoster, setPropagateRoster] = useState(false);
-  const [propagateToYearSem, setPropagateToYearSem] = useState(true);
+  const [showClassRosterPreview, setShowClassRosterPreview] = useState(false);
   const [selectedClassesForAccess, setSelectedClassesForAccess] = useState([]);
   const [accessFilterYear, setAccessFilterYear] = useState("All");
   const [accessFilterSem, setAccessFilterSem] = useState("All");
@@ -2085,8 +2084,8 @@ export default function AdminPanel() {
         editingEndDate: formData.editingEndDate,
         editingStartTime: formData.editingStartTime || "",
         editingEndTime: formData.editingEndTime || "",
-        propagateRoster: propagateRoster,
-        propagateToYearSem: propagateToYearSem,
+        propagateRoster: false,
+        propagateToYearSem: false,
         eseGradingSystem: formData.eseGradingSystem
       };
       await API.post("/api/classes", payload);
@@ -3174,7 +3173,7 @@ export default function AdminPanel() {
 
       {/* CLASS SETUP TAB */}
       {activeTab === "classes" && (
-        <div className="admin-grid-2col">
+        <div style={{ maxWidth: "1050px", margin: "0 auto" }}>
           <div className="glass-card" style={{ padding: "2rem" }}>
             
             {/* ── QUICK LOAD CONFIGURATION ── */}
@@ -3467,30 +3466,64 @@ export default function AdminPanel() {
               </table>
             </div>
             <button className="btn btn-secondary mt-2" style={{ width: "100%", marginTop: "1rem" }} onClick={() => setCourseDetails([...courseDetails, { courseCode: "", courseName: "", shortName: "", facultyName: "", credits: 3 }])}>➕ Add Course Entry</button>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "1.5rem" }}>
-              <input 
-                type="checkbox" 
-                id="propagateRoster" 
-                checked={propagateRoster} 
-                onChange={e => setPropagateRoster(e.target.checked)} 
-                style={{ width: "18px", height: "18px", cursor: "pointer" }}
-              />
-              <label htmlFor="propagateRoster" style={{ fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)", userSelect: "none" }}>
-                Apply this student roster only to all other exams of this section (keeps each exam&apos;s own subjects &amp; marks)
-              </label>
+
+            <div style={{ marginTop: "1.25rem", padding: "0.9rem 1rem", borderRadius: "12px", background: "rgba(16, 185, 129, 0.06)", border: "1px solid rgba(16, 185, 129, 0.35)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ fontSize: "0.85rem" }}>
+                  <strong style={{ color: "var(--success)" }}>👥 Enrolled Students: {students.length}</strong>
+                  <span style={{ color: "var(--text-muted)", marginLeft: "8px", fontSize: "0.78rem" }}>
+                    {autoLoadedFrom ? `(Loaded from "${autoLoadedFrom}")` : "(Synced from Master Roster — manage students in Roster tab)"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  {students.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                      onClick={() => setShowClassRosterPreview(prev => !prev)}
+                    >
+                      {showClassRosterPreview ? "🙈 Hide Students" : `👁️ View List (${students.length})`}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: "4px 10px", fontSize: "0.75rem" }}
+                    onClick={() => { setActiveTab("roster"); setRosterSubTab("students"); }}
+                  >
+                    ✏️ Edit in Roster Tab
+                  </button>
+                </div>
+              </div>
+              {showClassRosterPreview && students.length > 0 && (
+                <div className="table-container" style={{ maxHeight: "260px", marginTop: "0.75rem" }}>
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "45px" }}>#</th>
+                        <th>Reg No</th>
+                        <th>Name</th>
+                        <th>Gender</th>
+                        <th>Cohort</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((s, idx) => (
+                        <tr key={s.regNo || idx}>
+                          <td>{idx + 1}</td>
+                          <td>{s.regNo}</td>
+                          <td>{s.name}</td>
+                          <td>{s.gender === "Girl" ? "Female" : "Male"}</td>
+                          <td>{s.studentType === "Hosteller" ? "Resident" : "Local"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
-              <input 
-                type="checkbox" 
-                id="propagateToYearSem" 
-                checked={propagateToYearSem} 
-                onChange={e => setPropagateToYearSem(e.target.checked)} 
-                style={{ width: "18px", height: "18px", cursor: "pointer" }}
-              />
-              <label htmlFor="propagateToYearSem" style={{ fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)", userSelect: "none" }}>
-                Auto-sync Course Details &amp; Report Date to all other sections in this Year &amp; Sem
-              </label>
-            </div>
+
             <div style={{ marginTop: "1.25rem", padding: "1rem", borderRadius: "12px", background: "rgba(99, 102, 241, 0.05)", border: "1px solid rgba(99, 102, 241, 0.25)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "0.65rem" }}>
                 <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--primary)" }}>
@@ -3626,77 +3659,6 @@ export default function AdminPanel() {
                 ⚡ Bulk Clone to Other Sections &amp; Exams
               </button>
             </div>
-          </div>
-
-          <div className="glass-card" style={{ padding: "2rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
-              <h3 style={{ margin: 0 }}>Enrollment Roster View</h3>
-            </div>
-
-            {autoLoadedFrom && (
-              <div style={{
-                background: "rgba(16, 185, 129, 0.08)",
-                border: "1px solid var(--success)",
-                borderRadius: "12px",
-                padding: "1rem",
-                marginBottom: "1rem",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.25rem",
-                animation: "fadeIn 0.3s ease"
-              }}>
-                <span style={{ fontWeight: "600", color: "var(--success)", fontSize: "0.85rem" }}>
-                  💡 Roster Loaded Automatically
-                </span>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                  Imported {students.length} students from the roster of <strong>"{autoLoadedFrom}"</strong>. Save this configuration to approve and publish to Mark Entry.
-                </span>
-              </div>
-            )}
-            
-            <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginBottom: "1.5rem", background: "var(--bg-main)", padding: "1rem", borderRadius: "8px", border: "1px dashed var(--border-color)" }}>
-               Roster Synchronization: Reg No, Name, Gender, and Cohort Type are auto-detected from bulk imports.
-            </p>
-
-            <div className="table-container" style={{ maxHeight: "700px" }}>
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Identifier (Roll/Reg No)</th>
-                    <th>Candidate Name</th>
-                    <th>Date of Birth</th>
-                    <th>Gender</th>
-                    <th>Cohort</th>
-                    <th style={{ width: "40px" }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {students.map((s, i) => (
-                    <tr key={i}>
-                      <td>{i + 1}</td>
-                      <td><input value={s.regNo || ""} onChange={e => updateStudent(i, 'regNo', e.target.value)} className="text-input" style={{ padding: "0.4rem" }} /></td>
-                      <td><input value={s.name || ""} onChange={e => updateStudent(i, 'name', e.target.value)} className="text-input" style={{ padding: "0.4rem" }} /></td>
-                      <td><input type="date" value={s.dob || ""} onChange={e => updateStudent(i, 'dob', e.target.value)} className="text-input" style={{ padding: "0.4rem", width: "140px" }} /></td>
-                      <td>
-                        <select value={s.gender || "Boy"} onChange={e => updateStudent(i, 'gender', e.target.value)} className="select-input" style={{ padding: "0.4rem" }}>
-                          <option value="Boy">Male</option>
-                          <option value="Girl">Female</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select value={s.studentType || "Day Scholar"} onChange={e => updateStudent(i, 'studentType', e.target.value)} className="select-input" style={{ padding: "0.4rem" }}>
-                          <option value="Day Scholar">Local</option>
-                          <option value="Hosteller">Resident</option>
-                        </select>
-                      </td>
-                      <td><button className="btn-icon" onClick={() => setStudents(students.filter((_, idx) => idx !== i))}>❌</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <button className="btn btn-secondary" style={{ width: "100%", marginTop: "1rem" }} onClick={() => setStudents([...students, { regNo: "", name: "", dob: "", gender: "Boy", studentType: "Day Scholar" }])}>➕ Add New Candidate</button>
           </div>
         </div>
       )}
