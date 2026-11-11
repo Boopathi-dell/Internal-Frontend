@@ -22,7 +22,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  Save
 } from "lucide-react";
 
 export default function InternalMarkSheet() {
@@ -59,6 +60,8 @@ export default function InternalMarkSheet() {
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [userHiddenColumns, setUserHiddenColumns] = useState([]);
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const [savingHiddenCols, setSavingHiddenCols] = useState(false);
+  const [hiddenColsMsg, setHiddenColsMsg] = useState("");
   const [showExcelMenu, setShowExcelMenu] = useState(false);
   const excelMenuRef = useRef(null);
 
@@ -72,24 +75,109 @@ export default function InternalMarkSheet() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  // Sync hidden columns when active template changes
-  useEffect(() => {
-    if (activeTemplate && activeTemplate.columns) {
-      const templateHidden = activeTemplate.columns.filter(c => c.isHidden).map(c => c.heading);
-      setUserHiddenColumns(templateHidden);
-    } else {
-      setUserHiddenColumns([]);
-    }
-  }, [activeTemplate]);
+  const getTemplateHiddenSignature = (template) => {
+    if (!template || !Array.isArray(template.columns)) return "default";
+    return template.columns.map((c, idx) => `${idx}:${c.heading}:${Boolean(c.isHidden)}`).join("|");
+  };
 
-  const toggleColumnVisibility = (heading) => {
-    setUserHiddenColumns(prev => {
-      if (prev.includes(heading)) {
-        return prev.filter(h => h !== heading);
-      } else {
-        return [...prev, heading];
+  const getHiddenStorageKey = (reg, template) => {
+    return `internalMarkHiddenCols_${reg || "default"}_${template?._id || "default"}`;
+  };
+
+  const persistHiddenLocal = (nextKeys, reg, template) => {
+    try {
+      const storageKey = getHiddenStorageKey(reg, template);
+      localStorage.setItem(storageKey, JSON.stringify({
+        hiddenKeys: nextKeys,
+        dbSignature: getTemplateHiddenSignature(template)
+      }));
+    } catch {
+      // Ignore storage quota errors
+    }
+  };
+
+  // Sync hidden columns when active template or regulation changes (preserving saved choices per regulation)
+  useEffect(() => {
+    const rawCols = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
+      ? activeTemplate.columns
+      : defaultMecColumns;
+    const keyedCols = getColumnsWithKeys(rawCols);
+    const dbHiddenKeys = keyedCols.filter(c => c.isHidden).map(c => c.colKey);
+    const dbSig = getTemplateHiddenSignature(activeTemplate);
+    const storageKey = getHiddenStorageKey(formData.regulation, activeTemplate);
+
+    try {
+      const savedRaw = localStorage.getItem(storageKey);
+      if (savedRaw) {
+        const parsed = JSON.parse(savedRaw);
+        if (parsed && parsed.dbSignature === dbSig && Array.isArray(parsed.hiddenKeys)) {
+          const validKeys = new Set(keyedCols.map(c => c.colKey));
+          setUserHiddenColumns(parsed.hiddenKeys.filter(k => validKeys.has(k)));
+          return;
+        }
       }
+    } catch {
+      // Malformed storage falls back to DB defaults
+    }
+
+    setUserHiddenColumns(dbHiddenKeys);
+  }, [activeTemplate, formData.regulation]);
+
+  const toggleColumnVisibility = (colKey) => {
+    setHiddenColsMsg("");
+    setUserHiddenColumns(prev => {
+      const next = prev.includes(colKey)
+        ? prev.filter(k => k !== colKey)
+        : [...prev, colKey];
+      persistHiddenLocal(next, formData.regulation, activeTemplate);
+      return next;
     });
+  };
+
+  const handleShowAllColumns = () => {
+    setHiddenColsMsg("");
+    setUserHiddenColumns([]);
+    persistHiddenLocal([], formData.regulation, activeTemplate);
+  };
+
+  // Persist hidden columns directly into active Regulation template so all subjects & browsers stay synced
+  const handleSaveHiddenColumnsForRegulation = async () => {
+    persistHiddenLocal(userHiddenColumns, formData.regulation, activeTemplate);
+    if (!activeTemplate || !activeTemplate._id) {
+      setHiddenColsMsg(`Saved locally for Regulation ${formData.regulation} (all subjects)`);
+      setTimeout(() => setHiddenColsMsg(""), 3500);
+      return;
+    }
+
+    setSavingHiddenCols(true);
+    setHiddenColsMsg("");
+    try {
+      const keyedCols = getColumnsWithKeys(activeTemplate.columns || []);
+      const updatedColumns = (activeTemplate.columns || []).map((col, idx) => ({
+        ...col,
+        isHidden: userHiddenColumns.includes(keyedCols[idx].colKey) || userHiddenColumns.includes(col.heading)
+      }));
+      const payload = {
+        templateName: activeTemplate.templateName,
+        regulation: activeTemplate.regulation,
+        isActive: activeTemplate.isActive,
+        headerImage: activeTemplate.headerImage,
+        columns: updatedColumns
+      };
+      const res = await API.put(`/api/internal-marks/${activeTemplate._id}`, payload);
+      const savedTemplate = res.data || { ...activeTemplate, columns: updatedColumns };
+      setAllTemplates(prev => prev.map(t => (t._id === savedTemplate._id ? savedTemplate : t)));
+      setActiveTemplate(savedTemplate);
+      persistHiddenLocal(userHiddenColumns, formData.regulation, savedTemplate);
+      setHiddenColsMsg(`Saved permanently for Regulation ${formData.regulation} (all subjects)!`);
+      setTimeout(() => setHiddenColsMsg(""), 4000);
+    } catch (err) {
+      console.error("Failed to save hidden columns to template:", err);
+      setHiddenColsMsg(`Saved locally for this browser (Regulation ${formData.regulation})`);
+      setTimeout(() => setHiddenColsMsg(""), 4000);
+    } finally {
+      setSavingHiddenCols(false);
+    }
   };
 
   // 1. Fetch All Admin Templates & Extract Regulations
@@ -219,7 +307,8 @@ export default function InternalMarkSheet() {
         setFormData(prev => ({ ...prev, selectedSubject: "CUSTOM", isCustomSubject: true }));
       }
 
-      calculateStudentsMarks(filteredClasses, matchedRoster, targetSubj, activeTemplate);
+      const targetSubjName = subjectsWithNames.find(s => s.code === targetSubj)?.name || "";
+      calculateStudentsMarks(filteredClasses, matchedRoster, targetSubj, activeTemplate, targetSubjName);
     } catch (e) {
       console.error("Error loading class data:", e);
     } finally {
@@ -241,64 +330,98 @@ export default function InternalMarkSheet() {
   // Normalize string for fuzzy match
   const normStr = (str) => (str || "").toLowerCase().replace(/[\s\-_]/g, "");
 
-  // Normalize exam name specifically so CIA 1, CIA 2, CIA 3 and UT 1..5 never cross-collide
+  // Normalize exam name specifically so CIA 1, CIA 2, CIA 3, Practical & UT 1..5 never cross-collide
   const normalizeExam = (name) => {
     if (!name) return "";
-    let s = String(name).toLowerCase().replace(/[\s\-_]/g, "");
+    let s = String(name).toLowerCase().replace(/[\s\-_.]/g, "");
+    if (s.includes("practical") || s.includes("lab")) return s;
     s = s.replace(/unittest/g, "ut");
-    s = s.replace(/modelexam(ination)?/g, "cia3");
-    s = s.replace(/cia-?iii/g, "cia3").replace(/cia-?3/g, "cia3");
-    s = s.replace(/cia-?ii/g, "cia2").replace(/cia-?2/g, "cia2");
-    s = s.replace(/cia-?i/g, "cia1").replace(/cia-?1/g, "cia1");
-    s = s.replace(/ut-?v/g, "ut5").replace(/ut-?5/g, "ut5");
-    s = s.replace(/ut-?iv/g, "ut4").replace(/ut-?4/g, "ut4");
-    s = s.replace(/ut-?iii/g, "ut3").replace(/ut-?3/g, "ut3");
-    s = s.replace(/ut-?ii/g, "ut2").replace(/ut-?2/g, "ut2");
-    s = s.replace(/ut-?i/g, "ut1").replace(/ut-?1/g, "ut1");
+    if (/^modelexam(ination)?$/.test(s) || s === "model") return "cia3_model";
+    s = s.replace(/cia(iii|3)/g, "cia3")
+         .replace(/cia(ii|2)/g, "cia2")
+         .replace(/cia(iv|4)/g, "cia4")
+         .replace(/cia(i|1)/g, "cia1");
+    s = s.replace(/ut(iii|3)/g, "ut3")
+         .replace(/ut(ii|2)/g, "ut2")
+         .replace(/ut(iv|4)/g, "ut4")
+         .replace(/ut(v|5)/g, "ut5")
+         .replace(/ut(i|1)/g, "ut1");
     s = s.replace(/seminar/g, "sm");
     return s;
   };
 
-  const isExamMatch = (targetExam, classExam) => {
-    if (!targetExam || !classExam) return false;
+  // Returns match priority: 2 = Exact Exam Match, 1 = Model Exam <-> CIA 3 Fallback, 0 = No Match
+  const getExamMatchPriority = (targetExam, classExam) => {
+    if (!targetExam || !classExam) return 0;
     const n1 = normalizeExam(targetExam);
     const n2 = normalizeExam(classExam);
-    if (n1 === n2) return true;
-    if (n1 === "cia3" && (n2.includes("model") || n2 === "cia3")) return true;
-    if (n2 === "cia3" && (n1.includes("model") || n1 === "cia3")) return true;
-    return false;
+    if (!n1 || !n2) return 0;
+    if (n1 === n2) return 2;
+    const cia3Aliases = new Set(["cia3", "cia3_model"]);
+    if (cia3Aliases.has(n1) && cia3Aliases.has(n2)) return 1;
+    return 0;
   };
 
-  // Flexible exam mark finder
-  const findExamMarkForStudent = (student, examName, targetSubj, allClassesForSection) => {
+  // Finds exact matching subject index in a Class record without empty-string or prefix false positives
+  const findSubjectIndexInClass = (cls, targetSubjCode, targetSubjName = "") => {
+    const cleanCode = normStr(targetSubjCode);
+    const cleanName = (targetSubjName && targetSubjName !== "Theory Subject") ? normStr(targetSubjName) : "";
+    const count = Math.max(cls.subjects?.length || 0, cls.courseDetails?.length || 0);
+    if (count === 0) return -1;
+
+    // Pass 1: Strict Exact Match (prevents e.g. 23CS301 matching 23CS301L or "" empty string matches)
+    for (let i = 0; i < count; i++) {
+      const sRaw = normStr(cls.subjects?.[i]);
+      const cd = cls.courseDetails?.[i];
+      const cCode = normStr(cd?.courseCode);
+      const cName = normStr(cd?.courseName);
+      const cShort = normStr(cd?.shortName);
+
+      if (cleanCode && (sRaw === cleanCode || cCode === cleanCode)) return i;
+      if (cleanName && (sRaw === cleanName || cName === cleanName || cShort === cleanName)) return i;
+      if (cleanCode && cleanName && sRaw === `${cleanCode}${cleanName}`) return i;
+    }
+
+    // Pass 2: Delimited Code Prefix (e.g. subjects[i] = "23CSE01 - Internet of Things") or Long Name Match
+    const rawCodeToken = String(targetSubjCode || "").trim().toLowerCase();
+    for (let i = 0; i < count; i++) {
+      const rawSubjStr = String(cls.subjects?.[i] || "").trim().toLowerCase();
+      const firstToken = rawSubjStr.split(/[\s–\-:|]+/)[0];
+      if (rawCodeToken && firstToken && firstToken === rawCodeToken) return i;
+
+      const cd = cls.courseDetails?.[i];
+      const cCode = normStr(cd?.courseCode);
+      const cName = normStr(cd?.courseName);
+      if (cleanName && cleanName.length >= 6 && cName && cName.length >= 6 && (cName.includes(cleanName) || cleanName.includes(cName))) {
+        return i;
+      }
+      if (cleanCode && cleanCode.length >= 4 && cCode && cCode.length >= 4 && cCode === cleanCode) {
+        return i;
+      }
+    }
+
+    return -1;
+  };
+
+  // Accurate exam mark finder prioritizing Exact Exam Match + Exact Subject Match
+  const findExamMarkForStudent = (student, examName, targetSubjCode, allClassesForSection, targetSubjName = "") => {
     if (!examName) return "";
-    const cleanTarget = normStr(targetSubj);
+    const targetReg = String(student.regNo || "").trim().toUpperCase();
+    if (!targetReg) return "";
 
-    for (const cls of allClassesForSection) {
-      if (isExamMatch(examName, cls.examName)) {
-        let subjIdx = -1;
-        if (cls.subjects && Array.isArray(cls.subjects)) {
-          subjIdx = cls.subjects.findIndex(s => {
-            const c = normStr(s);
-            return c === cleanTarget || c.includes(cleanTarget) || cleanTarget.includes(c);
-          });
-        }
-        if (subjIdx === -1 && cls.courseDetails && Array.isArray(cls.courseDetails)) {
-          subjIdx = cls.courseDetails.findIndex(cd => {
-            const cCode = normStr(cd.courseCode);
-            const cName = normStr(cd.courseName);
-            return cCode === cleanTarget || cleanTarget.includes(cCode) || cCode.includes(cleanTarget) ||
-                   cName === cleanTarget || cleanTarget.includes(cName) || cName.includes(cleanTarget);
-          });
-        }
+    const matchingClasses = (allClassesForSection || [])
+      .map(cls => ({ cls, priority: getExamMatchPriority(examName, cls.examName) }))
+      .filter(item => item.priority > 0)
+      .sort((a, b) => b.priority - a.priority);
 
-        if (subjIdx !== -1 && cls.students) {
-          const stObj = cls.students.find(s => s.regNo === student.regNo);
-          if (stObj && stObj.marks && stObj.marks.length > subjIdx) {
-            const val = stObj.marks[subjIdx];
-            if (val !== "" && val !== undefined && val !== null) {
-              return val;
-            }
+    for (const { cls } of matchingClasses) {
+      const subjIdx = findSubjectIndexInClass(cls, targetSubjCode, targetSubjName);
+      if (subjIdx !== -1 && Array.isArray(cls.students)) {
+        const stObj = cls.students.find(s => String(s.regNo || "").trim().toUpperCase() === targetReg);
+        if (stObj && Array.isArray(stObj.marks) && stObj.marks.length > subjIdx) {
+          const val = stObj.marks[subjIdx];
+          if (val !== "" && val !== undefined && val !== null) {
+            return val;
           }
         }
       }
@@ -476,7 +599,7 @@ export default function InternalMarkSheet() {
   };
 
   // Builds evaluated student mark rows for any given subject (reused by UI & multi-subject Excel export)
-  const buildEvaluatedRowsForSubject = (classesList, rosterObj, targetSubject, template) => {
+  const buildEvaluatedRowsForSubject = (classesList, rosterObj, targetSubject, template, targetSubjName = "") => {
     if (!targetSubject) return [];
 
     const studentMap = {};
@@ -519,7 +642,7 @@ export default function InternalMarkSheet() {
 
       columnsToUse.forEach(col => {
         if (col.type === "exam") {
-          const mark = findExamMarkForStudent(student, col.examName, targetSubject, classesList || []);
+          const mark = findExamMarkForStudent(student, col.examName, targetSubject, classesList || [], targetSubjName);
           row[col.colKey] = mark;
           row[col.heading] = mark;
         }
@@ -534,13 +657,14 @@ export default function InternalMarkSheet() {
   };
 
   // Pure in-memory student marks & formulas calculation (Instant 0ms update, Zero API calls)
-  const calculateStudentsMarks = (classesList, rosterObj, targetSubj, template) => {
+  const calculateStudentsMarks = (classesList, rosterObj, targetSubj, template, targetSubjName = "") => {
     const targetSubject = targetSubj || (formData.isCustomSubject ? formData.customSubject : formData.selectedSubject);
     if (!targetSubject) {
       setStudentsData([]);
       return;
     }
-    const evaluatedStudents = buildEvaluatedRowsForSubject(classesList, rosterObj, targetSubject, template);
+    const resolvedName = targetSubjName || (formData.isCustomSubject ? "" : (subjects.find(s => s.code === targetSubject)?.name || ""));
+    const evaluatedStudents = buildEvaluatedRowsForSubject(classesList, rosterObj, targetSubject, template, resolvedName);
     setStudentsData(evaluatedStudents);
   };
 
@@ -548,7 +672,8 @@ export default function InternalMarkSheet() {
   useEffect(() => {
     if (allFetchedClasses.length > 0 || currentCohortRoster) {
       const targetSubj = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
-      calculateStudentsMarks(allFetchedClasses, currentCohortRoster, targetSubj, activeTemplate);
+      const targetSubjName = formData.isCustomSubject ? "" : (subjects.find(s => s.code === targetSubj)?.name || "");
+      calculateStudentsMarks(allFetchedClasses, currentCohortRoster, targetSubj, activeTemplate, targetSubjName);
     }
   }, [
     formData.selectedSubject, 
@@ -865,7 +990,7 @@ export default function InternalMarkSheet() {
     targetList.forEach(subj => {
       const evalRows = (subj.code === formData.selectedSubject && !formData.isCustomSubject)
         ? studentsData
-        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate);
+        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate, subj.name);
       const displaySubj = subj.name ? `${subj.code} - ${subj.name}` : subj.code;
       const ws = buildSubjectWorksheet(evalRows, displaySubj);
       XLSX.utils.book_append_sheet(wb, ws, makeSafeSheetName(subj.code, usedNames));
@@ -889,7 +1014,7 @@ export default function InternalMarkSheet() {
     targetList.forEach(subj => {
       const evalRows = (subj.code === formData.selectedSubject && !formData.isCustomSubject)
         ? studentsData
-        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate);
+        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate, subj.name);
       perSubjectRows[subj.code] = {};
       evalRows.forEach(st => {
         if (!st.regNo) return;
@@ -1173,24 +1298,39 @@ export default function InternalMarkSheet() {
                   Click to hide raw marks (like MKC or SEM). Hidden columns are omitted from printout & sheet, but formulas calculate them in the backend!
                 </p>
               </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button 
-                  onClick={() => setUserHiddenColumns([])}
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                {hiddenColsMsg && (
+                  <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "#15803d", background: "rgba(34, 197, 94, 0.12)", padding: "4px 10px", borderRadius: "99px" }}>
+                    {hiddenColsMsg}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleShowAllColumns}
                   className="btn btn-secondary btn-sm"
-                  style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px" }}
+                  style={{ fontSize: "0.78rem", padding: "6px 12px", borderRadius: "8px" }}
                 >
                   Show All Columns
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveHiddenColumnsForRegulation}
+                  disabled={savingHiddenCols}
+                  className="btn btn-primary btn-sm"
+                  style={{ fontSize: "0.78rem", padding: "6px 14px", borderRadius: "8px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                >
+                  <Save size={14} /> {savingHiddenCols ? "Saving..." : `Save for Reg ${formData.regulation} (All Subjects)`}
                 </button>
               </div>
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
               {currentColumns.map(col => {
-                const isHidden = userHiddenColumns.includes(col.heading);
+                const isHidden = userHiddenColumns.includes(col.colKey) || userHiddenColumns.includes(col.heading);
                 return (
                   <button
-                    key={col.heading}
-                    onClick={() => toggleColumnVisibility(col.heading)}
+                    key={col.colKey}
+                    onClick={() => toggleColumnVisibility(col.colKey)}
                     type="button"
                     style={{
                       padding: "6px 14px",
