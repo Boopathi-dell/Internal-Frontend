@@ -1790,7 +1790,7 @@ export default function MarkEntry() {
 
 
             {/* Faculty Table */}
-            {focusedSubjectIndices.length === 1 ? (
+            {focusedSubjectIndices.length === 1 && getCourseDetails()[focusedSubjectIndices[0]] ? (
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid black", padding: "10px", marginTop: "15px", fontWeight: "bold", fontSize: "14px", color: "black" }}>
                 <div>COURSE CODE: {getCourseDetails()[focusedSubjectIndices[0]].courseCode}</div>
                 <div>COURSE NAME: {getCourseDetails()[focusedSubjectIndices[0]].courseName}</div>

@@ -8,18 +8,7 @@ import {
   Lock, Unlock, History
 } from "lucide-react";
 import headerLogo from "../assets/logo image.jpg";
-
-export const DEFAULT_PERIOD_TIMINGS = {
-  1: "09:10 - 10:05",
-  2: "10:05 - 11:00",
-  teaBreak: "11:00 - 11:15",
-  3: "11:15 - 12:10",
-  4: "12:10 - 01:00",
-  lunchBreak: "01:00 - 01:45",
-  5: "01:45 - 02:40",
-  6: "02:40 - 03:35",
-  7: "03:35 - 04:30"
-};
+import { DEFAULT_PERIOD_TIMINGS } from "../constants/timetableDefaults";
 
 export default function TimetableManager() {
   // Navigation sub-tabs
@@ -30,7 +19,7 @@ export default function TimetableManager() {
   const [academicYear, setAcademicYear] = useState(() => {
     try {
       return localStorage.getItem("timetable_selected_academic_year") || "2026-2027";
-    } catch (e) {
+    } catch {
       return "2026-2027";
     }
   });
@@ -46,7 +35,9 @@ export default function TimetableManager() {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) {}
+    } catch {
+      // Fallback to defaults when storage unavailable
+    }
     return ["2024-2025", "2025-2026", "2026-2027", "2027-2028", "2028-2029"];
   });
 
@@ -81,13 +72,17 @@ export default function TimetableManager() {
       setAcademicYearList(updatedList);
       try {
         localStorage.setItem("timetable_academic_years", JSON.stringify(updatedList));
-      } catch (e) {}
+      } catch {
+        // Ignore storage errors
+      }
     }
 
     setAcademicYear(cleaned);
     try {
       localStorage.setItem("timetable_selected_academic_year", cleaned);
-    } catch (e) {}
+    } catch {
+      // Ignore storage errors
+    }
     setIsAddingCustomYear(false);
     setCustomAcademicYearInput("");
     showAlert(`Academic Year ${cleaned.includes("-") ? cleaned.replace("-", " - ") : cleaned} selected!`);
@@ -102,7 +97,9 @@ export default function TimetableManager() {
         if (!parsed["I"]) parsed["I"] = ["A", "B"];
         return parsed;
       }
-    } catch (e) {}
+    } catch {
+      // Fallback to default sections
+    }
     return {
       "I": ["A", "B"],
       "II": ["A", "B"],
@@ -138,7 +135,9 @@ export default function TimetableManager() {
     try {
       const saved = localStorage.getItem("timetable_class_advisors");
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch {
+      // Ignore storage read errors
+    }
     return {};
   });
 
@@ -146,7 +145,7 @@ export default function TimetableManager() {
   const [iqacNumber, setIqacNumber] = useState(() => {
     try {
       return localStorage.getItem("timetable_iqac_number") || "MEC/IQAC/2026 - 27/CSE/006";
-    } catch (e) {
+    } catch {
       return "MEC/IQAC/2026 - 27/CSE/006";
     }
   });
@@ -156,7 +155,9 @@ export default function TimetableManager() {
     try {
       const saved = localStorage.getItem("timetable_hall_numbers");
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch {
+      // Ignore storage read errors
+    }
     return {
       "I-A": "LH-1", "I-B": "LH-2",
       "II-A": "LH-3", "II-B": "LH-4", "II-C": "LH-5",
@@ -170,7 +171,9 @@ export default function TimetableManager() {
     try {
       const saved = localStorage.getItem("timetable_coordinators");
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch {
+      // Ignore storage read errors
+    }
     return {
       examCoordinator: "Mrs.M.Logapriya, AP/CSE",
       placementCoordinator: "Mrs.M.Buvaneswari, AP/CSE",
@@ -183,7 +186,7 @@ export default function TimetableManager() {
   const [printAcademicYear, setPrintAcademicYear] = useState(() => {
     try {
       return localStorage.getItem("timetable_print_academic_year") || "2026-2027";
-    } catch (e) {
+    } catch {
       return "2026-2027";
     }
   });
@@ -194,7 +197,9 @@ export default function TimetableManager() {
       setPrintAcademicYear(academicYear);
       try {
         localStorage.setItem("timetable_print_academic_year", academicYear);
-      } catch (e) {}
+      } catch {
+        // Ignore storage write errors
+      }
     }
   }, [academicYear]);
 
@@ -229,7 +234,9 @@ export default function TimetableManager() {
     try {
       const saved = localStorage.getItem("timetable_period_timings");
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch {
+      // Fallback to default period timings
+    }
     return DEFAULT_PERIOD_TIMINGS;
   });
   const [showTimingsModal, setShowTimingsModal] = useState(false);
@@ -287,16 +294,6 @@ export default function TimetableManager() {
       .split(/\s+/)
       .filter(t => t.length > 0)
       .sort();
-  };
-
-  // Helper to normalize faculty strings by stripping titles and non-alphanumerics
-  const cleanFacString = (str) => {
-    if (!str) return "";
-    return String(str)
-      .toLowerCase()
-      .replace(/\b(mr|mrs|ms|dr|prof|head|ta|ap)\b/gi, "")
-      .replace(/[^a-z0-9]/gi, "")
-      .trim();
   };
 
   // Robust comparison that matches:
@@ -538,8 +535,10 @@ export default function TimetableManager() {
   const handleSyncUsers = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/api/users"); // fallback check
-    } catch (e) {}
+      await API.get("/api/users"); // fallback check
+    } catch {
+      // Proceed to sync endpoint directly
+    }
 
     try {
       const res = await API.post("/api/timetable/staff/sync-users");
@@ -1041,7 +1040,7 @@ export default function TimetableManager() {
       }
       showAlert(`Sample curriculum loaded for ${semesterType} Semester (I, II, III, and IV Years)!`);
       await fetchSubjectsAndAllocations();
-    } catch (err) {
+    } catch {
       showAlert("Error loading sample subjects", "error");
     } finally {
       setLoading(false);
@@ -2046,7 +2045,7 @@ export default function TimetableManager() {
 
       showAlert(`Subject ${subjectCode} deleted successfully!`);
       await fetchSubjectsAndAllocations();
-    } catch (err) {
+    } catch {
       showAlert("Failed to delete subject", "error");
     } finally {
       setLoading(false);
@@ -2323,7 +2322,9 @@ export default function TimetableManager() {
                       setAcademicYear(e.target.value);
                       try {
                         localStorage.setItem("timetable_selected_academic_year", e.target.value);
-                      } catch (err) {}
+                      } catch {
+                        // Ignore storage errors
+                      }
                     }
                   }}
                   style={{ padding: "0.5rem 0.8rem", fontSize: "0.85rem" }}
@@ -5930,7 +5931,9 @@ export default function TimetableManager() {
                     setPrintAcademicYear(e.target.value);
                     try {
                       localStorage.setItem("timetable_print_academic_year", e.target.value);
-                    } catch (err) {}
+                    } catch {
+                      // Ignore storage errors
+                    }
                   }}
                   placeholder="e.g. 2026-2027"
                   style={{ width: "115px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
@@ -6344,7 +6347,9 @@ export default function TimetableManager() {
                     setPrintAcademicYear(e.target.value);
                     try {
                       localStorage.setItem("timetable_print_academic_year", e.target.value);
-                    } catch (err) {}
+                    } catch {
+                      // Ignore storage errors
+                    }
                   }}
                   placeholder="e.g. 2026-2027"
                   style={{ width: "115px", padding: "4px 8px", fontSize: "0.8rem", fontWeight: "700" }}
@@ -6404,9 +6409,6 @@ export default function TimetableManager() {
               const totalTheoryH = theoryList.reduce((s, a) => s + (Number(a.hoursPerWeek) || 0), 0);
               const totalLabH = labList.reduce((s, a) => s + (Number(a.hoursPerWeek) || 0), 0);
               const totalH = totalTheoryH + totalLabH;
-
-              const matchedFacKey = facultySchedules && (facultySchedules[facName] ? facName : Object.keys(facultySchedules).find(k => isSameFacultyName(k, facName)));
-              const facScheduleObj = matchedFacKey ? facultySchedules[matchedFacKey] : null;
 
               const rows = [];
               for (let i = 0; i < rowCount; i++) {

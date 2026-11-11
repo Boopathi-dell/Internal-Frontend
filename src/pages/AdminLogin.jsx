@@ -1,6 +1,7 @@
 import { useState } from "react";
 import API from "../api";
 import { Eye, EyeOff, ShieldAlert, KeyRound } from "lucide-react";
+import { safeSetSession } from "../utils/safeStorage";
 
 export default function AdminLogin({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -65,9 +66,10 @@ export default function AdminLogin({ onLogin }) {
   };
 
   const loginSuccess = (data) => {
-    sessionStorage.setItem("token", data.token);
-    sessionStorage.setItem("role", data.role);
-    onLogin(data.role);
+    const role = data?.role === "printAdmin" ? "printAdmin" : "admin";
+    safeSetSession("token", data?.token || "");
+    safeSetSession("role", role);
+    onLogin(role);
   };
 
   return (

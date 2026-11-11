@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import API from '../api';
 import { Save, X } from 'lucide-react';
-
-const API = axios.create({ baseURL: "http://localhost:5000" });
 
 export default function ManualSeatEditor({ plan, onSave, onCancel }) {
   const [editedPlan, setEditedPlan] = useState(JSON.parse(JSON.stringify(plan)));

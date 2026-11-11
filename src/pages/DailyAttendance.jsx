@@ -13,7 +13,7 @@ export default function DailyAttendance() {
   });
   
   const [attendanceData, setAttendanceData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "success" });
   
@@ -47,7 +47,6 @@ export default function DailyAttendance() {
 
   useEffect(() => {
     fetchAttendance();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.programme, filters.department, filters.year, filters.semester, filters.section, filters.date]);
 
   const fetchAttendance = async () => {

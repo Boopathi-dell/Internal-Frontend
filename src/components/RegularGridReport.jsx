@@ -79,7 +79,7 @@ export default function RegularGridReport() {
   // Format YYYY-MM-DD to D/M
   const formatShortDate = (dateStr) => {
     if (!dateStr) return "";
-    const [y, m, d] = dateStr.split("-");
+    const [, m, d] = dateStr.split("-");
     return `${parseInt(d)}/${parseInt(m)}`;
   };
   

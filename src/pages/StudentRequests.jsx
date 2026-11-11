@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import API from "../api";
 import { MessageSquareWarning, Clock, CheckCircle2, XCircle, RefreshCw, AlertCircle } from "lucide-react";
+import { safeGetSession, safeFormatDateTime } from "../utils/safeStorage";
 
 export default function StudentRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const studentRegNo = sessionStorage.getItem("userId"); // userId is actually regNo for students
+  const studentRegNo = safeGetSession("userId"); // userId is actually regNo for students
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -96,7 +97,7 @@ export default function StudentRequests() {
                     </div>
                     <div style={{ background: "#f8fafc", padding: "0.4rem 0.8rem", borderRadius: "8px", fontSize: "0.85rem", border: "1px solid #e2e8f0" }}>
                       <span style={{ fontWeight: "800", textTransform: "uppercase", fontSize: "0.7rem", color: "#94a3b8", marginRight: "0.4rem" }}>Submitted</span> 
-                      <strong style={{ color: "#334155" }}>{new Date(req.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</strong>
+                      <strong style={{ color: "#334155" }}>{safeFormatDateTime(req.createdAt)}</strong>
                     </div>
                   </div>
                 </div>
@@ -129,7 +130,7 @@ export default function StudentRequests() {
                     </div>
                     {req.updatedAt && (
                       <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "600", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                        <Clock size={12} /> {new Date(req.updatedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        <Clock size={12} /> {safeFormatDateTime(req.updatedAt)}
                       </div>
                     )}
                   </div>

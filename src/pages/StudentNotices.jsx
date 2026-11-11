@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import API from "../api";
 import { Bell, Search, RefreshCw, AlertCircle, Calendar, User, CheckCircle2 } from "lucide-react";
+import {
+  safeGetSession,
+  safeSetSession,
+  safeFormatDate,
+  getNotificationPermissionSafe,
+  requestNotificationPermissionSafe
+} from "../utils/safeStorage";
 
 export default function StudentNotices() {
   const [notices, setNotices] = useState([]);
@@ -11,29 +18,28 @@ export default function StudentNotices() {
   const [selectedImage, setSelectedImage] = useState(null);
 
   const [studentInfo, setStudentInfo] = useState({
-    programme: sessionStorage.getItem("studentProgramme") || "",
-    department: sessionStorage.getItem("studentDepartment") || "",
-    year: sessionStorage.getItem("studentYear") || "",
-    section: sessionStorage.getItem("studentSection") || ""
+    programme: safeGetSession("studentProgramme"),
+    department: safeGetSession("studentDepartment"),
+    year: safeGetSession("studentYear"),
+    section: safeGetSession("studentSection")
   });
 
   // Push Notification state
   const [pushPermission, setPushPermission] = useState("default");
   useEffect(() => {
-    if ("Notification" in window) {
-      setPushPermission(Notification.permission);
-    }
+    setPushPermission(getNotificationPermissionSafe());
   }, []);
 
   const enablePush = async () => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (typeof navigator === "undefined" || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
     try {
-      const permission = await Notification.requestPermission();
+      const permission = await requestNotificationPermissionSafe();
       setPushPermission(permission);
       if (permission === 'granted') {
         const registration = await navigator.serviceWorker.ready;
         const vapidRes = await API.get('/api/announcements/vapid-public-key');
-        const publicKey = vapidRes.data.publicKey;
+        const publicKey = vapidRes.data?.publicKey;
+        if (!publicKey) return;
         
         const urlBase64ToUint8Array = (base64String) => {
           const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -49,7 +55,7 @@ export default function StudentNotices() {
           applicationServerKey: urlBase64ToUint8Array(publicKey)
         });
 
-        const token = sessionStorage.getItem("token");
+        const token = safeGetSession("token");
         await API.post('/api/announcements/subscribe', { subscription }, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -69,12 +75,12 @@ export default function StudentNotices() {
       
       // If we don't have student class info in session storage, fetch it
       if (!currentInfo.programme || !currentInfo.department || !currentInfo.year || !currentInfo.section) {
-        const token = sessionStorage.getItem("token");
+        const token = safeGetSession("token");
         const res = await API.get("/api/auth/student/results", {
           headers: { Authorization: `Bearer ${token}` }
         });
         
-        if (res.data && res.data.results && res.data.results.length > 0) {
+        if (res.data && Array.isArray(res.data.results) && res.data.results.length > 0) {
           const firstResult = res.data.results[0];
           const yss = firstResult.yearSemSec || "";
           const parts = yss.split("/");
@@ -87,10 +93,10 @@ export default function StudentNotices() {
           };
           
           // Cache in session storage
-          sessionStorage.setItem("studentProgramme", currentInfo.programme);
-          sessionStorage.setItem("studentDepartment", currentInfo.department);
-          sessionStorage.setItem("studentYear", currentInfo.year);
-          sessionStorage.setItem("studentSection", currentInfo.section);
+          safeSetSession("studentProgramme", currentInfo.programme);
+          safeSetSession("studentDepartment", currentInfo.department);
+          safeSetSession("studentYear", currentInfo.year);
+          safeSetSession("studentSection", currentInfo.section);
           setStudentInfo(currentInfo);
         } else {
           throw new Error("Student class information could not be determined.");
@@ -101,7 +107,7 @@ export default function StudentNotices() {
       const noticesRes = await API.get(
         `/api/announcements/student?programme=${currentInfo.programme}&department=${currentInfo.department}&year=${currentInfo.year}&section=${currentInfo.section}`
       );
-      setNotices(noticesRes.data);
+      setNotices(Array.isArray(noticesRes.data) ? noticesRes.data : []);
     } catch (err) {
       setError(err.response?.data?.error || err.message || "Failed to load notices.");
     } finally {
@@ -457,7 +463,7 @@ export default function StudentNotices() {
                         <User size={12} /> {ann.createdBy}
                       </span>
                       <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                        <Calendar size={12} /> {new Date(ann.createdAt).toLocaleDateString([], { dateStyle: "medium" })}
+                        <Calendar size={12} /> {safeFormatDate(ann.createdAt)}
                       </span>
                     </div>
                   </div>

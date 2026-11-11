@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Settings, FileEdit, BarChart, Trophy, ArrowRight, Calendar, Users, MessageSquareWarning } from "lucide-react";
 import API from "../api";
 import { RESULT_HUB_PAGES } from "../constants/navigationConfig";
+import { safeGetSession, safeParseArray } from "../utils/safeStorage";
 
 export default function Dashboard() {
   const [stats, setStats] = useState([]);
@@ -23,15 +24,11 @@ export default function Dashboard() {
     ...(Array.isArray(classes) ? classes.map(c => c.examName) : [])
   ])).filter(Boolean);
 
-  const role = sessionStorage.getItem("role");
+  const role = safeGetSession("role");
   const isAdmin = role === "admin" || role === "printAdmin";
-  
-  let dashboardTabs = [];
-  let adminTabs = [];
-  try {
-    dashboardTabs = JSON.parse(sessionStorage.getItem("dashboardTabs") || "[]");
-    adminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
-  } catch(e) {}
+
+  const dashboardTabs = safeParseArray(safeGetSession("dashboardTabs", "[]"));
+  const adminTabs = safeParseArray(safeGetSession("adminTabs", "[]"));
 
   const renderCardIcon = (iconKey) => {
     switch (iconKey) {
@@ -217,7 +214,7 @@ export default function Dashboard() {
     <div className="admin-dash-bg fade-in">
       <div className="admin-header-card">
         <div>
-          <h1 className="admin-header-title">Welcome, {isAdmin ? 'Administrator' : sessionStorage.getItem('userName') || 'Faculty'}</h1>
+          <h1 className="admin-header-title">Welcome, {isAdmin ? 'Administrator' : safeGetSession('userName') || 'Faculty'}</h1>
           <p className="admin-header-subtext">{isAdmin ? 'Monitor academic performance and manage institutional data.' : 'Access your assigned modules and manage student data.'}</p>
         </div>
       </div>

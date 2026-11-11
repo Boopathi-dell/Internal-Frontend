@@ -1,5 +1,6 @@
 import { useState } from "react";
 import API from "../api";
+import { safeSetSession } from "../utils/safeStorage";
 
 export default function StudentLogin({ onLogin, onSwitch }) {
   const [regNo, setRegNo] = useState("");
@@ -13,13 +14,16 @@ export default function StudentLogin({ onLogin, onSwitch }) {
     setLoading(true);
     try {
       const res = await API.post("/api/auth/student/login", { regNo, dob });
-      sessionStorage.setItem("token", res.data.token);
-      sessionStorage.setItem("role", "student");
-      sessionStorage.setItem("userName", res.data.name);
-      sessionStorage.setItem("userId", res.data.regNo);
+      if (!res.data?.token) {
+        throw new Error("Invalid login response from server.");
+      }
+      safeSetSession("token", res.data.token);
+      safeSetSession("role", "student");
+      safeSetSession("userName", res.data.name || "");
+      safeSetSession("userId", res.data.regNo || regNo.trim().toUpperCase());
       onLogin("student");
     } catch (err) {
-      setError(err.response?.data?.error || "Incorrect credentials or DOB not registered.");
+      setError(err.response?.data?.error || err.message || "Incorrect credentials or DOB not registered.");
     }
     setLoading(false);
   };

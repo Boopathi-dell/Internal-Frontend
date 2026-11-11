@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
 import API from "../api";
 import { Printer, RefreshCw, Trophy, BookOpen, AlertCircle, CheckCircle2, XCircle, MessageSquareWarning, Bell } from "lucide-react";
+import {
+  safeGetSession,
+  safeSetSession,
+  safeGetLocal,
+  safeSetLocal,
+  safeParseArray,
+  safeFormatDate,
+  getNotificationPermissionSafe,
+  requestNotificationPermissionSafe
+} from "../utils/safeStorage";
 
 export default function StudentDashboard() {
   const [data, setData] = useState(null);
@@ -26,14 +36,12 @@ export default function StudentDashboard() {
   const [pushPermission, setPushPermission] = useState("default");
   const [pushMessage, setPushMessage] = useState('');
   useEffect(() => {
-    if ("Notification" in window) {
-      setPushPermission(Notification.permission);
-    }
+    setPushPermission(getNotificationPermissionSafe());
   }, []);
 
   const enablePush = async () => {
     setPushMessage('');
-    if (!('serviceWorker' in navigator)) {
+    if (typeof navigator === "undefined" || !('serviceWorker' in navigator)) {
       setPushMessage('Service Workers are not supported in this browser.');
       return;
     }
@@ -42,7 +50,7 @@ export default function StudentDashboard() {
       return;
     }
     try {
-      const permission = await Notification.requestPermission();
+      const permission = await requestNotificationPermissionSafe();
       setPushPermission(permission);
       if (permission !== 'granted') {
         setPushMessage('Notification permission denied. Please allow it in your browser settings.');
@@ -53,7 +61,7 @@ export default function StudentDashboard() {
       let registration;
       try {
         registration = await navigator.serviceWorker.register('/sw.js');
-      } catch (regErr) {
+      } catch {
         registration = await navigator.serviceWorker.ready;
       }
 
@@ -84,7 +92,7 @@ export default function StudentDashboard() {
         applicationServerKey: urlBase64ToUint8Array(publicKey)
       });
 
-      const token = sessionStorage.getItem('token');
+      const token = safeGetSession('token');
       await API.post('/api/announcements/subscribe', { subscription }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -99,13 +107,13 @@ export default function StudentDashboard() {
     setLoading(true);
     setError("");
     try {
-      const token = sessionStorage.getItem("token");
+      const token = safeGetSession("token");
       const res = await API.get("/api/auth/student/results", {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       // Sort results by predefined exam order (Unit Tests -> CIAs -> Models -> ESE)
-      if (res.data && res.data.results) {
+      if (res.data && Array.isArray(res.data.results)) {
         const examOrder = [
           "Unit Test - I",
           "Unit Test - II",
@@ -126,14 +134,14 @@ export default function StudentDashboard() {
           if (indexA !== -1 && indexB !== -1) return indexA - indexB;
           if (indexA !== -1) return -1;
           if (indexB !== -1) return 1;
-          return a.examName.localeCompare(b.examName);
+          return String(a.examName || "").localeCompare(String(b.examName || ""));
         });
       }
       
       setData(res.data);
 
       // Fetch Advisor Name and cache class details for notices
-      if (res.data && res.data.results && res.data.results.length > 0) {
+      if (res.data && Array.isArray(res.data.results) && res.data.results.length > 0) {
         const firstResult = res.data.results[0];
         const programme = firstResult.programme || "B.E";
         const department = firstResult.department || "CSE";
@@ -143,14 +151,14 @@ export default function StudentDashboard() {
         const section = parts[2] || "A";
 
         // Cache class details for the notices page
-        sessionStorage.setItem("studentProgramme", programme);
-        sessionStorage.setItem("studentDepartment", department);
-        sessionStorage.setItem("studentYear", year);
-        sessionStorage.setItem("studentSection", section);
+        safeSetSession("studentProgramme", programme);
+        safeSetSession("studentDepartment", department);
+        safeSetSession("studentYear", year);
+        safeSetSession("studentSection", section);
 
         try {
           const advRes = await API.get(`/api/advisors/lookup?programme=${programme}&department=${department}&year=${year}&section=${section}`);
-          setAdvisorName(advRes.data.advisorName);
+          setAdvisorName(advRes.data?.advisorName || "");
         } catch (err) {
           console.log("No advisor mapping found for student class group:", err.message);
           setAdvisorName("");
@@ -161,8 +169,9 @@ export default function StudentDashboard() {
           const noticesRes = await API.get(
             `/api/announcements/student?programme=${programme}&department=${department}&year=${year}&section=${section}`
           );
-          const readIds = JSON.parse(localStorage.getItem("readNotices") || "[]");
-          const unread = noticesRes.data.filter(n => !readIds.includes(n._id));
+          const readIds = safeParseArray(safeGetLocal("readNotices", "[]"));
+          const list = Array.isArray(noticesRes.data) ? noticesRes.data : [];
+          const unread = list.filter(n => n && !readIds.includes(n._id));
           setUnreadNotices(unread);
         } catch (err) {
           console.error("Failed to load announcements for popup:", err);
@@ -725,13 +734,13 @@ export default function StudentDashboard() {
                   <div className="stats-badge">
                     <div style={{ fontSize: "0.65rem", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>{examResult.examName === "ESE" ? "SGPA" : "Total Marks"}</div>
                     <div style={{ fontSize: "1.15rem", fontWeight: "800", color: "#0f172a" }}>
-                      {examResult.total} {examResult.examName !== "ESE" && <span style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: "600" }}>/ {examResult.marks.length * examResult.markPerSubject}</span>}
+                      {examResult.total ?? 0} {examResult.examName !== "ESE" && <span style={{ fontSize: "0.8rem", color: "#94a3b8", fontWeight: "600" }}>/ {(examResult.marks || []).length * (Number(examResult.markPerSubject) || 0)}</span>}
                     </div>
                   </div>
                   <div className="stats-badge">
                     <div style={{ fontSize: "0.65rem", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>Percentage</div>
                     <div style={{ fontSize: "1.15rem", fontWeight: "800", color: isPass ? "#059669" : "#dc2626" }}>
-                      {examResult.percentage.toFixed(2)}%
+                      {(Number.isFinite(Number(examResult.percentage)) ? Number(examResult.percentage) : 0).toFixed(2)}%
                     </div>
                   </div>
                   <div style={{ 
@@ -765,7 +774,7 @@ export default function StudentDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {examResult.marks.map((subj, sIdx) => {
+                    {(examResult.marks || []).map((subj, sIdx) => {
                       const isAbsent = String(subj.mark).toUpperCase() === "AB" || String(subj.mark).toUpperCase() === "A";
                       const markNum = Number(subj.mark);
                       const isSubjPass = !isAbsent && !isNaN(markNum) && markNum >= subj.passMark;
@@ -1026,15 +1035,15 @@ export default function StudentDashboard() {
               {/* Footer / Buttons */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
                 <span style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: "600" }}>
-                  Published: {new Date(activeNotice.createdAt).toLocaleDateString([], { dateStyle: "medium" })}
+                  Published: {safeFormatDate(activeNotice.createdAt)}
                 </span>
                 
                 <button
                   onClick={() => {
-                    const readIds = JSON.parse(localStorage.getItem("readNotices") || "[]");
+                    const readIds = safeParseArray(safeGetLocal("readNotices", "[]"));
                     if (!readIds.includes(activeNotice._id)) {
                       readIds.push(activeNotice._id);
-                      localStorage.setItem("readNotices", JSON.stringify(readIds));
+                      safeSetLocal("readNotices", JSON.stringify(readIds));
                     }
                     setUnreadNotices(prev => prev.filter(n => n._id !== activeNotice._id));
                   }}

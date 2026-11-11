@@ -10,14 +10,12 @@ import SubjectClearModal from "../components/SubjectClearModal";
 import { getSubjectLabel } from "../utils/subjectClearUtils";
 import { ADMIN_PANEL_TABS, RESULT_HUB_PAGES } from "../constants/navigationConfig";
 import { mergeCachedExamNames } from "../utils/examCatalog";
+import { safeGetSession, safeParseArray } from "../utils/safeStorage";
 
 export default function AdminPanel() {
-  const role = sessionStorage.getItem("role");
+  const role = safeGetSession("role");
   const isStrictAdmin = (role || "").toLowerCase() === "admin";
-  let myAdminTabs = [];
-  try {
-    myAdminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
-  } catch(e) {}
+  const myAdminTabs = safeParseArray(safeGetSession("adminTabs", "[]"));
   
   const hasAccessTo = (tab) => {
     if (role === "admin" || role === "printAdmin") return true;
@@ -42,7 +40,7 @@ export default function AdminPanel() {
   const [rosters, setRosters] = useState([]);
   const [selectedRostersForDelete, setSelectedRostersForDelete] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
-  const [showAllClassesDropdown, setShowAllClassesDropdown] = useState(false);
+  const [, setShowAllClassesDropdown] = useState(false);
   
   const [promoteSourceCohort, setPromoteSourceCohort] = useState("");
   const [promoteTargetYear, setPromoteTargetYear] = useState("II");
@@ -973,7 +971,7 @@ export default function AdminPanel() {
         if (exists) return prev.map(a => a.year === year ? res.data : a);
         return [...prev, res.data];
       });
-    } catch (err) {
+    } catch {
       alert("Failed to update approval");
     }
   };
@@ -2348,7 +2346,7 @@ export default function AdminPanel() {
       setTargetPassPercentage("85");
       setStudents([]);
       loadClasses();
-    } catch (err) {
+    } catch {
       alert("Failed to delete");
     }
   };
@@ -2363,7 +2361,7 @@ export default function AdminPanel() {
       });
       loadUsers();
       if (editingTabsUserId === userId) setEditingTabsUserId(null);
-    } catch (err) { alert("Failed to update user"); }
+    } catch { alert("Failed to update user"); }
   };
 
   const handleDeleteUser = async (userId) => {
@@ -2373,7 +2371,7 @@ export default function AdminPanel() {
         headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
       });
       loadUsers();
-    } catch (err) { alert("Failed to delete user"); }
+    } catch { alert("Failed to delete user"); }
   };
 
   const handleTogglePrintAccess = async () => {
@@ -2384,7 +2382,7 @@ export default function AdminPanel() {
       });
       setPrintEditAccess(newVal);
       alert("Print user edit access updated.");
-    } catch (err) { alert("Failed to update print user access"); }
+    } catch { alert("Failed to update print user access"); }
   };
 
   const loadSecuritySettings = async () => {
@@ -2415,7 +2413,7 @@ export default function AdminPanel() {
         headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
       });
       setSecurityMessage("Security settings updated successfully!");
-    } catch (err) {
+    } catch {
       setSecurityMessage("Failed to update security settings.");
     }
     setSecurityLoading(false);
@@ -2623,13 +2621,6 @@ export default function AdminPanel() {
     }
   };
 
-  const tabStyle = (tab) => ({
-    padding: "10px 20px", cursor: "pointer", border: "none", fontSize: "14px", fontWeight: "600",
-    borderRadius: "8px 8px 0 0", marginRight: "4px",
-    background: activeTab === tab ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.05)",
-    color: activeTab === tab ? "#818cf8" : "#9ca3af",
-    borderBottom: activeTab === tab ? "2px solid #818cf8" : "2px solid transparent"
-  });
   const tabsRef = useRef(null);
   const isDown = useRef(false);
   const startX = useRef(0);

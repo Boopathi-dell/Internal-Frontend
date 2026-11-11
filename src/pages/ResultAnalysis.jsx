@@ -456,7 +456,6 @@ export default function ResultAnalysis() {
 
   // Overall pass/fail
   const passStudents = students.filter(s => getStudentStatus(s) === "Pass");
-  const failStudents = students.filter(s => getStudentStatus(s) === "Fail");
   const overallPassPercent = totalStudents > 0 ? Math.round((passStudents.length / totalStudents) * 100) : 0;
 
   // Day Scholar / Hosteller breakdown

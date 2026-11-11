@@ -1,6 +1,7 @@
 import { useState } from "react";
 import API from "../api";
 import { Eye, EyeOff } from "lucide-react";
+import { safeSetSession } from "../utils/safeStorage";
 
 export default function UserLogin({ onLogin, onSwitch }) {
   const [email, setEmail] = useState("");
@@ -15,15 +16,18 @@ export default function UserLogin({ onLogin, onSwitch }) {
     setLoading(true);
     try {
       const res = await API.post("/api/auth/user/login", { email, password });
-      sessionStorage.setItem("token", res.data.token);
-      sessionStorage.setItem("role", "user");
-      sessionStorage.setItem("userName", res.data.name);
-      sessionStorage.setItem("userId", res.data.userId);
-      sessionStorage.setItem("adminTabs", JSON.stringify(res.data.adminTabs || []));
-      sessionStorage.setItem("dashboardTabs", JSON.stringify(res.data.dashboardTabs || []));
+      if (!res.data?.token) {
+        throw new Error("Invalid login response from server.");
+      }
+      safeSetSession("token", res.data.token);
+      safeSetSession("role", "user");
+      safeSetSession("userName", res.data.name || "");
+      safeSetSession("userId", res.data.userId || "");
+      safeSetSession("adminTabs", JSON.stringify(Array.isArray(res.data.adminTabs) ? res.data.adminTabs : []));
+      safeSetSession("dashboardTabs", JSON.stringify(Array.isArray(res.data.dashboardTabs) ? res.data.dashboardTabs : []));
       onLogin("user");
     } catch (err) {
-      setError(err.response?.data?.error || "Faculty credentials rejected");
+      setError(err.response?.data?.error || err.message || "Faculty credentials rejected");
     }
     setLoading(false);
   };

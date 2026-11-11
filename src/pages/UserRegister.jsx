@@ -25,7 +25,7 @@ export default function UserRegister({ onSwitch }) {
 
     setLoading(true);
     try {
-      const res = await API.post("/api/auth/user/register", {
+      await API.post("/api/auth/user/register", {
         name: form.name, email: form.email, department: form.department,
         designation: form.designation, password: form.password
       });

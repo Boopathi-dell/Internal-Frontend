@@ -103,7 +103,7 @@ export default function ParentLetter() {
     try {
       const res = await API.get("/api/letter-template");
       if (res.data) setTemplate({ ...DEFAULT_TEMPLATE, ...res.data });
-    } catch (e) { /* use defaults */ }
+    } catch { /* use defaults */ }
   };
 
   async function loadClasses() {
@@ -147,8 +147,6 @@ export default function ParentLetter() {
   const canGenerate = requiredExams.length > 0 && requiredExams.every(exam => 
     matchingClasses.some(c => c.examName === exam)
   );
-
-  const missingExams = requiredExams.filter(exam => !matchingClasses.some(c => c.examName === exam));
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
@@ -515,9 +513,6 @@ export default function ParentLetter() {
                   </thead>
                   <tbody>
                     {courses.map((course, j) => {
-                      // Pre-calculate failure status for the row to highlight
-                      let rowHasFail = false;
-                      
                       const rowCells = (template.columns || []).map((col, i) => {
                         let cellContent = "";
                         let isCellFail = false;
@@ -534,7 +529,6 @@ export default function ParentLetter() {
                           const { grade, pass } = getLetterGrade(mark, maxMark, passMark);
                           
                           isCellFail = !pass || grade === "Ab" || grade === "U*";
-                          if (isCellFail) rowHasFail = true;
 
                           if (col.type === "mark") cellContent = mark;
                           else if (col.type === "grade") cellContent = grade;

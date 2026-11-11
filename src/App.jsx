@@ -24,6 +24,13 @@ import { LayoutDashboard, Settings, FileEdit, BarChart, Trophy, LogOut, MessageS
 import './App.css';
 import ErrorBoundary from "./ErrorBoundary";
 import { RESULT_HUB_PAGES } from "./constants/navigationConfig";
+import {
+  safeGetSession,
+  safeRemoveSession,
+  safeParseArray,
+  requestNotificationPermissionSafe,
+  getNotificationPermissionSafe
+} from "./utils/safeStorage";
 
 const blinkAnimation = `
 @keyframes pulseBlink {
@@ -66,15 +73,15 @@ function App() {
     // If authState is loading, we just check session storage and set initial state
     if (authState === "loading") {
       try {
-        const token = sessionStorage.getItem("token");
-        const role = sessionStorage.getItem("role");
+        const token = safeGetSession("token");
+        const role = safeGetSession("role");
         const validRoles = ["admin", "printAdmin", "user", "student"];
         if (token && role && validRoles.includes(role)) {
           setAuthState(role);
         } else {
           setAuthState("studentLogin"); // Default to student portal
         }
-      } catch (e) {
+      } catch {
         // sessionStorage not available (e.g. Safari private mode)
         setAuthState("studentLogin");
       }
@@ -88,7 +95,7 @@ function App() {
       const verifySession = async () => {
         try {
           await API.get('/api/auth/admin/verify-session', {
-            headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
+            headers: { Authorization: `Bearer ${safeGetSession("token")}` }
           });
         } catch (err) {
           if (err.response && err.response.status === 401) {
@@ -113,15 +120,11 @@ function App() {
       window.addEventListener('scroll', resetInactivityTimer);
       resetInactivityTimer();
 
-      try {
-        if (authState === "admin" && "Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-          const promise = Notification.requestPermission();
-          if (promise) {
-            promise.catch(err => console.error("Notification permission error:", err));
-          }
+      if (authState === "admin") {
+        const perm = getNotificationPermissionSafe();
+        if (perm !== "granted" && perm !== "denied") {
+          requestNotificationPermissionSafe().catch(() => {});
         }
-      } catch (err) {
-        console.error("Notification request failed", err);
       }
 
       const pendingInterval = authState === "admin" ? setInterval(fetchPendingCount, 15000) : null;
@@ -149,12 +152,19 @@ function App() {
     const loggedInStates = ["admin", "printAdmin", "user", "student"];
     if (!loggedInStates.includes(authState)) return;
 
-    // Push sentinel state so there is always a state to pop
-    window.history.pushState({ appSentinel: true }, "");
+    const pushSentinel = () => {
+      try {
+        window.history.pushState({ ...(window.history.state || {}), appSentinel: true }, "");
+      } catch {
+        // Ignore history API restrictions in embedded WebViews
+      }
+    };
 
-    const handlePopState = (e) => {
+    pushSentinel();
+
+    const handlePopState = () => {
       // Push forward immediately to prevent any navigation
-      window.history.pushState({ appSentinel: true }, "");
+      pushSentinel();
 
       // Show confirmation — using setTimeout so the pushState settles first
       setTimeout(() => {
@@ -182,7 +192,7 @@ function App() {
   };
 
   const subscribeStudentToPushNotifications = async () => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    if (typeof navigator === "undefined" || !('serviceWorker' in navigator) || !('PushManager' in window)) {
       return;
     }
 
@@ -190,13 +200,14 @@ function App() {
       // Register service worker
       const registration = await navigator.serviceWorker.register('/sw.js');
 
-      // Request permission
-      const permission = await Notification.requestPermission();
+      // Request permission safely (mobile Safari / WebViews can throw or omit Promise)
+      const permission = await requestNotificationPermissionSafe();
       if (permission !== 'granted') return;
 
       // Get VAPID key from backend
       const vapidRes = await API.get('/api/announcements/vapid-public-key');
-      const publicKey = vapidRes.data.publicKey;
+      const publicKey = vapidRes.data?.publicKey;
+      if (!publicKey) return;
 
       // Subscribe
       const subscription = await registration.pushManager.subscribe({
@@ -205,7 +216,7 @@ function App() {
       });
 
       // Send to backend
-      const token = sessionStorage.getItem("token");
+      const token = safeGetSession("token");
       if (token) {
         await API.post('/api/announcements/subscribe', { subscription }, {
           headers: { Authorization: `Bearer ${token}` }
@@ -219,30 +230,35 @@ function App() {
   const fetchPendingCount = async () => {
     try {
       const res = await API.get("/api/corrections/pending-count");
+      const nextCount = Number(res.data?.count) || 0;
       setPendingRequestsCount(prev => {
-        // Trigger push notification if count increased
-        if (prev !== null && res.data.count > prev) {
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("New Correction Request", {
-              body: "A student just submitted a new mark correction request.",
-              icon: "/favicon.ico"
-            });
+        // Trigger browser notification safely (Android Chrome requires ServiceWorker.showNotification and throws on new Notification)
+        if (prev !== null && nextCount > prev && getNotificationPermissionSafe() === "granted") {
+          try {
+            if (typeof window.Notification === "function") {
+              new window.Notification("New Correction Request", {
+                body: "A student just submitted a new mark correction request.",
+                icon: "/favicon.ico"
+              });
+            }
+          } catch {
+            // Ignore Illegal constructor on mobile Android Chrome
           }
         }
-        return res.data.count;
+        return nextCount;
       });
-    } catch (err) {
+    } catch {
       console.error("Failed to fetch pending requests count");
     }
   };
 
   const fetchStudentUnreadCount = async () => {
     try {
-      const regNo = sessionStorage.getItem("userId"); // The regNo is stored in userId
+      const regNo = safeGetSession("userId"); // The regNo is stored in userId
       if (!regNo) return;
       const res = await API.get(`/api/corrections/student/${regNo}/unread-count`);
-      setPendingRequestsCount(res.data.count); // Reuse this state variable to show badge
-    } catch (err) {
+      setPendingRequestsCount(Number(res.data?.count) || 0); // Reuse this state variable to show badge
+    } catch {
       console.error("Failed to fetch student unread count");
     }
   };
@@ -266,10 +282,12 @@ function App() {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("role");
-    sessionStorage.removeItem("userName");
-    sessionStorage.removeItem("userId");
+    safeRemoveSession("token");
+    safeRemoveSession("role");
+    safeRemoveSession("userName");
+    safeRemoveSession("userId");
+    safeRemoveSession("adminTabs");
+    safeRemoveSession("dashboardTabs");
     setAuthState("userLogin");
     navigate("/");
   };
@@ -367,16 +385,14 @@ function App() {
   // Extra pages the admin can allocate (derived automatically from RESULT_HUB_PAGES)
   const ALLOCATABLE_DASHBOARD_PAGES = RESULT_HUB_PAGES.map(toNavItem);
 
-  try {
-    const dashboardTabs = JSON.parse(sessionStorage.getItem("dashboardTabs") || "[]");
-    ALLOCATABLE_DASHBOARD_PAGES.forEach(page => {
-      if (dashboardTabs.includes(page.id)) userNavItems.push(page);
-    });
-    const adminTabs = JSON.parse(sessionStorage.getItem("adminTabs") || "[]");
-    if (adminTabs.length > 0) {
-      userNavItems.push({ name: "Admin Setup", path: "/admin", icon: <Settings size={20} /> });
-    }
-  } catch (e) { }
+  const dashboardTabs = safeParseArray(safeGetSession("dashboardTabs", "[]"));
+  ALLOCATABLE_DASHBOARD_PAGES.forEach(page => {
+    if (dashboardTabs.includes(page.id)) userNavItems.push(page);
+  });
+  const adminTabs = safeParseArray(safeGetSession("adminTabs", "[]"));
+  if (adminTabs.length > 0) {
+    userNavItems.push({ name: "Admin Setup", path: "/admin", icon: <Settings size={20} /> });
+  }
 
   const studentNavItems = [
     { name: "My Results", path: "/", icon: <Trophy size={20} /> },
@@ -427,7 +443,7 @@ function App() {
             backdropFilter: "blur(4px)"
           }}>
             <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>Logged in as</div>
-            <div style={{ color: "var(--primary)", fontWeight: "700", fontSize: "0.95rem" }}>{isAdmin ? "Administrator" : (isPrintAdmin ? "Print Admin" : (isStudent ? (sessionStorage.getItem("userName") || "Student") : (sessionStorage.getItem("userName") || "Faculty")))}</div>
+            <div style={{ color: "var(--primary)", fontWeight: "700", fontSize: "0.95rem" }}>{isAdmin ? "Administrator" : (isPrintAdmin ? "Print Admin" : (isStudent ? (safeGetSession("userName") || "Student") : (safeGetSession("userName") || "Faculty")))}</div>
           </div>
         </div>
 
@@ -497,6 +513,7 @@ function App() {
               {(!isAdmin && !isPrintAdmin && !isStudent) && <Route path="/requests" element={<CorrectionRequests />} />}
               {isStudent && <Route path="/student-requests" element={<StudentRequests />} />}
               {isStudent && <Route path="/notices" element={<StudentNotices />} />}
+              <Route path="*" element={isPrintAdmin ? <MarkEntry /> : (isStudent ? <StudentDashboard /> : <Dashboard />)} />
             </Routes>
           </ErrorBoundary>
         </div>

@@ -213,7 +213,9 @@ export default function AttendanceEntry() {
       if (userId) {
         try {
           await API.post("/api/auth/activity", { userId, userName, action: "submit", details: `Submitted attendance for ${classData.className}` });
-        } catch (e) { }
+        } catch {
+          // Non-blocking activity log
+        }
       }
       
       setToast({ show: true, message: "Attendance saved successfully! 🎉", type: "success" });

@@ -53,8 +53,10 @@ class ErrorBoundary extends React.Component {
             <details style={{ whiteSpace: 'pre-wrap', marginTop: '20px', textAlign: 'left', color: '#666', background: '#fff', padding: '15px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '0.85rem' }}>
               <summary style={{ cursor: 'pointer', fontWeight: 'bold', color: '#ef4444' }}>Error Details</summary>
               <pre style={{ marginTop: '10px', overflowX: 'auto' }}>
-                {this.state.error.toString()}
-                {this.state.error.stack && `\n\n${this.state.error.stack}`}
+                {typeof this.state.error === "string"
+                  ? this.state.error
+                  : (this.state.error.message || this.state.error.toString?.() || "Unexpected error")}
+                {this.state.error?.stack && `\n\n${this.state.error.stack}`}
               </pre>
             </details>
           )}
