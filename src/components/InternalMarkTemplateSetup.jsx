@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import API from "../api";
 import { Plus, Trash, Save, Settings, FileText, Calculator, X, Sigma } from "lucide-react";
 import { Check } from "lucide-react";
+import { getCachedExamNames, mergeCachedExamNames } from "../utils/examCatalog";
 
 export default function InternalMarkTemplateSetup() {
   const [templates, setTemplates] = useState([]);
@@ -70,7 +71,7 @@ export default function InternalMarkTemplateSetup() {
 
   const fetchTemplates = async () => {
     try {
-      const res = await API.get("/api/internal-marks");
+      const res = await API.get("/api/internal-marks", { params: { _ts: Date.now() } });
       setTemplates(res.data);
       setLoading(false);
     } catch (err) {
@@ -80,25 +81,23 @@ export default function InternalMarkTemplateSetup() {
   };
 
   const fetchAvailableExams = async () => {
+    const defaults = [
+      "Unit Test - I", "Unit Test - II", "CIA - I",
+      "Unit Test - III", "Unit Test - IV", "CIA - II",
+      "Unit Test - V", "Model Exam", "CIA - III",
+      "Model Practical Exam",
+      "LAB OBSERVATION MARKS", "OBSERVATION", "RECORD", "VIVA VOCE 1", "VIVA VOCE 2",
+      "UNIT I", "UNIT II", "UNIT III", "UNIT IV", "UNIT V", "CIA I", "CIA II", "CIA III",
+      "Seminar", "SEMINAR", "MKC"
+    ];
     try {
-      const res = await API.get("/api/classes");
-      const uniqueExams = [...new Set(res.data.map(c => c.examName).filter(Boolean))];
-      const defaults = [
-        "Unit Test - I", "Unit Test - II", "CIA - I", 
-        "Unit Test - III", "Unit Test - IV", "CIA - II", 
-        "Unit Test - V", "Model Exam", "CIA - III", 
-        "UNIT I", "UNIT II", "UNIT III", "UNIT IV", "UNIT V", "CIA I", "CIA II", "CIA III",
-        "Seminar", "SEMINAR", "MKC"
-      ];
+      const res = await API.get("/api/classes", { params: { summary: "true", _ts: Date.now() } });
+      const uniqueExams = [...new Set((res.data || []).map(c => c.examName).filter(Boolean))];
+      mergeCachedExamNames(uniqueExams, { replaceWithServer: true });
       setAvailableExams([...new Set([...uniqueExams, ...defaults])]);
     } catch (err) {
       console.error(err);
-      setAvailableExams([
-        "Unit Test - I", "Unit Test - II", "CIA - I", 
-        "Unit Test - III", "Unit Test - IV", "CIA - II", 
-        "Unit Test - V", "Model Exam", "CIA - III",
-        "Seminar", "MKC"
-      ]);
+      setAvailableExams([...new Set([...getCachedExamNames(), ...defaults])]);
     }
   };
 
@@ -683,17 +682,27 @@ export default function InternalMarkTemplateSetup() {
                 {col.type === "exam" && (
                   <div style={{ background: "var(--bg-main)", padding: "1rem", borderRadius: "8px", borderLeft: "4px solid var(--primary)" }}>
                     <label style={{ fontSize: "0.85rem", fontWeight: "bold", display: "block", marginBottom: "0.5rem" }}>Which Exam's marks should be shown here?</label>
-                    <select 
-                      className="input-field" 
-                      value={col.examName} 
-                      onChange={(e) => handleColumnChange(index, 'examName', e.target.value)}
-                      style={{ maxWidth: "300px" }}
-                    >
-                      <option value="">-- Select Exam --</option>
-                      {availableExams.map(ex => <option key={ex} value={ex}>{ex}</option>)}
-                      <option value="SEMINAR">SEMINAR</option>
-                      <option value="MKC">MKC</option>
-                    </select>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                      <select
+                        className="input-field"
+                        value={col.examName || ""}
+                        onChange={(e) => handleColumnChange(index, 'examName', e.target.value)}
+                        style={{ maxWidth: "300px" }}
+                      >
+                        <option value="">-- Select Exam --</option>
+                        {Array.from(new Set([...availableExams, col.examName, "SEMINAR", "MKC"].filter(Boolean))).map(ex => (
+                          <option key={ex} value={ex}>{ex}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder="Or type exact custom Exam Name..."
+                        value={col.examName || ""}
+                        onChange={(e) => handleColumnChange(index, 'examName', e.target.value)}
+                        style={{ maxWidth: "280px" }}
+                      />
+                    </div>
                   </div>
                 )}
 

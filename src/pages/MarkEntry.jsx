@@ -4,6 +4,11 @@ import * as XLSX from "xlsx";
 import headerLogo from "../assets/logo image.jpg";
 import SubjectClearModal from "../components/SubjectClearModal";
 import { getSubjectLabel } from "../utils/subjectClearUtils";
+import {
+  getCachedExamNames,
+  mergeCachedExamNames,
+  buildDynamicExamOptions
+} from "../utils/examCatalog";
 
 
 
@@ -83,6 +88,8 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
 
 export default function MarkEntry() {
   const [classes, setClasses] = useState([]);
+  const [loadingClasses, setLoadingClasses] = useState(true);
+  const [cachedExamNames, setCachedExamNames] = useState(() => getCachedExamNames());
   const [selectedClassId, setSelectedClassId] = useState("");
   const [classData, setClassData] = useState(null);
   const [showAll, setShowAll] = useState(false);
@@ -94,13 +101,10 @@ export default function MarkEntry() {
     "Model Practical Exam",
     "Unit Test - I", "Unit Test - II", "Unit Test - III", "Unit Test - IV", "Unit Test - V",
     "CIA - I", "CIA - II", "CIA - III",
-    "MKC", "ESE"
+    "SEMINAR", "MKC", "ESE"
   ];
   
-  const dynamicExamNameOptions = Array.from(new Set([
-    ...examNameOptions,
-    ...(Array.isArray(classes) ? classes.map(c => c.examName) : [])
-  ])).filter(Boolean);
+  const dynamicExamNameOptions = buildDynamicExamOptions(examNameOptions, classes, cachedExamNames);
   const [filteredClasses, setFilteredClasses] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState({ show: false, message: "", type: "loading" });
@@ -129,6 +133,11 @@ export default function MarkEntry() {
 
   const inputRefs = useRef({});
   const loadRequestIdRef = useRef(0);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const classDataRef = useRef(classData);
+  classDataRef.current = classData;
+  const lastClassesFetchRef = useRef(0);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
@@ -267,6 +276,13 @@ export default function MarkEntry() {
 
   useEffect(() => {
     loadClasses();
+    const handleFocusRefresh = () => {
+      if (document.visibilityState === "hidden") return;
+      loadClasses({ silent: true });
+    };
+    window.addEventListener("focus", handleFocusRefresh);
+    document.addEventListener("visibilitychange", handleFocusRefresh);
+
     if (sessionStorage.getItem("role") === "printAdmin") {
       API.get("/api/auth/admin/print-access", {
         headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` }
@@ -274,15 +290,45 @@ export default function MarkEntry() {
       .then(res => setPrintEditAccess(res.data.printEditAccess))
       .catch(err => console.error(err));
     }
+
+    return () => {
+      window.removeEventListener("focus", handleFocusRefresh);
+      document.removeEventListener("visibilitychange", handleFocusRefresh);
+    };
   }, []);
 
-  async function loadClasses() {
+  async function loadClasses({ silent = false, force = false } = {}) {
+    const now = Date.now();
+    if (!force && silent && now - lastClassesFetchRef.current < 1500) {
+      return;
+    }
+    lastClassesFetchRef.current = now;
+    if (!silent) setLoadingClasses(true);
     try {
-      const res = await API.get("/api/classes");
-      setClasses(res.data);
-      applyFilters(res.data, filters);
+      const res = await API.get("/api/classes", {
+        params: { summary: "true", _ts: now }
+      });
+      const list = Array.isArray(res.data) ? res.data : [];
+      setClasses(list);
+      const updatedCache = mergeCachedExamNames(
+        list.map(c => c.examName),
+        { replaceWithServer: true }
+      );
+      setCachedExamNames(updatedCache);
+
+      if (!silent || !classDataRef.current) {
+        applyFilters(list, filtersRef.current);
+      } else {
+        const curF = filtersRef.current;
+        const targetYSS = `${curF.year}/${curF.semester}/${curF.section}`;
+        setFilteredClasses(
+          list.filter(c => c.yearSemSec === targetYSS && (!curF.exam || c.examName === curF.exam))
+        );
+      }
     } catch (err) {
       console.error(err);
+    } finally {
+      if (!silent) setLoadingClasses(false);
     }
   }
 
@@ -392,7 +438,9 @@ export default function MarkEntry() {
     setUnsavedChanges(false);
     setFocusedSubjectIndices([]);
     try {
-      const res = await API.get(`/api/classes/${encodeURIComponent(name)}`);
+      const res = await API.get(`/api/classes/${encodeURIComponent(name)}`, {
+        params: { _ts: Date.now() }
+      });
       if (reqId !== loadRequestIdRef.current) return;
       setClearSubjectIdx(0);
       setUnsavedChanges(false);
@@ -1157,7 +1205,9 @@ export default function MarkEntry() {
           <label className="input-label">Evaluation Module</label>
           <select 
             value={filters.exam} 
-            onChange={e => handleFilterChange('exam', e.target.value)} 
+            onChange={e => handleFilterChange('exam', e.target.value)}
+            onMouseDown={() => loadClasses({ silent: true })}
+            onFocus={() => loadClasses({ silent: true })}
             className="select-input"
           >
             {dynamicExamNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
@@ -1192,7 +1242,21 @@ export default function MarkEntry() {
         </div>
       )}
 
-      {filteredClasses.length === 0 && (
+      {loadingClasses && filteredClasses.length === 0 && (
+        <div style={{ 
+          padding: "18px 20px", 
+          background: "rgba(99, 102, 241, 0.08)", 
+          color: "var(--primary)", 
+          borderRadius: "12px", 
+          border: "1px solid rgba(99, 102, 241, 0.25)", 
+          marginTop: "15px",
+          fontWeight: "600"
+        }}>
+          ⏳ Loading classes and evaluation modules...
+        </div>
+      )}
+
+      {!loadingClasses && filteredClasses.length === 0 && (
         <div style={{ 
           padding: "20px", 
           background: "rgba(239, 68, 68, 0.08)", 

@@ -9,6 +9,7 @@ import TimetableManager from "../components/TimetableManager";
 import SubjectClearModal from "../components/SubjectClearModal";
 import { getSubjectLabel } from "../utils/subjectClearUtils";
 import { ADMIN_PANEL_TABS, RESULT_HUB_PAGES } from "../constants/navigationConfig";
+import { mergeCachedExamNames } from "../utils/examCatalog";
 
 export default function AdminPanel() {
   const role = sessionStorage.getItem("role");
@@ -409,6 +410,7 @@ export default function AdminPanel() {
 
       setClasses(res.data);
       classesRef.current = res.data;
+      mergeCachedExamNames((res.data || []).map(c => c.examName), { replaceWithServer: true });
 
       // Only sync the form on initial mount or when explicitly requested,
       // using the latest active formDataRef so background refetches never revert user selections!
@@ -2061,6 +2063,7 @@ export default function AdminPanel() {
         eseGradingSystem: formData.eseGradingSystem
       };
       await API.post("/api/classes", payload);
+      mergeCachedExamNames([trimmedExam]);
       setSelectedClassId(generatedName);
       setAutoLoadedFrom("");
       setCourseAutoLoadedFrom("");
@@ -2257,6 +2260,7 @@ export default function AdminPanel() {
       };
 
       const res = await API.post("/api/classes/bulk-clone", payload);
+      mergeCachedExamNames((res.data?.results || []).map(r => r.examName));
       const breakdown = (res.data.results || [])
         .map(r => `${r.section} - ${r.examName}: ${r.action} (${r.studentCount} students)`)
         .join("\n• ");

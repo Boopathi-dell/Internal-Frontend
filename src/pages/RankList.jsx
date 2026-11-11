@@ -157,7 +157,7 @@ export default function RankList() {
   useEffect(() => {
     const loadClasses = async () => {
       try {
-        const res = await API.get("/api/classes");
+        const res = await API.get("/api/classes", { params: { summary: "true", _ts: Date.now() } });
         setClasses(res.data);
         applyFilters(res.data, filters);
       } catch (err) {

@@ -108,7 +108,7 @@ export default function ParentLetter() {
 
   async function loadClasses() {
     try {
-      const res = await API.get("/api/classes");
+      const res = await API.get("/api/classes", { params: { summary: "true", _ts: Date.now() } });
       setClasses(res.data);
       applyFilters(res.data, filters);
     } catch (e) { console.error(e); }

@@ -21,7 +21,7 @@ export default function DepartmentAnalysis() {
   useEffect(() => {
     const loadClasses = async () => {
       try {
-        const res = await API.get("/api/classes");
+        const res = await API.get("/api/classes", { params: { summary: "true", _ts: Date.now() } });
         setClasses(res.data);
       } catch (err) {
         console.error("Error loading classes:", err);

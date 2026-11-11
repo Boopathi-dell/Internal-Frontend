@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import API from "../api";
 import * as XLSX from "xlsx";
+import {
+  normStr,
+  normalizeRegNo,
+  normalizeExam,
+  findMatchingClassesForExam,
+  findExamMarkForStudent
+} from "../utils/examMatchUtils";
 import { 
   Printer, 
   FileSpreadsheet, 
@@ -88,6 +95,7 @@ export default function InternalMarkSheet() {
   const [showColumnManager, setShowColumnManager] = useState(false);
   const [savingHiddenCols, setSavingHiddenCols] = useState(false);
   const [hiddenColsMsg, setHiddenColsMsg] = useState("");
+  const [showExamLinks, setShowExamLinks] = useState(false);
   const [showExcelMenu, setShowExcelMenu] = useState(false);
   const excelMenuRef = useRef(null);
 
@@ -336,10 +344,11 @@ export default function InternalMarkSheet() {
     setLoading(true);
     try {
       const yearSemSec = `${formData.year}/${formData.semester}/${formData.section}`;
+      const ts = Date.now();
       const [classRes, rosterRes, currSubjRes] = await Promise.all([
-        API.get("/api/classes", { params: { department: formData.department, yearSemSec } }),
-        API.get("/api/rosters", { params: { department: formData.department, year: formData.year, semester: formData.semester, section: formData.section } }),
-        API.get("/api/curriculum/subjects", { params: { department: formData.department, year: formData.year, semester: formData.semester } }).catch(() => ({ data: [] }))
+        API.get("/api/classes", { params: { department: formData.department, yearSemSec, _ts: ts } }),
+        API.get("/api/rosters", { params: { department: formData.department, year: formData.year, semester: formData.semester, section: formData.section, _ts: ts } }),
+        API.get("/api/curriculum/subjects", { params: { department: formData.department, year: formData.year, semester: formData.semester, _ts: ts } }).catch(() => ({ data: [] }))
       ]);
 
       const filteredClasses = classRes.data || [];
@@ -359,6 +368,7 @@ export default function InternalMarkSheet() {
       });
 
       const courseMap = {};
+      const courseShortMap = {};
       const allCourseCodes = new Set();
       const examNamesByCode = {};
       filteredClasses.forEach(c => {
@@ -367,7 +377,14 @@ export default function InternalMarkSheet() {
           c.courseDetails.forEach(cd => {
             if (cd.courseCode) {
               const code = cd.courseCode.trim();
-              courseMap[code] = cd.courseName ? cd.courseName.trim() : code;
+              if (cd.courseName && cd.courseName.trim()) {
+                courseMap[code] = cd.courseName.trim();
+              } else if (!courseMap[code]) {
+                courseMap[code] = code;
+              }
+              if (cd.shortName && cd.shortName.trim()) {
+                courseShortMap[code] = cd.shortName.trim();
+              }
               allCourseCodes.add(code);
               if (!examNamesByCode[code]) examNamesByCode[code] = [];
               examNamesByCode[code].push(examStr);
@@ -389,13 +406,14 @@ export default function InternalMarkSheet() {
       const distinctSubjectCodes = [...allCourseCodes];
       const subjectsWithNames = distinctSubjectCodes.map(code => {
         const name = courseMap[code] || "Theory Subject";
+        const shortName = courseShortMap[code] || "";
         const exList = examNamesByCode[code] || [];
         const isLab =
           masterLabCodes.has(code.toUpperCase()) ||
           /\blab\b|laboratory|practical/i.test(name) ||
           /\blab\b/i.test(code) ||
           (exList.length > 0 && exList.every(ex => /lab|practical|observation/i.test(ex)));
-        return { code, name, isLab };
+        return { code, name, shortName, isLab };
       }).sort((a, b) => a.code.localeCompare(b.code));
 
       setSubjects(subjectsWithNames);
@@ -416,6 +434,7 @@ export default function InternalMarkSheet() {
 
       const targetSubjObj = subjectsWithNames.find(s => s.code === targetSubj);
       const targetSubjName = targetSubjObj?.name || "";
+      const targetSubjShort = targetSubjObj?.shortName || "";
       const detectedCat = nextIsCustom
         ? (/\blab\b|laboratory|practical/i.test(formData.customSubject || "") ? "Lab" : "Theory")
         : (targetSubjObj?.isLab ? "Lab" : "Theory");
@@ -427,7 +446,7 @@ export default function InternalMarkSheet() {
         setActiveTemplate(resolvedTpl);
       }
 
-      calculateStudentsMarks(filteredClasses, matchedRoster, targetSubj, resolvedTpl, targetSubjName);
+      calculateStudentsMarks(filteredClasses, matchedRoster, targetSubj, resolvedTpl, targetSubjName, targetSubjShort);
     } catch (e) {
       console.error("Error loading class data:", e);
     } finally {
@@ -439,113 +458,18 @@ export default function InternalMarkSheet() {
     loadClassAndSubjectData();
   }, [formData.department, formData.year, formData.semester, formData.section]);
 
+  const handleSyncAll = async () => {
+    await Promise.all([
+      fetchTemplatesAndRegulations(),
+      loadClassAndSubjectData()
+    ]);
+  };
+
   // Helper to parse numbers safely
   const parseNum = (val) => {
     if (val === undefined || val === null || val === "" || String(val).toUpperCase() === "AB") return 0;
     const n = parseFloat(val);
     return isNaN(n) ? 0 : n;
-  };
-
-  // Normalize string for fuzzy match
-  const normStr = (str) => (str || "").toLowerCase().replace(/[\s\-_]/g, "");
-
-  // Normalize exam name specifically so CIA 1, CIA 2, CIA 3, Practical & UT 1..5 never cross-collide
-  const normalizeExam = (name) => {
-    if (!name) return "";
-    let s = String(name).toLowerCase().replace(/[\s\-_.]/g, "");
-    if (s.includes("practical") || s.includes("lab")) return s;
-    s = s.replace(/unittest/g, "ut");
-    if (/^modelexam(ination)?$/.test(s) || s === "model") return "cia3_model";
-    s = s.replace(/cia(iii|3)/g, "cia3")
-         .replace(/cia(ii|2)/g, "cia2")
-         .replace(/cia(iv|4)/g, "cia4")
-         .replace(/cia(i|1)/g, "cia1");
-    s = s.replace(/ut(iii|3)/g, "ut3")
-         .replace(/ut(ii|2)/g, "ut2")
-         .replace(/ut(iv|4)/g, "ut4")
-         .replace(/ut(v|5)/g, "ut5")
-         .replace(/ut(i|1)/g, "ut1");
-    s = s.replace(/seminar/g, "sm");
-    return s;
-  };
-
-  // Returns match priority: 2 = Exact Exam Match, 1 = Model Exam <-> CIA 3 Fallback, 0 = No Match
-  const getExamMatchPriority = (targetExam, classExam) => {
-    if (!targetExam || !classExam) return 0;
-    const n1 = normalizeExam(targetExam);
-    const n2 = normalizeExam(classExam);
-    if (!n1 || !n2) return 0;
-    if (n1 === n2) return 2;
-    const cia3Aliases = new Set(["cia3", "cia3_model"]);
-    if (cia3Aliases.has(n1) && cia3Aliases.has(n2)) return 1;
-    return 0;
-  };
-
-  // Finds exact matching subject index in a Class record without empty-string or prefix false positives
-  const findSubjectIndexInClass = (cls, targetSubjCode, targetSubjName = "") => {
-    const cleanCode = normStr(targetSubjCode);
-    const cleanName = (targetSubjName && targetSubjName !== "Theory Subject") ? normStr(targetSubjName) : "";
-    const count = Math.max(cls.subjects?.length || 0, cls.courseDetails?.length || 0);
-    if (count === 0) return -1;
-
-    // Pass 1: Strict Exact Match (prevents e.g. 23CS301 matching 23CS301L or "" empty string matches)
-    for (let i = 0; i < count; i++) {
-      const sRaw = normStr(cls.subjects?.[i]);
-      const cd = cls.courseDetails?.[i];
-      const cCode = normStr(cd?.courseCode);
-      const cName = normStr(cd?.courseName);
-      const cShort = normStr(cd?.shortName);
-
-      if (cleanCode && (sRaw === cleanCode || cCode === cleanCode)) return i;
-      if (cleanName && (sRaw === cleanName || cName === cleanName || cShort === cleanName)) return i;
-      if (cleanCode && cleanName && sRaw === `${cleanCode}${cleanName}`) return i;
-    }
-
-    // Pass 2: Delimited Code Prefix (e.g. subjects[i] = "23CSE01 - Internet of Things") or Long Name Match
-    const rawCodeToken = String(targetSubjCode || "").trim().toLowerCase();
-    for (let i = 0; i < count; i++) {
-      const rawSubjStr = String(cls.subjects?.[i] || "").trim().toLowerCase();
-      const firstToken = rawSubjStr.split(/[\s–\-:|]+/)[0];
-      if (rawCodeToken && firstToken && firstToken === rawCodeToken) return i;
-
-      const cd = cls.courseDetails?.[i];
-      const cCode = normStr(cd?.courseCode);
-      const cName = normStr(cd?.courseName);
-      if (cleanName && cleanName.length >= 6 && cName && cName.length >= 6 && (cName.includes(cleanName) || cleanName.includes(cName))) {
-        return i;
-      }
-      if (cleanCode && cleanCode.length >= 4 && cCode && cCode.length >= 4 && cCode === cleanCode) {
-        return i;
-      }
-    }
-
-    return -1;
-  };
-
-  // Accurate exam mark finder prioritizing Exact Exam Match + Exact Subject Match
-  const findExamMarkForStudent = (student, examName, targetSubjCode, allClassesForSection, targetSubjName = "") => {
-    if (!examName) return "";
-    const targetReg = String(student.regNo || "").trim().toUpperCase();
-    if (!targetReg) return "";
-
-    const matchingClasses = (allClassesForSection || [])
-      .map(cls => ({ cls, priority: getExamMatchPriority(examName, cls.examName) }))
-      .filter(item => item.priority > 0)
-      .sort((a, b) => b.priority - a.priority);
-
-    for (const { cls } of matchingClasses) {
-      const subjIdx = findSubjectIndexInClass(cls, targetSubjCode, targetSubjName);
-      if (subjIdx !== -1 && Array.isArray(cls.students)) {
-        const stObj = cls.students.find(s => String(s.regNo || "").trim().toUpperCase() === targetReg);
-        if (stObj && Array.isArray(stObj.marks) && stObj.marks.length > subjIdx) {
-          const val = stObj.marks[subjIdx];
-          if (val !== "" && val !== undefined && val !== null) {
-            return val;
-          }
-        }
-      }
-    }
-    return "";
   };
 
   // Clean title & max mark extractor
@@ -875,7 +799,7 @@ export default function InternalMarkSheet() {
   };
 
   // Builds evaluated student mark rows for any given subject (reused by UI & multi-subject Excel export)
-  const buildEvaluatedRowsForSubject = (classesList, rosterObj, targetSubject, template, targetSubjName = "") => {
+  const buildEvaluatedRowsForSubject = (classesList, rosterObj, targetSubject, template, targetSubjName = "", targetSubjShortName = "") => {
     if (!targetSubject) return [];
 
     const studentMap = {};
@@ -883,9 +807,10 @@ export default function InternalMarkSheet() {
     // 1. Gather all students from Roster of this section
     if (rosterObj && rosterObj.students) {
       rosterObj.students.forEach(student => {
-        if (student.regNo) {
-          studentMap[student.regNo] = {
-            regNo: student.regNo,
+        const regKey = normalizeRegNo(student.regNo);
+        if (regKey) {
+          studentMap[regKey] = {
+            regNo: String(student.regNo).trim(),
             name: student.name || ""
           };
         }
@@ -896,9 +821,10 @@ export default function InternalMarkSheet() {
     (classesList || []).forEach(c => {
       if (c.students && Array.isArray(c.students)) {
         c.students.forEach(st => {
-          if (st.regNo && !studentMap[st.regNo]) {
-            studentMap[st.regNo] = {
-              regNo: st.regNo,
+          const regKey = normalizeRegNo(st.regNo);
+          if (regKey && !studentMap[regKey]) {
+            studentMap[regKey] = {
+              regNo: String(st.regNo).trim(),
               name: st.name || ""
             };
           }
@@ -918,7 +844,15 @@ export default function InternalMarkSheet() {
 
       columnsToUse.forEach(col => {
         if (col.type === "exam") {
-          const mark = findExamMarkForStudent(student, col.examName || col.title || col.heading, targetSubject, classesList || [], targetSubjName);
+          const mark = findExamMarkForStudent(
+            student,
+            col.examName || col.title || col.heading,
+            targetSubject,
+            classesList || [],
+            targetSubjName,
+            targetSubjShortName,
+            col.title || col.heading
+          );
           row[col.colKey] = mark;
           row[col.heading] = mark;
         }
@@ -933,14 +867,16 @@ export default function InternalMarkSheet() {
   };
 
   // Pure in-memory student marks & formulas calculation (Instant 0ms update, Zero API calls)
-  const calculateStudentsMarks = (classesList, rosterObj, targetSubj, template, targetSubjName = "") => {
+  const calculateStudentsMarks = (classesList, rosterObj, targetSubj, template, targetSubjName = "", targetSubjShortName = "") => {
     const targetSubject = targetSubj || (formData.isCustomSubject ? formData.customSubject : formData.selectedSubject);
     if (!targetSubject) {
       setStudentsData([]);
       return;
     }
-    const resolvedName = targetSubjName || (formData.isCustomSubject ? "" : (subjects.find(s => s.code === targetSubject)?.name || ""));
-    const evaluatedStudents = buildEvaluatedRowsForSubject(classesList, rosterObj, targetSubject, template, resolvedName);
+    const matchedObj = formData.isCustomSubject ? null : subjects.find(s => s.code === targetSubject);
+    const resolvedName = targetSubjName || matchedObj?.name || "";
+    const resolvedShort = targetSubjShortName || matchedObj?.shortName || "";
+    const evaluatedStudents = buildEvaluatedRowsForSubject(classesList, rosterObj, targetSubject, template, resolvedName, resolvedShort);
     setStudentsData(evaluatedStudents);
   };
 
@@ -948,8 +884,10 @@ export default function InternalMarkSheet() {
   useEffect(() => {
     if (allFetchedClasses.length > 0 || currentCohortRoster) {
       const targetSubj = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
-      const targetSubjName = formData.isCustomSubject ? "" : (subjects.find(s => s.code === targetSubj)?.name || "");
-      calculateStudentsMarks(allFetchedClasses, currentCohortRoster, targetSubj, activeTemplate, targetSubjName);
+      const matchedObj = formData.isCustomSubject ? null : subjects.find(s => s.code === targetSubj);
+      const targetSubjName = matchedObj?.name || "";
+      const targetSubjShort = matchedObj?.shortName || "";
+      calculateStudentsMarks(allFetchedClasses, currentCohortRoster, targetSubj, activeTemplate, targetSubjName, targetSubjShort);
     }
   }, [
     formData.selectedSubject, 
@@ -1015,6 +953,33 @@ export default function InternalMarkSheet() {
   const hasSubHeaders = useMemo(() => {
     return visibleColumns.some(c => c.maxMark || (c.heading && c.heading.includes("(") && c.heading.includes(")")));
   }, [visibleColumns]);
+
+  // Diagnostic mapping status showing which Exam class feeds each exam column
+  const examLinksStatus = useMemo(() => {
+    const targetCode = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
+    return visibleColumns
+      .filter(c => c.type === "exam")
+      .map(col => {
+        const matched = findMatchingClassesForExam(
+          allFetchedClasses,
+          col.examName || col.title || col.heading,
+          col.title || col.heading
+        );
+        const primaryMatch = matched[0]?.cls || null;
+        const filledCount = targetCode
+          ? studentsData.filter(st => {
+              const v = st[col.colKey];
+              return v !== "" && v !== undefined && v !== null;
+            }).length
+          : 0;
+        return {
+          heading: col.heading || col.title,
+          expectedExam: col.examName || col.title || col.heading,
+          matchedExam: primaryMatch?.examName || null,
+          filledCount
+        };
+      });
+  }, [visibleColumns, allFetchedClasses, studentsData, formData.selectedSubject, formData.customSubject, formData.isCustomSubject]);
 
   // Multi-page chunking: Balanced 2 Pages (Fit ONLY actual enrolled students cleanly into max 2 pages; Portrait fits more rows vertically)
   const studentPages = useMemo(() => {
@@ -1277,7 +1242,7 @@ export default function InternalMarkSheet() {
     targetList.forEach(subj => {
       const evalRows = (subj.code === formData.selectedSubject && !formData.isCustomSubject)
         ? studentsData
-        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate, subj.name);
+        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate, subj.name, subj.shortName);
       const displaySubj = subj.name ? `${subj.code} - ${subj.name}` : subj.code;
       const ws = buildSubjectWorksheet(evalRows, displaySubj);
       XLSX.utils.book_append_sheet(wb, ws, makeSafeSheetName(subj.code, usedNames));
@@ -1301,7 +1266,7 @@ export default function InternalMarkSheet() {
     targetList.forEach(subj => {
       const evalRows = (subj.code === formData.selectedSubject && !formData.isCustomSubject)
         ? studentsData
-        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate, subj.name);
+        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate, subj.name, subj.shortName);
       perSubjectRows[subj.code] = {};
       evalRows.forEach(st => {
         if (!st.regNo) return;
@@ -1753,8 +1718,8 @@ export default function InternalMarkSheet() {
 
               <button
                 type="button"
-                onClick={fetchTemplatesAndRegulations}
-                title="Sync latest template settings from Admin Panel"
+                onClick={handleSyncAll}
+                title="Sync latest templates and Mark Entry marks from server"
                 style={{
                   background: "#ffffff",
                   border: "1px solid #cbd5e1",
@@ -1903,13 +1868,54 @@ export default function InternalMarkSheet() {
               <span>Name Col: <strong style={{ color: "#0f172a" }}>{formData.nameColWidth === "auto" ? "Auto-Fit" : formData.nameColWidth}</strong></span>
             </div>
 
-            <button
-              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-              style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
-            >
-              <Sliders size={14} /> {showAdvancedSettings ? "Hide Page & Layout Settings" : "Page & Layout Settings"} {showAdvancedSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+              {examLinksStatus.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowExamLinks(prev => !prev)}
+                  style={{ background: "transparent", border: "none", color: "#0f766e", fontSize: "0.82rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", fontWeight: "700" }}
+                >
+                  <Info size={14} /> Exam Links ({examLinksStatus.filter(x => x.matchedExam).length}/{examLinksStatus.length}) {showExamLinks ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+              )}
+
+              <button
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                style={{ background: "transparent", border: "none", color: "var(--primary)", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontWeight: "700" }}
+              >
+                <Sliders size={14} /> {showAdvancedSettings ? "Hide Page & Layout Settings" : "Page & Layout Settings"} {showAdvancedSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            </div>
           </div>
+
+          {showExamLinks && examLinksStatus.length > 0 && (
+            <div style={{ marginTop: "0.85rem", padding: "0.9rem 1rem", background: "rgba(248, 250, 252, 0.9)", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: allFetchedClasses.length > 0 ? "8px" : 0 }}>
+                {examLinksStatus.map((item, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "99px",
+                      fontSize: "0.76rem",
+                      fontWeight: "700",
+                      background: item.matchedExam ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.1)",
+                      color: item.matchedExam ? "#047857" : "#b91c1c",
+                      border: item.matchedExam ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(239, 68, 68, 0.28)"
+                    }}
+                  >
+                    {item.heading} ← {item.matchedExam ? `${item.matchedExam} (${item.filledCount} marks)` : `No class matching "${item.expectedExam}"`}
+                  </span>
+                ))}
+              </div>
+              {allFetchedClasses.length > 0 && (
+                <div style={{ fontSize: "0.74rem", color: "#475569" }}>
+                  Available Exam Models in {formData.year}/{formData.semester}/{formData.section}:{" "}
+                  <strong>{[...new Set(allFetchedClasses.map(c => c.examName).filter(Boolean))].join(", ")}</strong>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Advanced Settings Drawer */}
           {showAdvancedSettings && (
@@ -2148,7 +2154,7 @@ export default function InternalMarkSheet() {
             background: #ffffff;
             color: #0f172a;
             width: 100%;
-            max-width: ${isPortraitMode ? "820px" : "1420px"};
+            max-width: ${isPortraitMode ? "900px" : "1420px"};
             border: 1px solid #e2e8f0;
             padding: 24px 28px;
             box-shadow: 0 12px 32px -12px rgba(15, 23, 42, 0.1);
@@ -2178,10 +2184,14 @@ export default function InternalMarkSheet() {
             background: #f1f5f9;
             color: #334155;
             font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-            font-size: 12px;
+            font-size: ${isPortraitMode ? "10px" : "12px"};
             font-weight: 700;
-            padding: 10px 8px;
-            letter-spacing: 0.02em;
+            padding: ${isPortraitMode ? "8px 4px" : "10px 8px"};
+            line-height: 1.25;
+            letter-spacing: 0.01em;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
           }
           .print-sheet .mec-official-table thead tr.max-mark-row th {
             background: #f8fafc;
@@ -2409,7 +2419,13 @@ export default function InternalMarkSheet() {
           .mec-official-table thead tr:first-child th,
           .mec-official-table thead tr.max-mark-row th {
             font-family: "Times New Roman", Times, serif !important;
-            font-size: ${isPortraitMode ? "8.5px" : "9.5px"} !important;
+            font-size: ${isPortraitMode ? "8px" : "9.5px"} !important;
+            line-height: 1.15 !important;
+          }
+          .mec-official-table th.col-mark {
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+            word-break: break-word !important;
           }
           .mec-official-table th.col-sno, .mec-official-table td.col-sno {
             width: ${isPortraitMode ? "26px" : "30px"} !important;
@@ -2487,7 +2503,10 @@ export default function InternalMarkSheet() {
         }
         .mec-official-table th.col-mark, .mec-official-table td.col-mark {
           text-align: center;
-          padding: 2px 2px;
+          padding: 2px 3px;
+          white-space: normal;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
       `}</style>
 
