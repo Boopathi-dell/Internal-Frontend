@@ -277,6 +277,25 @@ export default function InternalMarkSheet() {
     setActiveTemplate(matched || null);
   };
 
+  const getSemOptionsForYear = (year) => {
+    switch (year) {
+      case "I": return ["I", "II"];
+      case "II": return ["III", "IV"];
+      case "III": return ["V", "VI"];
+      case "IV": return ["VII", "VIII"];
+      default: return ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
+    }
+  };
+
+  const handleYearChange = (nextYear) => {
+    const validSems = getSemOptionsForYear(nextYear);
+    setFormData(prev => ({
+      ...prev,
+      year: nextYear,
+      semester: validSems.includes(prev.semester) ? prev.semester : validSems[0]
+    }));
+  };
+
   const handleTargetSubjectChange = (val) => {
     if (val === "CUSTOM") {
       setFormData(prev => ({ ...prev, selectedSubject: "CUSTOM", isCustomSubject: true }));
@@ -1812,7 +1831,7 @@ export default function InternalMarkSheet() {
             {/* 4. Year */}
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Year</label>
-              <select className="input-field" value={formData.year} onChange={e => setFormData({ ...formData, year: e.target.value })} style={{ borderRadius: "10px", background: "#ffffff" }}>
+              <select className="input-field" value={formData.year} onChange={e => handleYearChange(e.target.value)} style={{ borderRadius: "10px", background: "#ffffff" }}>
                 {["I", "II", "III", "IV"].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
@@ -1821,7 +1840,7 @@ export default function InternalMarkSheet() {
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Semester</label>
               <select className="input-field" value={formData.semester} onChange={e => setFormData({ ...formData, semester: e.target.value })} style={{ borderRadius: "10px", background: "#ffffff" }}>
-                {["I", "II", "III", "IV", "V", "VI", "VII", "VIII"].map(s => <option key={s} value={s}>{s}</option>)}
+                {getSemOptionsForYear(formData.year).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
@@ -1829,7 +1848,7 @@ export default function InternalMarkSheet() {
             <div>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#64748b", textTransform: "uppercase" }}>Section</label>
               <select className="input-field" value={formData.section} onChange={e => setFormData({ ...formData, section: e.target.value })} style={{ borderRadius: "10px", background: "#ffffff" }}>
-                {["A", "B", "C", "D"].map(s => <option key={s} value={s}>{s}</option>)}
+                {["A", "B", "C", "D", "E"].map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
 
