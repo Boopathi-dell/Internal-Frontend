@@ -32,12 +32,42 @@ import {
   Save
 } from "lucide-react";
 
+const getDefaultShortName = (subj) => {
+  if (!subj) return "";
+  const rawShort = String(subj.shortName || "").trim();
+  if (rawShort) return rawShort.toUpperCase();
+  const stopWords = new Set(["and", "of", "the", "in", "for", "to", "with", "using", "on"]);
+  const words = String(subj.name || "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(w => w && !stopWords.has(w.toLowerCase()));
+  if (words.length >= 2) {
+    return words.map(w => w[0].toUpperCase()).join("").slice(0, 6);
+  }
+  if (words.length === 1) {
+    return words[0].slice(0, 5).toUpperCase();
+  }
+  return String(subj.code || "").slice(-4).toUpperCase();
+};
+
+const getResolvedShortName = (subj, overrides = {}) => {
+  if (!subj) return "";
+  const custom = overrides[subj.code];
+  if (typeof custom === "string" && custom.trim()) {
+    return custom.trim().toUpperCase();
+  }
+  return getDefaultShortName(subj);
+};
+
 export default function InternalMarkSheet() {
   const [availableRegulations, setAvailableRegulations] = useState([]);
   const [activeTemplate, setActiveTemplate] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("Theory");
+  const [viewMode, setViewMode] = useState("subject"); // "subject" | "consolidated"
   const allTemplatesRef = useRef([]);
   const selectedCategoryRef = useRef("Theory");
+  const viewModeRef = useRef("subject");
 
   const getTemplateCategory = (t) => {
     if (!t) return "Theory";
@@ -51,7 +81,9 @@ export default function InternalMarkSheet() {
     return getTemplateCategory(t) === "Lab" ? "portrait" : "landscape";
   };
 
-  const isPortraitMode = getTemplateOrientation(activeTemplate) === "portrait";
+  const isPortraitMode = viewMode === "consolidated"
+    ? true
+    : getTemplateOrientation(activeTemplate) === "portrait";
 
   const resolveTemplateForRegulationAndCategory = (list = [], reg, category = "Theory") => {
     if (!Array.isArray(list) || list.length === 0) return null;
@@ -97,7 +129,41 @@ export default function InternalMarkSheet() {
   const [hiddenColsMsg, setHiddenColsMsg] = useState("");
   const [showExamLinks, setShowExamLinks] = useState(false);
   const [showExcelMenu, setShowExcelMenu] = useState(false);
+  const [hiddenConsolidatedSubjects, setHiddenConsolidatedSubjects] = useState([]);
+  const [shortNameOverrides, setShortNameOverrides] = useState({});
+  const [consolidatedEdits, setConsolidatedEdits] = useState({});
   const excelMenuRef = useRef(null);
+
+  const getConsolidatedPrefsKey = (dept, year, sem, category) =>
+    `internalMarkConsolidatedPrefs_${dept || "dept"}_${year || "yr"}_${sem || "sem"}_${category || "Theory"}`;
+
+  useEffect(() => {
+    const key = getConsolidatedPrefsKey(formData.department, formData.year, formData.semester, selectedCategory);
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || "null");
+      setHiddenConsolidatedSubjects(Array.isArray(saved?.hiddenSubjects) ? saved.hiddenSubjects : []);
+      setShortNameOverrides(saved?.shortNames && typeof saved.shortNames === "object" ? saved.shortNames : {});
+    } catch {
+      setHiddenConsolidatedSubjects([]);
+      setShortNameOverrides({});
+    }
+  }, [formData.department, formData.year, formData.semester, selectedCategory]);
+
+  useEffect(() => {
+    setConsolidatedEdits({});
+  }, [formData.department, formData.year, formData.semester, formData.section, selectedCategory, formData.regulation]);
+
+  const persistConsolidatedPrefs = (nextHidden, nextShortNames) => {
+    const key = getConsolidatedPrefsKey(formData.department, formData.year, formData.semester, selectedCategory);
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        hiddenSubjects: nextHidden,
+        shortNames: nextShortNames
+      }));
+    } catch {
+      // Ignore storage quota or private browsing errors
+    }
+  };
 
   useEffect(() => {
     const handleOutsideClick = (event) => {
@@ -278,6 +344,21 @@ export default function InternalMarkSheet() {
     }
   };
 
+  // Switch between single Subject-wise Sheet and class Consolidated Sheet (Portrait)
+  const handleViewModeChange = (nextMode) => {
+    const targetMode = nextMode === "consolidated" ? "consolidated" : "subject";
+    viewModeRef.current = targetMode;
+    setViewMode(targetMode);
+    setShowColumnManager(false);
+    setShowExcelMenu(false);
+    if (targetMode === "subject" && !formData.isCustomSubject && formData.selectedSubject) {
+      const subjObj = subjects.find(s => s.code === formData.selectedSubject);
+      if (subjObj) {
+        applyCategoryAndResolveTemplate(subjObj.isLab ? "Lab" : "Theory");
+      }
+    }
+  };
+
   // When selected regulation changes, automatically activate matching template for active category
   const handleRegulationChange = (reg) => {
     setFormData(prev => ({ ...prev, regulation: reg }));
@@ -359,10 +440,17 @@ export default function InternalMarkSheet() {
       setCurrentCohortRoster(matchedRoster);
 
       const masterLabCodes = new Set();
+      const masterShortMap = {};
       (Array.isArray(currSubjRes.data) ? currSubjRes.data : []).forEach(doc => {
         (doc.subjects || []).forEach(s => {
-          if (s.category === "Lab" && s.courseCode) {
-            masterLabCodes.add(String(s.courseCode).trim().toUpperCase());
+          if (s.courseCode) {
+            const normCode = String(s.courseCode).trim().toUpperCase();
+            if (s.category === "Lab") {
+              masterLabCodes.add(normCode);
+            }
+            if (s.shortName && String(s.shortName).trim() && !masterShortMap[normCode]) {
+              masterShortMap[normCode] = String(s.shortName).trim();
+            }
           }
         });
       });
@@ -406,7 +494,7 @@ export default function InternalMarkSheet() {
       const distinctSubjectCodes = [...allCourseCodes];
       const subjectsWithNames = distinctSubjectCodes.map(code => {
         const name = courseMap[code] || "Theory Subject";
-        const shortName = courseShortMap[code] || "";
+        const shortName = courseShortMap[code] || masterShortMap[code.toUpperCase()] || "";
         const exList = examNamesByCode[code] || [];
         const isLab =
           masterLabCodes.has(code.toUpperCase()) ||
@@ -435,9 +523,11 @@ export default function InternalMarkSheet() {
       const targetSubjObj = subjectsWithNames.find(s => s.code === targetSubj);
       const targetSubjName = targetSubjObj?.name || "";
       const targetSubjShort = targetSubjObj?.shortName || "";
-      const detectedCat = nextIsCustom
-        ? (/\blab\b|laboratory|practical/i.test(formData.customSubject || "") ? "Lab" : "Theory")
-        : (targetSubjObj?.isLab ? "Lab" : "Theory");
+      const detectedCat = viewModeRef.current === "consolidated"
+        ? selectedCategoryRef.current
+        : nextIsCustom
+          ? (/\blab\b|laboratory|practical/i.test(formData.customSubject || "") ? "Lab" : "Theory")
+          : (targetSubjObj?.isLab ? "Lab" : "Theory");
 
       selectedCategoryRef.current = detectedCat;
       setSelectedCategory(detectedCat);
@@ -981,9 +1071,157 @@ export default function InternalMarkSheet() {
       });
   }, [visibleColumns, allFetchedClasses, studentsData, formData.selectedSubject, formData.customSubject, formData.isCustomSubject]);
 
+  // Identifies the final formula/total column for UI highlight & summary KPIs (no functional change)
+  const finalSummaryColumn = useMemo(() => {
+    return [...currentColumns].reverse().find(c => c.type === "formula" || c.type === "calculation")
+      || currentColumns[currentColumns.length - 1]
+      || null;
+  }, [currentColumns]);
+
+  // Minimum Internal Pass Mark configured in Admin Template for this Regulation (0 = disabled)
+  const internalPassMark = useMemo(() => {
+    const val = Number(activeTemplate?.passMark);
+    return !isNaN(val) && val > 0 ? val : 0;
+  }, [activeTemplate]);
+
+  // Normalizes cell values so numeric marks export as real Excel numbers without breaking "AB"/blank cells
+  const normalizeExcelCellValue = (val, isFormula) => {
+    if (isFormula) {
+      if (val === undefined || val === null || val === "") return 0;
+      const n = Number(val);
+      return isNaN(n) ? 0 : n;
+    }
+    if (val === undefined || val === null || val === "") return "";
+    const str = String(val).trim();
+    if (str !== "" && !isNaN(Number(str)) && typeof val !== "boolean") {
+      return Number(str);
+    }
+    return str;
+  };
+
+  // Separate subjects strictly by active Theory / Lab category for Consolidated Sheet
+  const consolidatedCategorySubjects = useMemo(() => {
+    return subjects.filter(s => (selectedCategory === "Lab" ? s.isLab : !s.isLab));
+  }, [subjects, selectedCategory]);
+
+  const visibleConsolidatedSubjects = useMemo(() => {
+    return consolidatedCategorySubjects.filter(s => !hiddenConsolidatedSubjects.includes(s.code));
+  }, [consolidatedCategorySubjects, hiddenConsolidatedSubjects]);
+
+  // Shared Consolidated evaluation engine (reused by Consolidated UI/Print & Summary Excel Export)
+  const buildConsolidatedDataset = (targetSubjects, template, editsMap = {}) => {
+    const rawCols = (template && Array.isArray(template.columns) && template.columns.length > 0)
+      ? template.columns
+      : defaultMecColumns;
+    const cols = getColumnsWithKeys(rawCols);
+    const summaryCol = [...cols].reverse().find(c => c.type === "formula" || c.type === "calculation")
+      || cols[cols.length - 1]
+      || null;
+    const isSummaryFormula = Boolean(summaryCol && (summaryCol.type === "formula" || summaryCol.type === "calculation"));
+
+    const masterStudents = {};
+    const perSubjectScores = {};
+
+    if (currentCohortRoster && Array.isArray(currentCohortRoster.students)) {
+      currentCohortRoster.students.forEach(student => {
+        const regKey = normalizeRegNo(student.regNo);
+        if (regKey) {
+          masterStudents[regKey] = {
+            regNo: String(student.regNo).trim(),
+            name: student.name || ""
+          };
+        }
+      });
+    }
+
+    (allFetchedClasses || []).forEach(c => {
+      if (Array.isArray(c.students)) {
+        c.students.forEach(st => {
+          const regKey = normalizeRegNo(st.regNo);
+          if (regKey && !masterStudents[regKey]) {
+            masterStudents[regKey] = {
+              regNo: String(st.regNo).trim(),
+              name: st.name || ""
+            };
+          }
+        });
+      }
+    });
+
+    (targetSubjects || []).forEach(subj => {
+      const evalRows = buildEvaluatedRowsForSubject(
+        allFetchedClasses,
+        currentCohortRoster,
+        subj.code,
+        template,
+        subj.name,
+        subj.shortName
+      );
+      perSubjectScores[subj.code] = {};
+      evalRows.forEach(st => {
+        const regKey = normalizeRegNo(st.regNo);
+        if (!regKey) return;
+        if (!masterStudents[regKey]) {
+          masterStudents[regKey] = { regNo: st.regNo, name: st.name || "" };
+        } else if (!masterStudents[regKey].name && st.name) {
+          masterStudents[regKey].name = st.name;
+        }
+        const rawTotal = summaryCol
+          ? (st[summaryCol.colKey] !== undefined ? st[summaryCol.colKey] : st[summaryCol.heading])
+          : "";
+        perSubjectScores[subj.code][regKey] = normalizeExcelCellValue(rawTotal, isSummaryFormula);
+      });
+    });
+
+    const rows = Object.entries(masterStudents)
+      .map(([regKey, base]) => {
+        const row = { regKey, regNo: base.regNo, name: base.name };
+        (targetSubjects || []).forEach(subj => {
+          const editKey = `${regKey}::${subj.code}`;
+          if (editsMap[editKey] !== undefined) {
+            row[subj.code] = editsMap[editKey];
+          } else {
+            row[subj.code] = perSubjectScores[subj.code]?.[regKey] ?? (isSummaryFormula ? 0 : "");
+          }
+        });
+        return row;
+      })
+      .sort((a, b) => (a.regNo || "").localeCompare(b.regNo || "", undefined, { numeric: true }));
+
+    return { rows, summaryCol, isSummaryFormula };
+  };
+
+  const isConsolidatedView = viewMode === "consolidated";
+
+  const consolidatedDataset = useMemo(() => {
+    if (!isConsolidatedView) {
+      return { rows: [], summaryCol: finalSummaryColumn, isSummaryFormula: true };
+    }
+    return buildConsolidatedDataset(visibleConsolidatedSubjects, activeTemplate, consolidatedEdits);
+  }, [
+    isConsolidatedView,
+    visibleConsolidatedSubjects,
+    allFetchedClasses,
+    currentCohortRoster,
+    activeTemplate,
+    consolidatedEdits,
+    finalSummaryColumn
+  ]);
+
+  const handleConsolidatedCellEdit = (regNo, subjCode, value) => {
+    const regKey = normalizeRegNo(regNo);
+    if (!regKey || !subjCode) return;
+    setConsolidatedEdits(prev => ({
+      ...prev,
+      [`${regKey}::${subjCode}`]: value
+    }));
+  };
+
+  const activeRenderRows = isConsolidatedView ? consolidatedDataset.rows : studentsData;
+
   // Multi-page chunking: Balanced 2 Pages (Fit ONLY actual enrolled students cleanly into max 2 pages; Portrait fits more rows vertically)
   const studentPages = useMemo(() => {
-    const baseList = [...studentsData];
+    const baseList = [...activeRenderRows];
 
     if (baseList.length === 0) {
       return [[]];
@@ -1019,7 +1257,7 @@ export default function InternalMarkSheet() {
       pages.push(baseList.slice(i, i + chunkSize));
     }
     return pages;
-  }, [studentsData, formData.pageSplitMode, isPortraitMode]);
+  }, [activeRenderRows, formData.pageSplitMode, isPortraitMode]);
 
   // Dynamically scale row height & font in print so Header + Table + Signatures + Page Number fit cleanly in both Landscape and Portrait A4
   const printMetrics = useMemo(() => {
@@ -1042,10 +1280,11 @@ export default function InternalMarkSheet() {
   // Auto-fit student Name column width to longest enrolled name while keeping mark columns roomy within Portrait (~650px) or Landscape (~920px) budget
   const resolvedNameColWidth = useMemo(() => {
     if (formData.nameColWidth !== "auto") return formData.nameColWidth;
-    const maxChars = studentsData.reduce((mx, st) => Math.max(mx, (st.name || "").length), 14);
+    const maxChars = activeRenderRows.reduce((mx, st) => Math.max(mx, (st.name || "").length), 14);
     const totalBudget = isPortraitMode ? 650 : 920;
-    const minColSpace = isPortraitMode ? 36 : 40;
-    const reservedForMarks = Math.max(isPortraitMode ? 185 : 240, visibleColumns.length * minColSpace);
+    const activeMarkColCount = isConsolidatedView ? Math.max(1, visibleConsolidatedSubjects.length) : visibleColumns.length;
+    const minColSpace = isPortraitMode ? (isConsolidatedView ? 44 : 36) : 40;
+    const reservedForMarks = Math.max(isPortraitMode ? 185 : 240, activeMarkColCount * minColSpace);
     const maxAllowedForName = isPortraitMode
       ? Math.max(115, Math.min(200, totalBudget - reservedForMarks))
       : Math.max(145, Math.min(270, totalBudget - reservedForMarks));
@@ -1053,23 +1292,42 @@ export default function InternalMarkSheet() {
     const minName = isPortraitMode ? 115 : 145;
     const desired = Math.max(minName, Math.ceil(maxChars * charFactor + 14));
     return `${Math.min(maxAllowedForName, desired)}px`;
-  }, [formData.nameColWidth, studentsData, visibleColumns.length, isPortraitMode]);
-
-  // Identifies the final formula/total column for UI highlight & summary KPIs (no functional change)
-  const finalSummaryColumn = useMemo(() => {
-    return [...currentColumns].reverse().find(c => c.type === "formula" || c.type === "calculation")
-      || currentColumns[currentColumns.length - 1]
-      || null;
-  }, [currentColumns]);
-
-  // Minimum Internal Pass Mark configured in Admin Template for this Regulation (0 = disabled)
-  const internalPassMark = useMemo(() => {
-    const val = Number(activeTemplate?.passMark);
-    return !isNaN(val) && val > 0 ? val : 0;
-  }, [activeTemplate]);
+  }, [formData.nameColWidth, activeRenderRows, isConsolidatedView, visibleConsolidatedSubjects.length, visibleColumns.length, isPortraitMode]);
 
   // Derived screen-only KPI stats for visual overview
   const screenSummaryStats = useMemo(() => {
+    if (isConsolidatedView) {
+      const rows = consolidatedDataset.rows;
+      const summaryCol = consolidatedDataset.summaryCol || finalSummaryColumn;
+      if (!rows.length || !visibleConsolidatedSubjects.length) {
+        return { total: rows.length, highest: 0, average: "0.0", maxMark: summaryCol?.maxMark || "", belowPassCount: 0 };
+      }
+      const allVals = [];
+      let belowPassStudents = 0;
+      rows.forEach(st => {
+        let studentHasFail = false;
+        visibleConsolidatedSubjects.forEach(subj => {
+          const n = Number(st[subj.code]);
+          if (st[subj.code] !== "" && st[subj.code] !== undefined && st[subj.code] !== null && !isNaN(n)) {
+            allVals.push(n);
+            if (internalPassMark > 0 && n < internalPassMark) {
+              studentHasFail = true;
+            }
+          }
+        });
+        if (studentHasFail) belowPassStudents += 1;
+      });
+      const highest = allVals.length ? Math.max(...allVals) : 0;
+      const avg = allVals.length ? (allVals.reduce((a, b) => a + b, 0) / allVals.length).toFixed(1) : "0.0";
+      return {
+        total: rows.length,
+        highest,
+        average: avg,
+        maxMark: summaryCol?.maxMark || "",
+        belowPassCount: belowPassStudents
+      };
+    }
+
     if (!studentsData.length || !finalSummaryColumn) {
       return { total: studentsData.length, highest: 0, average: "0.0", maxMark: finalSummaryColumn?.maxMark || "", belowPassCount: 0 };
     }
@@ -1086,25 +1344,10 @@ export default function InternalMarkSheet() {
       maxMark: finalSummaryColumn.maxMark || "",
       belowPassCount
     };
-  }, [studentsData, finalSummaryColumn, internalPassMark]);
+  }, [isConsolidatedView, consolidatedDataset, visibleConsolidatedSubjects, studentsData, finalSummaryColumn, internalPassMark]);
 
   const handlePrint = () => {
     window.print();
-  };
-
-  // Normalizes cell values so numeric marks export as real Excel numbers without breaking "AB"/blank cells
-  const normalizeExcelCellValue = (val, isFormula) => {
-    if (isFormula) {
-      if (val === undefined || val === null || val === "") return 0;
-      const n = Number(val);
-      return isNaN(n) ? 0 : n;
-    }
-    if (val === undefined || val === null || val === "") return "";
-    const str = String(val).trim();
-    if (str !== "" && !isNaN(Number(str)) && typeof val !== "boolean") {
-      return Number(str);
-    }
-    return str;
   };
 
   // Builds a valid, unique Excel sheet tab name (max 31 chars, no invalid characters)
@@ -1253,69 +1496,92 @@ export default function InternalMarkSheet() {
     setShowExcelMenu(false);
   };
 
-  // Option 3: Export Final Internal Total Consolidated Summary Across All Subjects (.xlsx)
+  // Option 3: Export Final Internal Total Consolidated Summary Across Category Subjects (.xlsx)
   const handleExportSummaryExcel = () => {
-    const targetList = getExportSubjectList();
-    const summaryCol = [...currentColumns].reverse().find(c => c.type === "formula" || c.type === "calculation")
-      || currentColumns[currentColumns.length - 1];
-    const isSummaryFormula = Boolean(summaryCol && (summaryCol.type === "formula" || summaryCol.type === "calculation"));
-
-    const perSubjectRows = {};
-    const masterStudents = {};
-
-    targetList.forEach(subj => {
-      const evalRows = (subj.code === formData.selectedSubject && !formData.isCustomSubject)
-        ? studentsData
-        : buildEvaluatedRowsForSubject(allFetchedClasses, currentCohortRoster, subj.code, activeTemplate, subj.name, subj.shortName);
-      perSubjectRows[subj.code] = {};
-      evalRows.forEach(st => {
-        if (!st.regNo) return;
-        masterStudents[st.regNo] = { regNo: st.regNo, name: st.name || masterStudents[st.regNo]?.name || "" };
-        const rawTotal = summaryCol ? (st[summaryCol.colKey] !== undefined ? st[summaryCol.colKey] : st[summaryCol.heading]) : "";
-        perSubjectRows[subj.code][st.regNo] = normalizeExcelCellValue(rawTotal, isSummaryFormula);
-      });
-    });
-
-    const sortedStudents = Object.values(masterStudents).sort((a, b) =>
-      (a.regNo || "").localeCompare(b.regNo || "", undefined, { numeric: true })
+    const categoryPool = isConsolidatedView
+      ? visibleConsolidatedSubjects
+      : (consolidatedCategorySubjects.length > 0 ? consolidatedCategorySubjects : getExportSubjectList());
+    const targetList = categoryPool;
+    const { rows: consolidatedRows, summaryCol } = buildConsolidatedDataset(
+      targetList,
+      activeTemplate,
+      isConsolidatedView ? consolidatedEdits : {}
     );
 
     const totalCols = Math.max(5, 3 + targetList.length);
     const lastColIdx = totalCols - 1;
+    const iqacStartCol = Math.max(0, lastColIdx - 2);
+
+    const refRow = new Array(totalCols).fill("");
+    refRow[iqacStartCol] = formData.iqacRef;
+
+    const collegeRow = new Array(totalCols).fill("");
+    collegeRow[0] = "MUTHAYAMMAL ENGINEERING COLLEGE (AUTONOMOUS)";
+
+    const addressRow = new Array(totalCols).fill("");
+    addressRow[0] = "Rasipuram – 637 408, Namakkal (Dt.), Tamil Nadu, India.";
+
+    const metaRow = new Array(totalCols).fill("");
+    metaRow[0] = `Dept: ${formData.department}`;
+    metaRow[2] = `Year/Sem/Sec: ${formData.year}/${formData.semester}/${formData.section}`;
+    metaRow[Math.min(Math.max(3, Math.floor(totalCols * 0.48)), Math.max(3, lastColIdx - 1))] = formData.semesterSession;
+    metaRow[lastColIdx] = `Date: ${formData.date}`;
+
     const rows = [
-      ["MUTHAYAMMAL ENGINEERING COLLEGE (AUTONOMOUS)"],
-      [`Consolidated Internal Marks Summary (${summaryCol ? summaryCol.heading : "Total"})`],
-      [`Dept: ${formData.department}`, "", `Year/Sem/Sec: ${formData.year}/${formData.semester}/${formData.section}`, "", formData.semesterSession],
+      refRow,
+      collegeRow,
+      addressRow,
       [],
-      ["S.No", "Reg.No.", "Name", ...targetList.map(s => s.code)]
+      metaRow,
+      []
     ];
 
+    const headerRowIdx = rows.length;
+    rows.push(["S.No", "Reg.No.", "Name", ...targetList.map(s => s.code)]);
+    rows.push(["", "", "", ...targetList.map(s => getResolvedShortName(s, shortNameOverrides))]);
+
     let maxNameLen = 20;
-    sortedStudents.forEach((st, idx) => {
+    consolidatedRows.forEach((st, idx) => {
       if (st.name && st.name.length > maxNameLen) maxNameLen = st.name.length;
       rows.push([
         idx + 1,
         st.regNo,
         st.name,
-        ...targetList.map(subj => perSubjectRows[subj.code]?.[st.regNo] ?? 0)
+        ...targetList.map(subj => (st[subj.code] !== undefined ? st[subj.code] : 0))
       ]);
     });
+
+    rows.push([]);
+    rows.push([]);
+    const sigRow = new Array(totalCols).fill("");
+    sigRow[1] = "Class Advisor";
+    sigRow[Math.max(2, Math.floor(totalCols * 0.5))] = "Year Co-ordinator";
+    sigRow[Math.max(3, lastColIdx)] = "HoD";
+    rows.push(sigRow);
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: lastColIdx } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: lastColIdx } }
+      { s: { r: 0, c: iqacStartCol }, e: { r: 0, c: lastColIdx } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: lastColIdx } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: lastColIdx } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: 1 } },
+      { s: { r: headerRowIdx, c: 0 }, e: { r: headerRowIdx + 1, c: 0 } },
+      { s: { r: headerRowIdx, c: 1 }, e: { r: headerRowIdx + 1, c: 1 } },
+      { s: { r: headerRowIdx, c: 2 }, e: { r: headerRowIdx + 1, c: 2 } }
     ];
     ws["!cols"] = [
       { wch: 6 },
-      { wch: 16 },
-      { wch: Math.min(36, Math.max(24, maxNameLen + 3)) },
-      ...targetList.map(s => ({ wch: Math.max(12, String(s.code).length + 3) }))
+      { wch: 15 },
+      { wch: Math.min(34, Math.max(22, maxNameLen + 3)) },
+      ...targetList.map(s => ({
+        wch: Math.max(10, String(s.code || "").length + 2, String(getResolvedShortName(s, shortNameOverrides)).length + 3)
+      }))
     ];
-    ws["!pageSetup"] = { orientation: "landscape", paperSize: 9, fitToWidth: 1, fitToHeight: 0 };
-    XLSX.utils.book_append_sheet(wb, ws, "Consolidated Summary");
-    const filename = `Internal_Marks_Summary_${formData.department}_${formData.year}_Sem${formData.semester}_Sec${formData.section}.xlsx`;
+    ws["!pageSetup"] = { orientation: "portrait", paperSize: 9, fitToWidth: 1, fitToHeight: 2 };
+    const tabTitle = `Consolidated ${selectedCategory} (${summaryCol ? summaryCol.title : "Total"})`.slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, tabTitle);
+    const filename = `Consolidated_${selectedCategory}_Internal_Marks_${formData.department}_${formData.year}_Sem${formData.semester}_Sec${formData.section}.xlsx`;
     XLSX.writeFile(wb, filename);
     setShowExcelMenu(false);
   };
@@ -1369,20 +1635,71 @@ export default function InternalMarkSheet() {
                 </span>
               </div>
               <p style={{ color: "#64748b", margin: "2px 0 0 0", fontSize: "0.85rem" }}>
-                Admin-configured mark sheet with automatic calculations, Excel export, and A4 {isPortraitMode ? "Portrait" : "Landscape"} print.
+                {isConsolidatedView
+                  ? `Consolidated ${selectedCategory} sheet across all subjects • A4 Portrait print (${visibleConsolidatedSubjects.length} subjects).`
+                  : `Admin-configured mark sheet with automatic calculations, Excel export, and A4 ${isPortraitMode ? "Portrait" : "Landscape"} print.`}
               </p>
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            {/* Option A Inline View Mode Toggle */}
+            <div style={{
+              display: "inline-flex",
+              background: "#f1f5f9",
+              padding: "3px",
+              borderRadius: "10px",
+              border: "1px solid #cbd5e1",
+              gap: "3px"
+            }}>
+              <button
+                type="button"
+                onClick={() => handleViewModeChange("subject")}
+                style={{
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "7px 12px",
+                  fontSize: "0.82rem",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  background: !isConsolidatedView ? "#4f46e5" : "transparent",
+                  color: !isConsolidatedView ? "#ffffff" : "#475569",
+                  boxShadow: !isConsolidatedView ? "0 2px 6px rgba(79,70,229,0.28)" : "none",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                Subject-wise
+              </button>
+              <button
+                type="button"
+                onClick={() => handleViewModeChange("consolidated")}
+                style={{
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "7px 12px",
+                  fontSize: "0.82rem",
+                  fontWeight: "700",
+                  cursor: "pointer",
+                  background: isConsolidatedView ? "#0f766e" : "transparent",
+                  color: isConsolidatedView ? "#ffffff" : "#475569",
+                  boxShadow: isConsolidatedView ? "0 2px 6px rgba(15,118,110,0.28)" : "none",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                Consolidated ({selectedCategory})
+              </button>
+            </div>
+
             <button
               onClick={() => setShowColumnManager(!showColumnManager)}
-              className={`btn ${userHiddenColumns.length > 0 ? "btn-warning" : "btn-secondary"}`}
+              className={`btn ${(isConsolidatedView ? hiddenConsolidatedSubjects.length > 0 : userHiddenColumns.length > 0) ? "btn-warning" : "btn-secondary"}`}
               style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
-              title="Hide or show specific columns on report"
+              title={isConsolidatedView ? "Filter subjects & edit Row-2 short forms" : "Hide or show specific columns on report"}
             >
-              {userHiddenColumns.length > 0 ? <EyeOff size={16} /> : <Eye size={16} />}
-              Columns {userHiddenColumns.length > 0 ? `(${userHiddenColumns.length} Hidden)` : ""}
+              {(isConsolidatedView ? hiddenConsolidatedSubjects.length > 0 : userHiddenColumns.length > 0) ? <EyeOff size={16} /> : <Eye size={16} />}
+              {isConsolidatedView
+                ? `Subjects${hiddenConsolidatedSubjects.length > 0 ? ` (${hiddenConsolidatedSubjects.length} Hidden)` : ""}`
+                : `Columns${userHiddenColumns.length > 0 ? ` (${userHiddenColumns.length} Hidden)` : ""}`}
             </button>
 
             <button
@@ -1398,7 +1715,7 @@ export default function InternalMarkSheet() {
               <button
                 type="button"
                 onClick={() => setShowExcelMenu(prev => !prev)}
-                disabled={studentsData.length === 0 && subjects.length === 0}
+                disabled={activeRenderRows.length === 0 && subjects.length === 0}
                 className="btn btn-secondary"
                 style={{
                   height: "40px",
@@ -1423,7 +1740,7 @@ export default function InternalMarkSheet() {
                   position: "absolute",
                   top: "calc(100% + 8px)",
                   right: 0,
-                  minWidth: "290px",
+                  minWidth: "295px",
                   background: "#ffffff",
                   border: "1px solid rgba(16, 185, 129, 0.35)",
                   borderRadius: "12px",
@@ -1479,21 +1796,21 @@ export default function InternalMarkSheet() {
                   <button
                     type="button"
                     onClick={handleExportSummaryExcel}
-                    disabled={subjects.length === 0 && studentsData.length === 0}
+                    disabled={(consolidatedCategorySubjects.length === 0 && subjects.length === 0 && studentsData.length === 0) || (isConsolidatedView && visibleConsolidatedSubjects.length === 0)}
                     style={{
                       textAlign: "left",
                       padding: "10px 12px",
                       borderRadius: "8px",
-                      border: "none",
-                      background: "rgba(245, 158, 11, 0.09)",
+                      border: isConsolidatedView ? "1.5px solid #f59e0b" : "none",
+                      background: "rgba(245, 158, 11, 0.12)",
                       cursor: "pointer"
                     }}
                   >
                     <div style={{ fontWeight: "700", fontSize: "0.88rem", color: "#92400e" }}>
-                      3. Consolidated Total Summary (.xlsx)
+                      3. Consolidated {selectedCategory} Summary (.xlsx)
                     </div>
                     <div style={{ fontSize: "0.75rem", color: "#475569", marginTop: "2px" }}>
-                      All subjects&apos; final total mark side-by-side per student
+                      Official A4 Portrait 2-row header ({(isConsolidatedView ? visibleConsolidatedSubjects : consolidatedCategorySubjects).length} {selectedCategory} subjects)
                     </div>
                   </button>
                 </div>
@@ -1503,7 +1820,7 @@ export default function InternalMarkSheet() {
             <button
               onClick={handlePrint}
               className="btn btn-primary"
-              disabled={studentsData.length === 0}
+              disabled={activeRenderRows.length === 0 || (isConsolidatedView && visibleConsolidatedSubjects.length === 0)}
               style={{
                 height: "40px",
                 display: "flex",
@@ -1522,7 +1839,7 @@ export default function InternalMarkSheet() {
           </div>
         </div>
 
-        {/* COLUMN VISIBILITY DRAWER */}
+        {/* COLUMN / CONSOLIDATED SUBJECT & SHORT-FORM MANAGER DRAWER */}
         {showColumnManager && (
           <div style={{
             background: "linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98))",
@@ -1532,71 +1849,203 @@ export default function InternalMarkSheet() {
             marginBottom: "1.5rem",
             boxShadow: "0 10px 25px -5px rgba(99, 102, 241, 0.1)"
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "8px" }}>
-              <div>
-                <h4 style={{ margin: 0, fontWeight: "800", color: "#1e293b", fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Eye size={16} color="var(--primary)" /> Manage Columns to Show / Hide on Mark Sheet
-                </h4>
-                <p style={{ margin: "3px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
-                  Click to hide raw marks (like MKC or SEM). Hidden columns are omitted from printout & sheet, but formulas calculate them in the backend!
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                {hiddenColsMsg && (
-                  <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "#15803d", background: "rgba(34, 197, 94, 0.12)", padding: "4px 10px", borderRadius: "99px" }}>
-                    {hiddenColsMsg}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleShowAllColumns}
-                  className="btn btn-secondary btn-sm"
-                  style={{ fontSize: "0.78rem", padding: "6px 12px", borderRadius: "8px" }}
-                >
-                  Show All Columns
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveHiddenColumnsForRegulation}
-                  disabled={savingHiddenCols}
-                  className="btn btn-primary btn-sm"
-                  style={{ fontSize: "0.78rem", padding: "6px 14px", borderRadius: "8px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                >
-                  <Save size={14} /> {savingHiddenCols ? "Saving..." : `Save for Reg ${formData.regulation} (All Subjects)`}
-                </button>
-              </div>
-            </div>
+            {isConsolidatedView ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.85rem", flexWrap: "wrap", gap: "8px" }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontWeight: "800", color: "#1e293b", fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Eye size={16} color="var(--primary)" /> Consolidated {selectedCategory} Subjects & Short Forms
+                    </h4>
+                    <p style={{ margin: "3px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                      Toggle subjects to include on the Portrait Consolidated Sheet and customize Row-2 short labels (e.g. PS, CN, DAA, COA, WD, FDS).
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHiddenConsolidatedSubjects([]);
+                        persistConsolidatedPrefs([], shortNameOverrides);
+                      }}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: "0.78rem", padding: "6px 12px", borderRadius: "8px" }}
+                    >
+                      Show All {selectedCategory} Subjects
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShortNameOverrides({});
+                        persistConsolidatedPrefs(hiddenConsolidatedSubjects, {});
+                      }}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: "0.78rem", padding: "6px 12px", borderRadius: "8px" }}
+                    >
+                      Reset Short Forms
+                    </button>
+                  </div>
+                </div>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {currentColumns.map(col => {
-                const isHidden = userHiddenColumns.includes(col.colKey);
-                return (
-                  <button
-                    key={col.colKey}
-                    onClick={() => toggleColumnVisibility(col.colKey)}
-                    type="button"
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: "20px",
-                      fontSize: "0.82rem",
-                      fontWeight: "700",
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      transition: "all 0.15s ease",
-                      background: isHidden ? "rgba(239, 68, 68, 0.1)" : "rgba(99, 102, 241, 0.1)",
-                      color: isHidden ? "#ef4444" : "var(--primary)",
-                      border: isHidden ? "1px dashed rgba(239, 68, 68, 0.5)" : "1px solid rgba(99, 102, 241, 0.3)"
-                    }}
-                  >
-                    {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
-                    <span>{col.heading}</span>
-                    {isHidden && <span style={{ fontSize: "0.7rem", opacity: 0.85 }}>(Hidden)</span>}
-                  </button>
-                );
-              })}
-            </div>
+                {consolidatedCategorySubjects.length === 0 ? (
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
+                    No {selectedCategory} subjects found for {formData.department} {formData.year}/{formData.semester}/{formData.section}.
+                  </p>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "10px" }}>
+                    {consolidatedCategorySubjects.map(subj => {
+                      const isHidden = hiddenConsolidatedSubjects.includes(subj.code);
+                      const resolvedShort = getResolvedShortName(subj, shortNameOverrides);
+                      return (
+                        <div
+                          key={subj.code}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "12px",
+                            background: isHidden ? "rgba(254, 242, 242, 0.7)" : "#ffffff",
+                            border: isHidden ? "1px dashed rgba(239, 68, 68, 0.45)" : "1px solid #cbd5e1",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8px"
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: "800", fontSize: "0.84rem", color: "#0f172a" }}>{subj.code}</div>
+                              <div style={{ fontSize: "0.74rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={subj.name}>
+                                {subj.name}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextHidden = isHidden
+                                  ? hiddenConsolidatedSubjects.filter(c => c !== subj.code)
+                                  : [...hiddenConsolidatedSubjects, subj.code];
+                                setHiddenConsolidatedSubjects(nextHidden);
+                                persistConsolidatedPrefs(nextHidden, shortNameOverrides);
+                              }}
+                              style={{
+                                padding: "4px 10px",
+                                borderRadius: "99px",
+                                fontSize: "0.74rem",
+                                fontWeight: "700",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                border: isHidden ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(99,102,241,0.35)",
+                                background: isHidden ? "rgba(239,68,68,0.12)" : "rgba(99,102,241,0.1)",
+                                color: isHidden ? "#dc2626" : "#4338ca",
+                                flexShrink: 0
+                              }}
+                            >
+                              {isHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                              {isHidden ? "Hidden" : "Shown"}
+                            </button>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ fontSize: "0.74rem", fontWeight: "700", color: "#475569", whiteSpace: "nowrap" }}>Short:</span>
+                            <input
+                              type="text"
+                              value={shortNameOverrides[subj.code] !== undefined ? shortNameOverrides[subj.code] : resolvedShort}
+                              onChange={(e) => {
+                                const nextOverrides = {
+                                  ...shortNameOverrides,
+                                  [subj.code]: e.target.value.toUpperCase()
+                                };
+                                setShortNameOverrides(nextOverrides);
+                                persistConsolidatedPrefs(hiddenConsolidatedSubjects, nextOverrides);
+                              }}
+                              maxLength={12}
+                              placeholder={getDefaultShortName(subj)}
+                              style={{
+                                flex: 1,
+                                height: "28px",
+                                padding: "2px 8px",
+                                borderRadius: "7px",
+                                border: "1px solid #cbd5e1",
+                                fontSize: "0.78rem",
+                                fontWeight: "700",
+                                color: "#0f172a",
+                                textTransform: "uppercase"
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "8px" }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontWeight: "800", color: "#1e293b", fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Eye size={16} color="var(--primary)" /> Manage Columns to Show / Hide on Mark Sheet
+                    </h4>
+                    <p style={{ margin: "3px 0 0 0", fontSize: "0.8rem", color: "#64748b" }}>
+                      Click to hide raw marks (like MKC or SEM). Hidden columns are omitted from printout & sheet, but formulas calculate them in the backend!
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    {hiddenColsMsg && (
+                      <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "#15803d", background: "rgba(34, 197, 94, 0.12)", padding: "4px 10px", borderRadius: "99px" }}>
+                        {hiddenColsMsg}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleShowAllColumns}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: "0.78rem", padding: "6px 12px", borderRadius: "8px" }}
+                    >
+                      Show All Columns
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveHiddenColumnsForRegulation}
+                      disabled={savingHiddenCols}
+                      className="btn btn-primary btn-sm"
+                      style={{ fontSize: "0.78rem", padding: "6px 14px", borderRadius: "8px", display: "inline-flex", alignItems: "center", gap: "5px" }}
+                    >
+                      <Save size={14} /> {savingHiddenCols ? "Saving..." : `Save for Reg ${formData.regulation} (All Subjects)`}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {currentColumns.map(col => {
+                    const isHidden = userHiddenColumns.includes(col.colKey);
+                    return (
+                      <button
+                        key={col.colKey}
+                        onClick={() => toggleColumnVisibility(col.colKey)}
+                        type="button"
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: "20px",
+                          fontSize: "0.82rem",
+                          fontWeight: "700",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.15s ease",
+                          background: isHidden ? "rgba(239, 68, 68, 0.1)" : "rgba(99, 102, 241, 0.1)",
+                          color: isHidden ? "#ef4444" : "var(--primary)",
+                          border: isHidden ? "1px dashed rgba(239, 68, 68, 0.5)" : "1px solid rgba(99, 102, 241, 0.3)"
+                        }}
+                      >
+                        {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                        <span>{col.heading}</span>
+                        {isHidden && <span style={{ fontSize: "0.7rem", opacity: 0.85 }}>(Hidden)</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1817,49 +2266,112 @@ export default function InternalMarkSheet() {
               </select>
             </div>
 
-            {/* 7. Target Subject (Auto Detect & Bound) */}
-            <div style={{ gridColumn: "span 2", minWidth: "260px" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "var(--primary)", textTransform: "uppercase" }}>
-                <GraduationCap size={14} /> Target Subject (Auto Prints on Report)
-              </label>
-              <select 
-                className="input-field" 
-                value={formData.isCustomSubject ? "CUSTOM" : formData.selectedSubject} 
-                onChange={e => handleTargetSubjectChange(e.target.value)}
-                style={{ 
-                  border: "2px solid rgba(99, 102, 241, 0.3)", 
-                  background: "#ffffff", 
-                  fontWeight: "bold", 
-                  borderRadius: "10px" 
-                }}
-              >
-                {subjects.map(s => <option key={s.code} value={s.code}>{s.code} - {s.name}{s.isLab ? " (Lab)" : ""}</option>)}
-                <option value="CUSTOM">+ Type Custom Subject Code & Name</option>
-              </select>
-            </div>
-
-            {formData.isCustomSubject && (
-              <div style={{ gridColumn: "span 2" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "var(--primary)" }}>
-                  <Type size={14} /> Enter Subject Code & Name
+            {/* 7. Target Subject (Subject-wise) OR Consolidated Subject List Overview */}
+            {isConsolidatedView ? (
+              <div style={{ gridColumn: "span 2", minWidth: "260px" }}>
+                <label style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "#0f766e", textTransform: "uppercase" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <GraduationCap size={14} /> Consolidated {selectedCategory} Subjects ({visibleConsolidatedSubjects.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnManager(true)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#4f46e5",
+                      fontSize: "0.75rem",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textTransform: "none"
+                    }}
+                  >
+                    Filter / Edit Short Forms
+                  </button>
                 </label>
-                <input 
-                  type="text" 
-                  className="input-field" 
-                  placeholder="E.g. 21CS401 - Operating Systems"
-                  value={formData.customSubject}
-                  onChange={e => handleCustomSubjectChange(e.target.value)}
-                  style={{ border: "2px solid var(--primary)", background: "#ffffff", borderRadius: "10px" }}
-                  autoFocus
-                />
+                <div style={{
+                  minHeight: "40px",
+                  padding: "6px 10px",
+                  borderRadius: "10px",
+                  border: "1.5px solid rgba(15, 118, 110, 0.3)",
+                  background: "#ffffff",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: "6px"
+                }}>
+                  {visibleConsolidatedSubjects.length === 0 ? (
+                    <span style={{ fontSize: "0.82rem", color: "#dc2626", fontWeight: "600" }}>
+                      No {selectedCategory} subjects active — switch Theory / Lab above or restore hidden subjects.
+                    </span>
+                  ) : (
+                    visibleConsolidatedSubjects.map(s => (
+                      <span
+                        key={s.code}
+                        title={s.name || s.code}
+                        style={{
+                          fontSize: "0.75rem",
+                          fontWeight: "700",
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          background: selectedCategory === "Lab" ? "rgba(219, 39, 119, 0.09)" : "rgba(15, 118, 110, 0.1)",
+                          color: selectedCategory === "Lab" ? "#9d174d" : "#0f766e",
+                          border: selectedCategory === "Lab" ? "1px solid rgba(219, 39, 119, 0.25)" : "1px solid rgba(15, 118, 110, 0.25)"
+                        }}
+                      >
+                        {s.code} ({getResolvedShortName(s, shortNameOverrides)})
+                      </span>
+                    ))
+                  )}
+                </div>
               </div>
+            ) : (
+              <>
+                <div style={{ gridColumn: "span 2", minWidth: "260px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "var(--primary)", textTransform: "uppercase" }}>
+                    <GraduationCap size={14} /> Target Subject (Auto Prints on Report)
+                  </label>
+                  <select 
+                    className="input-field" 
+                    value={formData.isCustomSubject ? "CUSTOM" : formData.selectedSubject} 
+                    onChange={e => handleTargetSubjectChange(e.target.value)}
+                    style={{ 
+                      border: "2px solid rgba(99, 102, 241, 0.3)", 
+                      background: "#ffffff", 
+                      fontWeight: "bold", 
+                      borderRadius: "10px" 
+                    }}
+                  >
+                    {subjects.map(s => <option key={s.code} value={s.code}>{s.code} - {s.name}{s.isLab ? " (Lab)" : ""}</option>)}
+                    <option value="CUSTOM">+ Type Custom Subject Code & Name</option>
+                  </select>
+                </div>
+
+                {formData.isCustomSubject && (
+                  <div style={{ gridColumn: "span 2" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.8rem", fontWeight: "700", marginBottom: "0.45rem", color: "var(--primary)" }}>
+                      <Type size={14} /> Enter Subject Code & Name
+                    </label>
+                    <input 
+                      type="text" 
+                      className="input-field" 
+                      placeholder="E.g. 21CS401 - Operating Systems"
+                      value={formData.customSubject}
+                      onChange={e => handleCustomSubjectChange(e.target.value)}
+                      style={{ border: "2px solid var(--primary)", background: "#ffffff", borderRadius: "10px" }}
+                      autoFocus
+                    />
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           {/* Advanced Print & Layout Settings Toggle */}
           <div style={{ marginTop: "1.25rem", paddingTop: "1rem", borderTop: "1px dashed rgba(226, 232, 240, 0.8)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.85rem", color: "#64748b", flexWrap: "wrap" }}>
-              <span>Loaded Students: <strong style={{ color: "var(--primary)" }}>{studentsData.length}</strong></span>
+              <span>Loaded Students: <strong style={{ color: "var(--primary)" }}>{activeRenderRows.length}</strong></span>
               <span>•</span>
               <span>Print Pages: <strong style={{ color: "#16a34a" }}>{formData.pageSplitMode === "2pages" ? `Fit All in ${studentPages.length} Page${studentPages.length > 1 ? "s" : ""} (${isPortraitMode ? "Portrait" : "Landscape"})` : `${formData.pageSplitMode} Mode`}</strong></span>
               <span>•</span>
@@ -1869,7 +2381,7 @@ export default function InternalMarkSheet() {
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
-              {examLinksStatus.length > 0 && (
+              {!isConsolidatedView && examLinksStatus.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setShowExamLinks(prev => !prev)}
@@ -1888,7 +2400,7 @@ export default function InternalMarkSheet() {
             </div>
           </div>
 
-          {showExamLinks && examLinksStatus.length > 0 && (
+          {!isConsolidatedView && showExamLinks && examLinksStatus.length > 0 && (
             <div style={{ marginTop: "0.85rem", padding: "0.9rem 1rem", background: "rgba(248, 250, 252, 0.9)", borderRadius: "12px", border: "1px solid #cbd5e1" }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: allFetchedClasses.length > 0 ? "8px" : 0 }}>
                 {examLinksStatus.map((item, idx) => (
@@ -2046,7 +2558,7 @@ export default function InternalMarkSheet() {
         )}
 
         {/* SCREEN KPI OVERVIEW STRIP (HIDDEN IN PRINT) */}
-        {!loading && studentsData.length > 0 && (
+        {!loading && activeRenderRows.length > 0 && (!isConsolidatedView || visibleConsolidatedSubjects.length > 0) && (
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
@@ -2066,7 +2578,9 @@ export default function InternalMarkSheet() {
             <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "0.95rem 1.2rem", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 10px rgba(15,23,42,0.03)" }}>
               <div>
                 <div style={{ fontSize: "0.72rem", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                  Highest {finalSummaryColumn ? finalSummaryColumn.title : "Score"}
+                  {isConsolidatedView
+                    ? `Highest (${selectedCategory})`
+                    : `Highest ${finalSummaryColumn ? finalSummaryColumn.title : "Score"}`}
                 </div>
                 <div style={{ fontSize: "1.45rem", fontWeight: "800", color: "#059669", marginTop: "2px" }}>
                   {screenSummaryStats.highest}{screenSummaryStats.maxMark ? ` / ${screenSummaryStats.maxMark}` : ""}
@@ -2193,13 +2707,14 @@ export default function InternalMarkSheet() {
             overflow-wrap: anywhere;
             word-break: break-word;
           }
-          .print-sheet .mec-official-table thead tr.max-mark-row th {
+          .print-sheet .mec-official-table thead tr.max-mark-row th,
+          .print-sheet .mec-official-table thead tr.consolidated-short-row th {
             background: #f8fafc;
-            color: #64748b;
+            color: #334155;
             font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
             font-size: 11px;
             font-weight: 700;
-            padding: 5px 8px;
+            padding: 5px 6px;
           }
           .print-sheet .mec-official-table thead th.col-formula {
             background: #eef2ff;
@@ -2400,6 +2915,7 @@ export default function InternalMarkSheet() {
           .mec-official-table thead th.col-formula,
           .mec-official-table thead th.col-total,
           .mec-official-table thead tr.max-mark-row th,
+          .mec-official-table thead tr.consolidated-short-row th,
           .mec-official-table tbody tr.row-fail-mark,
           .mec-official-table tbody tr.row-fail-mark:nth-child(even),
           .mec-official-table tbody tr.row-fail-mark:hover,
@@ -2417,9 +2933,11 @@ export default function InternalMarkSheet() {
           }
           .mec-official-table th,
           .mec-official-table thead tr:first-child th,
-          .mec-official-table thead tr.max-mark-row th {
+          .mec-official-table thead tr.max-mark-row th,
+          .mec-official-table thead tr.consolidated-short-row th {
             font-family: "Times New Roman", Times, serif !important;
-            font-size: ${isPortraitMode ? "8px" : "9.5px"} !important;
+            font-size: ${isPortraitMode ? (isConsolidatedView ? "8.5px" : "8px") : "9.5px"} !important;
+            font-weight: bold !important;
             line-height: 1.15 !important;
           }
           .mec-official-table th.col-mark {
@@ -2510,8 +3028,8 @@ export default function InternalMarkSheet() {
         }
       `}</style>
 
-      {/* RENDER PAGES (PAGE 1 HAS FULL HEADER, PAGE 2 HAS ONLY COURSE CODE/NAME & SIGNATURES) */}
-      {!loading && (
+      {/* RENDER PAGES (PAGE 1 HAS FULL HEADER, PAGE 2 HAS COMPACT CONTINUATION & SIGNATURES) */}
+      {!loading && activeRenderRows.length > 0 && (!isConsolidatedView || visibleConsolidatedSubjects.length > 0) && (
         <div className="print-container">
           {studentPages.map((pageStudents, pageIndex) => {
             const pageNum = pageIndex + 1;
@@ -2535,7 +3053,7 @@ export default function InternalMarkSheet() {
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <span style={{
-                        background: "linear-gradient(135deg, #4f46e5, #6366f1)",
+                        background: isConsolidatedView ? "linear-gradient(135deg, #0f766e, #14b8a6)" : "linear-gradient(135deg, #4f46e5, #6366f1)",
                         color: "#ffffff",
                         fontSize: "0.76rem",
                         fontWeight: "700",
@@ -2546,16 +3064,19 @@ export default function InternalMarkSheet() {
                       </span>
                       <span style={{ fontSize: "0.8rem", fontWeight: "600", color: "#475569" }}>
                         Rows {startSno} – {startSno + pageStudents.length - 1}
+                        {isConsolidatedView ? ` • Consolidated ${selectedCategory}` : ""}
                       </span>
                     </div>
                     <span style={{ fontSize: "0.78rem", fontWeight: "600", color: isEditingMarks ? "#d97706" : "#64748b" }}>
                       {isEditingMarks
-                        ? "Inline Editing Mode • Changes recalculate automatically"
+                        ? isConsolidatedView
+                          ? "Inline Consolidated Editing Mode"
+                          : "Inline Editing Mode • Changes recalculate automatically"
                         : `Screen Preview • Prints in Official A4 ${isPortraitMode ? "Portrait" : "Landscape"} Format`}
                     </span>
                   </div>
 
-                  {/* TOP HEADER: PAGE 1 HAS FULL BANNER, PAGE 2 HAS ONLY COURSE CODE/NAME (Image 1 & 2) */}
+                  {/* TOP HEADER: PAGE 1 HAS FULL BANNER, PAGE 2 HAS COMPACT CONTINUATION */}
                   {pageIndex === 0 ? (
                     <div>
                       {/* Top Right Reference Code */}
@@ -2605,124 +3126,227 @@ export default function InternalMarkSheet() {
                         <div style={{ flex: "1", textAlign: "right" }}>Date: {formData.date}</div>
                       </div>
 
-                      {/* Metadata Row 2 */}
-                      <div style={{ fontSize: "10pt", fontWeight: "bold", margin: "2px 0 5px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left", color: "#000000" }}>
-                        Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
-                      </div>
+                      {/* Metadata Row 2 (Only in Subject-wise mode) */}
+                      {!isConsolidatedView && (
+                        <div style={{ fontSize: "10pt", fontWeight: "bold", margin: "2px 0 5px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left", color: "#000000" }}>
+                          Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    /* PAGE 2 HEADER: ONLY COURSE CODE/NAME (Image 1) */
+                    /* PAGE 2 HEADER */
                     <div>
-                      <div style={{ fontSize: "11px", fontWeight: "bold", margin: "0 0 4px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left" }}>
-                        Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
-                      </div>
+                      {isConsolidatedView ? (
+                        <div style={{ fontSize: "10.5px", fontWeight: "bold", margin: "0 0 4px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left", color: "#000000" }}>
+                          Dept: {formData.department} &nbsp;|&nbsp; Year/Sem/Sec: {formData.year}/{formData.semester}/{formData.section} &nbsp;|&nbsp; Consolidated {selectedCategory} Internal Marks
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "11px", fontWeight: "bold", margin: "0 0 4px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left" }}>
+                          Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
                   {/* TABLE WRAPPER */}
                   <div className="table-responsive-wrapper" style={{ width: "100%", overflowX: "auto" }}>
                     <table className={`mec-official-table ${formData.tableWidthMode === "autoFit" ? "auto-fit-table" : "full-width-table"}`}>
-                      <thead>
-                        {/* HEADER ROW 1 */}
-                        <tr>
-                          <th rowSpan={hasSubHeaders ? 2 : 1} className="col-sno">S.No</th>
-                          <th rowSpan={hasSubHeaders ? 2 : 1} className="col-reg">Reg.No.</th>
-                          <th 
-                            rowSpan={hasSubHeaders ? 2 : 1} 
-                            className="col-name"
-                            style={{
-                              width: resolvedNameColWidth,
-                              maxWidth: resolvedNameColWidth
-                            }}
-                          >
-                            Name
-                          </th>
-                          {visibleColumns.map((col, idx) => {
-                            const isFormula = col.type === "formula" || col.type === "calculation";
-                            const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
-                            return (
-                              <th key={idx} className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""}`}>
-                                {col.title}
-                              </th>
-                            );
-                          })}
-                        </tr>
-
-                        {/* HEADER ROW 2 (MAX MARKS ROW) */}
-                        {hasSubHeaders && (
-                          <tr className="max-mark-row">
-                            {visibleColumns.map((col, idx) => {
-                              const isFormula = col.type === "formula" || col.type === "calculation";
-                              const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
-                              return (
-                                <th key={idx} className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""}`}>
-                                  {col.maxMark}
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        )}
-                      </thead>
-
-                      <tbody>
-                        {pageStudents.map((st, i) => {
-                          const sNo = st.sNo || (startSno + i);
-                          const globalIndex = startSno - 1 + i;
-                          const finalScoreRaw = finalSummaryColumn ? (st[finalSummaryColumn.colKey] ?? st[finalSummaryColumn.heading]) : undefined;
-                          const finalScoreVal = Number(finalScoreRaw);
-                          const isBelowPass = Boolean(!st.isPlaceholder && internalPassMark > 0 && !isNaN(finalScoreVal) && finalScoreVal < internalPassMark);
-
-                          return (
-                            <tr key={st.regNo || i} className={isBelowPass ? "row-fail-mark" : ""}>
-                              <td className="col-sno">{sNo}</td>
-                              <td className="col-reg">{st.regNo || ""}</td>
-                              <td 
-                                className="col-name name-col" 
-                                title={st.name}
+                      {isConsolidatedView ? (
+                        <>
+                          <thead>
+                            <tr>
+                              <th rowSpan={2} className="col-sno">S.No</th>
+                              <th rowSpan={2} className="col-reg">Reg.No.</th>
+                              <th
+                                rowSpan={2}
+                                className="col-name"
                                 style={{
                                   width: resolvedNameColWidth,
                                   maxWidth: resolvedNameColWidth
                                 }}
                               >
-                                {st.name || ""}
-                              </td>
+                                Name
+                              </th>
+                              {visibleConsolidatedSubjects.map(subj => (
+                                <th
+                                  key={subj.code}
+                                  className="col-mark consolidated-code-th"
+                                  title={subj.name || subj.code}
+                                >
+                                  {subj.code}
+                                </th>
+                              ))}
+                            </tr>
+                            <tr className="consolidated-short-row">
+                              {visibleConsolidatedSubjects.map(subj => (
+                                <th
+                                  key={subj.code}
+                                  className="col-mark consolidated-short-th"
+                                  title={subj.name || subj.code}
+                                >
+                                  {getResolvedShortName(subj, shortNameOverrides)}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
 
-                              {visibleColumns.map((col, colIdx) => {
+                          <tbody>
+                            {pageStudents.map((st, i) => {
+                              const sNo = st.sNo || (startSno + i);
+                              return (
+                                <tr key={st.regNo || i}>
+                                  <td className="col-sno">{sNo}</td>
+                                  <td className="col-reg">{st.regNo || ""}</td>
+                                  <td
+                                    className="col-name name-col"
+                                    title={st.name}
+                                    style={{
+                                      width: resolvedNameColWidth,
+                                      maxWidth: resolvedNameColWidth
+                                    }}
+                                  >
+                                    {st.name || ""}
+                                  </td>
+
+                                  {visibleConsolidatedSubjects.map(subj => {
+                                    const rawVal = st[subj.code];
+                                    const displayVal = rawVal !== undefined && rawVal !== null ? rawVal : "";
+                                    const numVal = Number(displayVal);
+                                    const isAbsent = String(displayVal).trim().toUpperCase() === "AB";
+                                    const isBelowPass = Boolean(
+                                      !st.isPlaceholder &&
+                                      internalPassMark > 0 &&
+                                      displayVal !== "" &&
+                                      !isNaN(numVal) &&
+                                      numVal < internalPassMark
+                                    );
+                                    return (
+                                      <td
+                                        key={subj.code}
+                                        className={`col-mark ${isBelowPass ? "cell-fail-mark" : ""} ${isAbsent ? "cell-absent" : ""}`}
+                                      >
+                                        {isEditingMarks && !st.isPlaceholder ? (
+                                          <input
+                                            className="editable-cell-input"
+                                            value={displayVal}
+                                            onChange={e => handleConsolidatedCellEdit(st.regNo, subj.code, e.target.value)}
+                                          />
+                                        ) : (
+                                          displayVal
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </>
+                      ) : (
+                        <>
+                          <thead>
+                            {/* HEADER ROW 1 */}
+                            <tr>
+                              <th rowSpan={hasSubHeaders ? 2 : 1} className="col-sno">S.No</th>
+                              <th rowSpan={hasSubHeaders ? 2 : 1} className="col-reg">Reg.No.</th>
+                              <th 
+                                rowSpan={hasSubHeaders ? 2 : 1} 
+                                className="col-name"
+                                style={{
+                                  width: resolvedNameColWidth,
+                                  maxWidth: resolvedNameColWidth
+                                }}
+                              >
+                                Name
+                              </th>
+                              {visibleColumns.map((col, idx) => {
                                 const isFormula = col.type === "formula" || col.type === "calculation";
                                 const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
-                                const rawVal = st[col.colKey] !== undefined ? st[col.colKey] : st[col.heading];
-
-                                let displayVal = "";
-                                if (isFormula) {
-                                  displayVal = (rawVal !== undefined && rawVal !== null && rawVal !== "") ? rawVal : 0;
-                                } else {
-                                  displayVal = (rawVal !== undefined && rawVal !== null) ? rawVal : "";
-                                }
-                                const isAbsent = String(displayVal).trim().toUpperCase() === "AB";
-                                const highlightFailBox = isTotal && isBelowPass;
-
                                 return (
-                                  <td 
-                                    key={colIdx} 
-                                    className={`col-mark ${highlightFailBox ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
-                                    style={{ fontWeight: isFormula ? "bold" : "normal" }}
-                                  >
-                                    {isEditingMarks && !isFormula && !st.isPlaceholder ? (
-                                      <input 
-                                        className="editable-cell-input" 
-                                        value={displayVal} 
-                                        onChange={e => handleCellEdit(globalIndex, col.colKey, e.target.value)} 
-                                      />
-                                    ) : (
-                                      displayVal
-                                    )}
-                                  </td>
+                                  <th key={idx} className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""}`}>
+                                    {col.title}
+                                  </th>
                                 );
                               })}
                             </tr>
-                          );
-                        })}
-                      </tbody>
+
+                            {/* HEADER ROW 2 (MAX MARKS ROW) */}
+                            {hasSubHeaders && (
+                              <tr className="max-mark-row">
+                                {visibleColumns.map((col, idx) => {
+                                  const isFormula = col.type === "formula" || col.type === "calculation";
+                                  const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
+                                  return (
+                                    <th key={idx} className={`col-mark ${isTotal ? "col-total" : isFormula ? "col-formula" : ""}`}>
+                                      {col.maxMark}
+                                    </th>
+                                  );
+                                })}
+                              </tr>
+                            )}
+                          </thead>
+
+                          <tbody>
+                            {pageStudents.map((st, i) => {
+                              const sNo = st.sNo || (startSno + i);
+                              const globalIndex = startSno - 1 + i;
+                              const finalScoreRaw = finalSummaryColumn ? (st[finalSummaryColumn.colKey] ?? st[finalSummaryColumn.heading]) : undefined;
+                              const finalScoreVal = Number(finalScoreRaw);
+                              const isBelowPass = Boolean(!st.isPlaceholder && internalPassMark > 0 && !isNaN(finalScoreVal) && finalScoreVal < internalPassMark);
+
+                              return (
+                                <tr key={st.regNo || i} className={isBelowPass ? "row-fail-mark" : ""}>
+                                  <td className="col-sno">{sNo}</td>
+                                  <td className="col-reg">{st.regNo || ""}</td>
+                                  <td 
+                                    className="col-name name-col" 
+                                    title={st.name}
+                                    style={{
+                                      width: resolvedNameColWidth,
+                                      maxWidth: resolvedNameColWidth
+                                    }}
+                                  >
+                                    {st.name || ""}
+                                  </td>
+
+                                  {visibleColumns.map((col, colIdx) => {
+                                    const isFormula = col.type === "formula" || col.type === "calculation";
+                                    const isTotal = finalSummaryColumn && col.colKey === finalSummaryColumn.colKey;
+                                    const rawVal = st[col.colKey] !== undefined ? st[col.colKey] : st[col.heading];
+
+                                    let displayVal = "";
+                                    if (isFormula) {
+                                      displayVal = (rawVal !== undefined && rawVal !== null && rawVal !== "") ? rawVal : 0;
+                                    } else {
+                                      displayVal = (rawVal !== undefined && rawVal !== null) ? rawVal : "";
+                                    }
+                                    const isAbsent = String(displayVal).trim().toUpperCase() === "AB";
+                                    const highlightFailBox = isTotal && isBelowPass;
+
+                                    return (
+                                      <td 
+                                        key={colIdx} 
+                                        className={`col-mark ${highlightFailBox ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
+                                        style={{ fontWeight: isFormula ? "bold" : "normal" }}
+                                      >
+                                        {isEditingMarks && !isFormula && !st.isPlaceholder ? (
+                                          <input 
+                                            className="editable-cell-input" 
+                                            value={displayVal} 
+                                            onChange={e => handleCellEdit(globalIndex, col.colKey, e.target.value)} 
+                                          />
+                                        ) : (
+                                          displayVal
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </>
+                      )}
                     </table>
                   </div>
                 </div>
@@ -2740,7 +3364,7 @@ export default function InternalMarkSheet() {
                       fontFamily: '"Times New Roman", Times, serif' 
                     }}>
                       <div style={{ textAlign: "center", minWidth: "120px" }}>
-                        <div>Course Faculty</div>
+                        <div>{isConsolidatedView ? "Class Advisor" : "Course Faculty"}</div>
                       </div>
                       <div style={{ textAlign: "center", minWidth: "140px" }}>
                         <div>Year Co-ordinator</div>
@@ -2762,8 +3386,39 @@ export default function InternalMarkSheet() {
         </div>
       )}
 
+      {/* EMPTY CONSOLIDATED SUBJECTS STATE */}
+      {!loading && isConsolidatedView && activeRenderRows.length > 0 && visibleConsolidatedSubjects.length === 0 && (
+        <div className="no-print" style={{ textAlign: "center", padding: "2.5rem", background: "var(--bg-secondary)", borderRadius: "16px", border: "1px dashed var(--border-color)", marginTop: "1rem" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "1.05rem", margin: "0 0 0.75rem 0", fontWeight: "600" }}>
+            {consolidatedCategorySubjects.length === 0
+              ? `No ${selectedCategory} courses found for ${formData.department} ${formData.year}/${formData.semester}/${formData.section}.`
+              : `All ${selectedCategory} courses are currently hidden on the Consolidated Sheet.`}
+          </p>
+          {consolidatedCategorySubjects.length === 0 ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => applyCategoryAndResolveTemplate(selectedCategory === "Lab" ? "Theory" : "Lab")}
+            >
+              Switch to {selectedCategory === "Lab" ? "Theory" : "Lab"} Consolidated Sheet
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setHiddenConsolidatedSubjects([]);
+                persistConsolidatedPrefs([], shortNameOverrides);
+              }}
+            >
+              Show All {selectedCategory} Subjects
+            </button>
+          )}
+        </div>
+      )}
+
       {/* EMPTY STATE */}
-      {!loading && studentsData.length === 0 && (
+      {!loading && activeRenderRows.length === 0 && (
         <div className="no-print" style={{ textAlign: "center", padding: "3rem", background: "var(--bg-secondary)", borderRadius: "16px", border: "1px dashed var(--border-color)", marginTop: "1rem" }}>
           <p style={{ color: "var(--text-muted)", fontSize: "1.1rem", margin: "0 0 0.5rem 0" }}>
             No students found for {formData.department} {formData.year}/{formData.semester}/{formData.section}.
