@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import API from "../api";
 import * as XLSX from "xlsx";
+import { safeGetSession } from "../utils/safeStorage";
 import {
   normStr,
   normalizeRegNo,
@@ -121,7 +122,9 @@ export default function InternalMarkSheet() {
   const [loading, setLoading] = useState(false);
   const [currentCohortRoster, setCurrentCohortRoster] = useState(null);
   const [allFetchedClasses, setAllFetchedClasses] = useState([]);
+  const isAdmin = safeGetSession("role").toLowerCase() === "admin";
   const [isEditingMarks, setIsEditingMarks] = useState(false);
+  const canEditInline = isAdmin && isEditingMarks;
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [userHiddenColumns, setUserHiddenColumns] = useState([]);
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -1702,14 +1705,16 @@ export default function InternalMarkSheet() {
                 : `Columns${userHiddenColumns.length > 0 ? ` (${userHiddenColumns.length} Hidden)` : ""}`}
             </button>
 
-            <button
-              onClick={() => setIsEditingMarks(!isEditingMarks)}
-              className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
-              style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
-              title="Toggle inline mark editing"
-            >
-              <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setIsEditingMarks(!isEditingMarks)}
+                className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
+                style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
+                title="Toggle inline mark editing"
+              >
+                <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
+              </button>
+            )}
 
             <div ref={excelMenuRef} style={{ position: "relative" }}>
               <button
@@ -3067,8 +3072,8 @@ export default function InternalMarkSheet() {
                         {isConsolidatedView ? ` • Consolidated ${selectedCategory}` : ""}
                       </span>
                     </div>
-                    <span style={{ fontSize: "0.78rem", fontWeight: "600", color: isEditingMarks ? "#d97706" : "#64748b" }}>
-                      {isEditingMarks
+                    <span style={{ fontSize: "0.78rem", fontWeight: "600", color: canEditInline ? "#d97706" : "#64748b" }}>
+                      {canEditInline
                         ? isConsolidatedView
                           ? "Inline Consolidated Editing Mode"
                           : "Inline Editing Mode • Changes recalculate automatically"
@@ -3225,7 +3230,7 @@ export default function InternalMarkSheet() {
                                         key={subj.code}
                                         className={`col-mark ${isBelowPass ? "cell-fail-mark" : ""} ${isAbsent ? "cell-absent" : ""}`}
                                       >
-                                        {isEditingMarks && !st.isPlaceholder ? (
+                                        {canEditInline && !st.isPlaceholder ? (
                                           <input
                                             className="editable-cell-input"
                                             value={displayVal}
@@ -3329,7 +3334,7 @@ export default function InternalMarkSheet() {
                                         className={`col-mark ${highlightFailBox ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
                                         style={{ fontWeight: isFormula ? "bold" : "normal" }}
                                       >
-                                        {isEditingMarks && !isFormula && !st.isPlaceholder ? (
+                                        {canEditInline && !isFormula && !st.isPlaceholder ? (
                                           <input 
                                             className="editable-cell-input" 
                                             value={displayVal} 

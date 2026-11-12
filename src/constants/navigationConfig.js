@@ -117,3 +117,4 @@ export const RESULT_HUB_PAGES = [
     hasPendingBadge: true
   }
 ];
+

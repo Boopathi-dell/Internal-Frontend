@@ -243,3 +243,4 @@ export const findExamMarkForStudent = (
   }
   return "";
 };
+

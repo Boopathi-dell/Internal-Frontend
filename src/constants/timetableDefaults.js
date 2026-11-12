@@ -9,3 +9,4 @@ export const DEFAULT_PERIOD_TIMINGS = {
   6: "02:40 - 03:35",
   7: "03:35 - 04:30"
 };
+

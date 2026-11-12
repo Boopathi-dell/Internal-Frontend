@@ -117,3 +117,4 @@ export const requestNotificationPermissionSafe = async () => {
     return "denied";
   }
 };
+
