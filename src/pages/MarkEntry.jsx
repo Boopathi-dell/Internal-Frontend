@@ -1463,15 +1463,11 @@ export default function MarkEntry() {
             </div>
           )}
 
-          {/* SCREEN-ONLY EXAM MAX / PASS / TOTAL OUT-OF STRIP (NEVER PRINTS) */}
+          {/* SCREEN-ONLY EXAM MAX / PASS STRIP (NEVER PRINTS) */}
           {(() => {
             const isESE = classData.examName === "ESE";
-            const activeSubjectCount = focusedSubjectIndices.length > 0
-              ? focusedSubjectIndices.length
-              : (classData.subjects || []).length;
             const maxVal = Number(classData.markPerSubject) || 0;
             const passVal = Number(classData.passMark) || 0;
-            const totalOutOf = isESE ? activeSubjectCount * 10 : activeSubjectCount * maxVal;
             const passPercent = (!isESE && maxVal > 0) ? Math.round((passVal / maxVal) * 100) : 0;
 
             return (
@@ -1546,16 +1542,6 @@ export default function MarkEntry() {
                           fontSize: "0.88rem"
                         }}>
                           Pass Mark: {passVal}{maxVal > 0 ? ` (${passPercent}%)` : ""}
-                        </span>
-                        <span style={{
-                          padding: "4px 12px",
-                          borderRadius: "8px",
-                          background: "rgba(59, 130, 246, 0.14)",
-                          color: "#1d4ed8",
-                          fontWeight: "800",
-                          fontSize: "0.88rem"
-                        }}>
-                          Total Out Of: {totalOutOf} ({activeSubjectCount} {activeSubjectCount === 1 ? "Subj" : "Subjs"})
                         </span>
                         <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: "600" }}>
                           Entry: 0–{maxVal} or AB / A
@@ -1973,14 +1959,7 @@ export default function MarkEntry() {
                       {getCourseDetails()[idx]?.courseCode || sub}
                     </th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px" }}>
-                    {classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}
-                    {classData.examName !== "ESE" && (
-                      <div className="no-print" style={{ fontSize: "9.5px", fontWeight: "700", color: "#4f46e5", marginTop: "2px" }}>
-                        (Out of {(focusedSubjectIndices.length > 0 ? focusedSubjectIndices.length : (classData.subjects || []).length) * (Number(classData.markPerSubject) || 0)})
-                      </div>
-                    )}
-                  </th>
+                  <th rowSpan="2" style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass %</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass/<br />Fail</th>
                 </tr>
@@ -1988,12 +1967,7 @@ export default function MarkEntry() {
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
                   {getCourseDetails().map((cd, idx) => (
                     <th key={`cn-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px", fontWeight: "bold", color: "black" }}>
-                      <div>{cd.shortName || cd.courseName}</div>
-                      {classData.examName !== "ESE" && (
-                        <div className="no-print" style={{ fontSize: "9px", fontWeight: "700", color: "#0f766e", marginTop: "2px" }}>
-                          Max:{classData.markPerSubject} | Pass:{classData.passMark}
-                        </div>
-                      )}
+                      {cd.shortName || cd.courseName}
                     </th>
                   ))}
                 </tr>
