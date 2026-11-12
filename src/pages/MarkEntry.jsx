@@ -7,7 +7,8 @@ import { getSubjectLabel } from "../utils/subjectClearUtils";
 import {
   getCachedExamNames,
   mergeCachedExamNames,
-  buildDynamicExamOptions
+  buildDynamicExamOptions,
+  formatExamOptionLabel
 } from "../utils/examCatalog";
 
 
@@ -57,11 +58,19 @@ const LocalMarkInput = ({ s, j, classData, printEditAccess, isEditingLockedByDat
       : (s.marks[j] === "AB" || s.marks[j] === "A" || (s.marks[j] !== "" && !isNaN(Number(s.marks[j])) && Number(s.marks[j]) < classData.passMark))
   );
 
+  const isESE = classData.examName === "ESE";
+  const inputPlaceholder = isESE ? "Grade" : `0-${classData.markPerSubject ?? ""}`;
+  const inputTitle = isESE
+    ? `Enter Grade (${classData.eseGradingSystem || "System 2"}) or AB`
+    : `Out of ${classData.markPerSubject} (Min Pass: ${classData.passMark}) • AB for Absent`;
+
   return (
     <input
       type="text"
       className="mark-input"
       enterKeyHint="next"
+      placeholder={inputPlaceholder}
+      title={inputTitle}
       style={{
         fontSize: "11px",
         height: "100%",
@@ -117,6 +126,20 @@ export default function MarkEntry() {
   const [clearSubjectIdx, setClearSubjectIdx] = useState(0);
   const [isClearingMarks, setIsClearingMarks] = useState(false);
   const [lastClearBackup, setLastClearBackup] = useState(null);
+  const [isEditingLimits, setIsEditingLimits] = useState(false);
+  const [savingLimits, setSavingLimits] = useState(false);
+  const [limitsForm, setLimitsForm] = useState({ markPerSubject: "", passMark: "", syncAllSections: false });
+
+  useEffect(() => {
+    if (classData) {
+      setLimitsForm({
+        markPerSubject: String(classData.markPerSubject ?? ""),
+        passMark: String(classData.passMark ?? ""),
+        syncAllSections: false
+      });
+      setIsEditingLimits(false);
+    }
+  }, [classData?._id, classData?.className, classData?.markPerSubject, classData?.passMark]);
 
   useEffect(() => {
     if (focusedSubjectIndices.length === 1) {
@@ -138,6 +161,67 @@ export default function MarkEntry() {
   const classDataRef = useRef(classData);
   classDataRef.current = classData;
   const lastClassesFetchRef = useRef(0);
+  const toastTimerRef = useRef(null);
+
+  const showQuickToast = (message, type = "error", duration = 2600) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ show: true, message, type });
+    toastTimerRef.current = setTimeout(() => {
+      setToast({ show: false, message: "", type: "" });
+    }, duration);
+  };
+
+  const handleSaveMarkLimits = async () => {
+    if (!isAdmin || !classData) return;
+    const maxNum = Number(limitsForm.markPerSubject);
+    const passNum = Number(limitsForm.passMark);
+    if (!Number.isFinite(maxNum) || maxNum <= 0) {
+      showQuickToast("Max Mark must be greater than 0.", "error");
+      return;
+    }
+    if (!Number.isFinite(passNum) || passNum < 0 || (classData.examName !== "ESE" && passNum > maxNum)) {
+      showQuickToast(`Pass Mark must be between 0 and ${maxNum}.`, "error");
+      return;
+    }
+
+    setSavingLimits(true);
+    try {
+      if (unsavedChanges) {
+        await API.post(`/api/classes/${encodeURIComponent(classData.className)}/marks`, {
+          students: classData.students,
+          isAdmin: true
+        });
+        setUnsavedChanges(false);
+        setLastAutoSave(new Date());
+      }
+
+      const res = await API.put(
+        `/api/classes/${encodeURIComponent(classData.className)}/mark-limits`,
+        {
+          markPerSubject: maxNum,
+          passMark: passNum,
+          syncAllSections: limitsForm.syncAllSections
+        },
+        { headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` } }
+      );
+
+      setClassData(normalizeLoadedClassData(res.data.classData));
+      setIsEditingLimits(false);
+      await loadClasses({ silent: true, force: true });
+      const syncedCount = Number(res.data.updatedCount) || 1;
+      showQuickToast(
+        syncedCount > 1
+          ? `Updated Max: ${maxNum} / Pass: ${passNum} across ${syncedCount} section(s)!`
+          : `Updated Max: ${maxNum} / Pass: ${passNum} & recalculated results!`,
+        "success",
+        3500
+      );
+    } catch (err) {
+      showQuickToast(err.response?.data?.error || err.message, "error", 4000);
+    } finally {
+      setSavingLimits(false);
+    }
+  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
@@ -631,7 +715,7 @@ export default function MarkEntry() {
       const sys2Grades = ["O", "A+", "A", "B+", "B", "C", "U", "U*"];
       const validGrades = classData.eseGradingSystem === "System 1" ? sys1Grades : sys2Grades;
       if (strVal !== "" && !validGrades.includes(strVal)) {
-        alert(`Invalid grade '${strVal}' for ${classData.eseGradingSystem || "this system"}.\nAllowed grades: ${validGrades.join(", ")}`);
+        showQuickToast(`Invalid grade '${strVal}'. Allowed: ${validGrades.join(", ")}`, "error");
         const newStudents = [...classData.students];
         newStudents[studentIndex].marks[subjectIndex] = "";
         setClassData({ ...classData, students: newStudents });
@@ -642,9 +726,11 @@ export default function MarkEntry() {
         let numVal = Number(value);
         if (isNaN(numVal) || numVal < 0 || numVal > classData.markPerSubject) {
           if (isNaN(numVal)) {
-            alert(`Invalid entry '${strVal}'. Only numbers, 'A' or 'AB' are allowed.`);
+            showQuickToast(`Invalid entry '${strVal}'. Enter 0–${classData.markPerSubject}, 'A' or 'AB'.`, "error");
+          } else if (numVal < 0) {
+            showQuickToast(`Mark cannot be negative (0–${classData.markPerSubject}).`, "error");
           } else if (numVal > classData.markPerSubject) {
-            alert(`Max mark is ${classData.markPerSubject}`);
+            showQuickToast(`Max mark is ${classData.markPerSubject} (Pass: ${classData.passMark}).`, "error");
           }
           const newStudents = [...classData.students];
           newStudents[studentIndex].marks[subjectIndex] = "";
@@ -1209,8 +1295,15 @@ export default function MarkEntry() {
             onMouseDown={() => loadClasses({ silent: true })}
             onFocus={() => loadClasses({ silent: true })}
             className="select-input"
+            style={{ minWidth: "250px" }}
           >
-            {dynamicExamNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
+            {dynamicExamNameOptions.map(opt => (
+              <option key={opt} value={opt}>
+                {formatExamOptionLabel(opt, classes, {
+                  yearSemSec: `${filters.year}/${filters.semester}/${filters.section}`
+                })}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -1369,6 +1462,190 @@ export default function MarkEntry() {
               🖨️ View & Print Only Mode (Edit Access Disabled by Admin)
             </div>
           )}
+
+          {/* SCREEN-ONLY EXAM MAX / PASS / TOTAL OUT-OF STRIP (NEVER PRINTS) */}
+          {(() => {
+            const isESE = classData.examName === "ESE";
+            const activeSubjectCount = focusedSubjectIndices.length > 0
+              ? focusedSubjectIndices.length
+              : (classData.subjects || []).length;
+            const maxVal = Number(classData.markPerSubject) || 0;
+            const passVal = Number(classData.passMark) || 0;
+            const totalOutOf = isESE ? activeSubjectCount * 10 : activeSubjectCount * maxVal;
+            const passPercent = (!isESE && maxVal > 0) ? Math.round((passVal / maxVal) * 100) : 0;
+
+            return (
+              <div
+                className="no-print"
+                style={{
+                  padding: "12px 16px",
+                  marginBottom: "16px",
+                  borderRadius: "12px",
+                  background: "var(--bg-card)",
+                  border: "1px solid rgba(99, 102, 241, 0.35)",
+                  boxShadow: "var(--shadow-sm)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                    <span style={{
+                      padding: "4px 10px",
+                      borderRadius: "8px",
+                      background: "rgba(99, 102, 241, 0.14)",
+                      color: "var(--primary)",
+                      fontWeight: "800",
+                      fontSize: "0.85rem"
+                    }}>
+                      {isESE ? "End Semester Examination" : classData.examName}
+                    </span>
+
+                    {isESE ? (
+                      <>
+                        <span style={{
+                          padding: "4px 10px",
+                          borderRadius: "8px",
+                          background: "rgba(16, 185, 129, 0.14)",
+                          color: "#047857",
+                          fontWeight: "700",
+                          fontSize: "0.84rem"
+                        }}>
+                          Grading: {classData.eseGradingSystem || "System 2"} (O / S / A+ / A / B+ / B / C)
+                        </span>
+                        <span style={{
+                          padding: "4px 10px",
+                          borderRadius: "8px",
+                          background: "rgba(239, 68, 68, 0.12)",
+                          color: "#dc2626",
+                          fontWeight: "700",
+                          fontSize: "0.84rem"
+                        }}>
+                          Arrear / Fail: U, U*, AB
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{
+                          padding: "4px 12px",
+                          borderRadius: "8px",
+                          background: "rgba(16, 185, 129, 0.14)",
+                          color: "#047857",
+                          fontWeight: "800",
+                          fontSize: "0.88rem"
+                        }}>
+                          Max Mark (Out of): {maxVal}
+                        </span>
+                        <span style={{
+                          padding: "4px 12px",
+                          borderRadius: "8px",
+                          background: "rgba(245, 158, 11, 0.15)",
+                          color: "#b45309",
+                          fontWeight: "800",
+                          fontSize: "0.88rem"
+                        }}>
+                          Pass Mark: {passVal}{maxVal > 0 ? ` (${passPercent}%)` : ""}
+                        </span>
+                        <span style={{
+                          padding: "4px 12px",
+                          borderRadius: "8px",
+                          background: "rgba(59, 130, 246, 0.14)",
+                          color: "#1d4ed8",
+                          fontWeight: "800",
+                          fontSize: "0.88rem"
+                        }}>
+                          Total Out Of: {totalOutOf} ({activeSubjectCount} {activeSubjectCount === 1 ? "Subj" : "Subjs"})
+                        </span>
+                        <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: "600" }}>
+                          Entry: 0–{maxVal} or AB / A
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {isAdmin && !isESE && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingLimits(prev => !prev)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--primary)",
+                        background: isEditingLimits ? "var(--primary)" : "transparent",
+                        color: isEditingLimits ? "#ffffff" : "var(--primary)",
+                        fontWeight: "700",
+                        fontSize: "0.82rem",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {isEditingLimits ? "Close Edit" : "✏️ Edit Max / Pass"}
+                    </button>
+                  )}
+                </div>
+
+                {isAdmin && !isESE && isEditingLimits && (
+                  <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "12px",
+                    paddingTop: "10px",
+                    borderTop: "1px dashed var(--border-color)"
+                  }}>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.84rem", fontWeight: "700" }}>
+                      Max Mark:
+                      <input
+                        type="number"
+                        min="1"
+                        value={limitsForm.markPerSubject}
+                        onChange={e => setLimitsForm(prev => ({ ...prev, markPerSubject: e.target.value }))}
+                        className="select-input"
+                        style={{ width: "85px", padding: "5px 8px" }}
+                      />
+                    </label>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.84rem", fontWeight: "700" }}>
+                      Pass Mark:
+                      <input
+                        type="number"
+                        min="0"
+                        value={limitsForm.passMark}
+                        onChange={e => setLimitsForm(prev => ({ ...prev, passMark: e.target.value }))}
+                        className="select-input"
+                        style={{ width: "85px", padding: "5px 8px" }}
+                      />
+                    </label>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.82rem", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={limitsForm.syncAllSections}
+                        onChange={e => setLimitsForm(prev => ({ ...prev, syncAllSections: e.target.checked }))}
+                        style={{ width: "16px", height: "16px" }}
+                      />
+                      Apply to all sections of Year {filters.year} / Sem {filters.semester}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleSaveMarkLimits}
+                      disabled={savingLimits}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "8px",
+                        border: "none",
+                        background: "#10b981",
+                        color: "#ffffff",
+                        fontWeight: "700",
+                        fontSize: "0.82rem",
+                        cursor: savingLimits ? "not-allowed" : "pointer"
+                      }}
+                    >
+                      {savingLimits ? "Saving..." : "Save & Recalculate"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Focus Mode & Admin Subject Mark Cleaner */}
           <div className="no-print" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "15px", marginBottom: "20px" }}>
@@ -1539,11 +1816,20 @@ export default function MarkEntry() {
                   padding: 0 !important;
                   margin: 0 !important;
                 }
+                .mark-input::placeholder {
+                  color: transparent !important;
+                  opacity: 0 !important;
+                }
                 .sig-cell { height: 75px !important; }
                 .focus-hidden { display: none !important; }
               }
               @media screen {
                 .focus-hidden { display: none !important; }
+                .mark-input::placeholder {
+                  color: #94a3b8;
+                  font-size: 10px;
+                  font-weight: 500;
+                }
                 .faculty-screen-large {
                   font-size: 20px !important;
                 }
@@ -1687,7 +1973,14 @@ export default function MarkEntry() {
                       {getCourseDetails()[idx]?.courseCode || sub}
                     </th>
                   ))}
-                  <th rowSpan="2" style={{ padding: "3px" }}>{classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}</th>
+                  <th rowSpan="2" style={{ padding: "3px" }}>
+                    {classData.examName === "ESE" ? "SGPA" : <>Total<br />Marks</>}
+                    {classData.examName !== "ESE" && (
+                      <div className="no-print" style={{ fontSize: "9.5px", fontWeight: "700", color: "#4f46e5", marginTop: "2px" }}>
+                        (Out of {(focusedSubjectIndices.length > 0 ? focusedSubjectIndices.length : (classData.subjects || []).length) * (Number(classData.markPerSubject) || 0)})
+                      </div>
+                    )}
+                  </th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass %</th>
                   <th rowSpan="2" style={{ padding: "3px" }}>Pass/<br />Fail</th>
                 </tr>
@@ -1695,7 +1988,12 @@ export default function MarkEntry() {
                 <tr style={{ background: "#f2f2f2", fontSize: "12px" }}>
                   {getCourseDetails().map((cd, idx) => (
                     <th key={`cn-${idx}`} className={focusedSubjectIndices.length > 0 && !focusedSubjectIndices.includes(idx) ? "focus-hidden" : ""} style={{ padding: "4px", maxWidth: "80px", wordWrap: "break-word", fontSize: "10px", fontWeight: "bold", color: "black" }}>
-                      {cd.shortName || cd.courseName}
+                      <div>{cd.shortName || cd.courseName}</div>
+                      {classData.examName !== "ESE" && (
+                        <div className="no-print" style={{ fontSize: "9px", fontWeight: "700", color: "#0f766e", marginTop: "2px" }}>
+                          Max:{classData.markPerSubject} | Pass:{classData.passMark}
+                        </div>
+                      )}
                     </th>
                   ))}
                 </tr>

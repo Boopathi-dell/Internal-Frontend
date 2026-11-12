@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { RefreshCw } from "lucide-react";
 import API from "../api";
+import { formatExamOptionLabel } from "../utils/examCatalog";
 
 export default function DepartmentAnalysis() {
   const [filters, setFilters] = useState({ year: "I", semester: "I", exam: "CIA - I", department: "CSE" });
@@ -203,11 +204,17 @@ export default function DepartmentAnalysis() {
               <option value="AI&DS">AI&DS</option>
             </select>
           </div>
-          <div className="input-group" style={{ flex: 1, minWidth: "150px" }}>
+          <div className="input-group" style={{ flex: 1, minWidth: "220px" }}>
             <label className="input-label">Evaluation Module</label>
             <select className="text-input" name="exam" value={filters.exam} onChange={handleFilterChange}>
               {dynamicExamNameOptions.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
+                <option key={opt} value={opt}>
+                  {formatExamOptionLabel(opt, classes, {
+                    department: filters.department,
+                    year: filters.year,
+                    semester: filters.semester
+                  })}
+                </option>
               ))}
             </select>
           </div>

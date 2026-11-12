@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import API from "../api";
 import * as XLSX from "xlsx";
 import headerLogo from "../assets/logo image.jpg";
+import { formatExamOptionLabel } from "../utils/examCatalog";
 
 
 
@@ -195,8 +196,14 @@ export default function RankList() {
       </div>
       <div>
         <label style={{ display: "block", fontSize: "12px", fontWeight: "bold" }}>Evaluation Module</label>
-        <select value={filters.exam} onChange={e => handleFilterChange('exam', e.target.value)} style={{ padding: "8px" }}>
-          {dynamicExamNameOptions.map(opt => <option key={opt} value={opt}>{opt === "ESE" ? "End Semester Examination" : opt}</option>)}
+        <select value={filters.exam} onChange={e => handleFilterChange('exam', e.target.value)} style={{ padding: "8px", minWidth: "240px" }}>
+          {dynamicExamNameOptions.map(opt => (
+            <option key={opt} value={opt}>
+              {formatExamOptionLabel(opt, classes, {
+                yearSemSec: `${filters.year}/${filters.semester}/${filters.section}`
+              })}
+            </option>
+          ))}
         </select>
       </div>
     </div>
