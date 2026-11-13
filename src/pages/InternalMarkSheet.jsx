@@ -113,7 +113,10 @@ export default function InternalMarkSheet() {
     semesterSession: "EVEN SEM APRIL - 2027",
     pageSplitMode: "2pages", // "2pages" (default: Split all students across max 2 pages), "1page", "30", "25"
     tableWidthMode: "full", // "full" (100% Stretch - standard MEC landscape), "autoFit"
-    nameColWidth: "auto" // "auto" (default: Auto-Fit to student names), "160px", "200px", "240px"
+    nameColWidth: "auto", // "auto" (default: Auto-Fit to student names), "160px", "200px", "240px"
+    rowHeightMode: "auto", // "auto", "compact" (20px), "normal" (25px), "spacious" (30px), "extra" (36px), "custom"
+    customRowHeight: 25,
+    signatureSpace: 55 // Clearance (px) above Course Faculty, Year Coordinator, and HoD signatures
   });
 
   const [headerImage, setHeaderImage] = useState(() => localStorage.getItem("internalMarkHeaderImage") || "");
@@ -1265,20 +1268,44 @@ export default function InternalMarkSheet() {
   // Dynamically scale row height & font in print so Header + Table + Signatures + Page Number fit cleanly in both Landscape and Portrait A4
   const printMetrics = useMemo(() => {
     const maxRows = Math.max(1, ...studentPages.map(p => p.length));
+    
+    // Auto dynamic height based on row count
+    let autoH;
     if (isPortraitMode) {
-      if (maxRows <= 34) return { rowHeight: 19, fontSize: 9.5, paddingY: 1 };
-      if (maxRows <= 40) return { rowHeight: 17, fontSize: 9, paddingY: 0 };
-      if (maxRows <= 46) return { rowHeight: 15, fontSize: 8.5, paddingY: 0 };
-      const fitted = Math.max(11, Math.floor(780 / maxRows));
-      return { rowHeight: fitted, fontSize: Math.max(7.5, fitted - 3), paddingY: 0 };
+      if (maxRows <= 28) autoH = 24;
+      else if (maxRows <= 34) autoH = 21;
+      else if (maxRows <= 40) autoH = 19;
+      else if (maxRows <= 46) autoH = 17;
+      else autoH = Math.max(13, Math.floor(750 / maxRows));
+    } else {
+      if (maxRows <= 20) autoH = 24;
+      else if (maxRows <= 25) autoH = 21;
+      else if (maxRows <= 30) autoH = 18;
+      else if (maxRows <= 35) autoH = 16;
+      else autoH = Math.max(13, Math.floor(490 / maxRows));
     }
-    if (maxRows <= 25) return { rowHeight: 17, fontSize: 9.5, paddingY: 1 };
-    if (maxRows <= 30) return { rowHeight: 15, fontSize: 9, paddingY: 0 };
-    if (maxRows <= 34) return { rowHeight: 14, fontSize: 8.5, paddingY: 0 };
-    if (maxRows <= 38) return { rowHeight: 13, fontSize: 8, paddingY: 0 };
-    const fitted = Math.max(10, Math.floor(490 / maxRows));
-    return { rowHeight: fitted, fontSize: Math.max(7.5, fitted - 4), paddingY: 0 };
-  }, [studentPages, isPortraitMode]);
+
+    // User-configured or auto row height
+    let rowH;
+    if (formData.rowHeightMode === "compact") {
+      rowH = 20;
+    } else if (formData.rowHeightMode === "normal") {
+      rowH = 25;
+    } else if (formData.rowHeightMode === "spacious") {
+      rowH = 30;
+    } else if (formData.rowHeightMode === "extra") {
+      rowH = 36;
+    } else if (formData.rowHeightMode === "custom") {
+      rowH = Math.max(16, Math.min(60, Number(formData.customRowHeight) || 25));
+    } else {
+      rowH = autoH;
+    }
+
+    const fontSize = rowH >= 32 ? 11 : (rowH >= 26 ? 10 : (rowH >= 22 ? 9.5 : (rowH >= 18 ? 9 : 8)));
+    const paddingY = rowH >= 32 ? 5 : (rowH >= 26 ? 3 : (rowH >= 22 ? 2 : 1));
+
+    return { rowHeight: rowH, autoHeight: autoH, fontSize, paddingY };
+  }, [studentPages, isPortraitMode, formData.rowHeightMode, formData.customRowHeight]);
 
   // Auto-fit student Name column width to longest enrolled name while keeping mark columns roomy within Portrait (~650px) or Landscape (~920px) budget
   const resolvedNameColWidth = useMemo(() => {
@@ -1425,6 +1452,7 @@ export default function InternalMarkSheet() {
 
     rows.push([]);
     rows.push([]);
+    rows.push([]);
     const sigRow = new Array(totalCols).fill("");
     sigRow[2] = "Course Faculty";
     sigRow[Math.max(3, Math.floor(totalCols * 0.55))] = "Year Co-ordinator";
@@ -1554,6 +1582,7 @@ export default function InternalMarkSheet() {
       ]);
     });
 
+    rows.push([]);
     rows.push([]);
     rows.push([]);
     const sigRow = new Array(totalCols).fill("");
@@ -2383,6 +2412,10 @@ export default function InternalMarkSheet() {
               <span>Table Layout: <strong style={{ color: "#6366f1" }}>{formData.tableWidthMode === "autoFit" ? "Auto-Fit Content (Snug)" : "Full Width (100%)"}</strong></span>
               <span>•</span>
               <span>Name Col: <strong style={{ color: "#0f172a" }}>{formData.nameColWidth === "auto" ? "Auto-Fit" : formData.nameColWidth}</strong></span>
+              <span>•</span>
+              <span>Row Size: <strong style={{ color: "#8b5cf6" }}>{formData.rowHeightMode === "auto" ? `Auto (${printMetrics.rowHeight}px)` : `${printMetrics.rowHeight}px`}</strong></span>
+              <span>•</span>
+              <span>Sign Space: <strong style={{ color: "#0ea5e9" }}>{formData.signatureSpace}px</strong></span>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
@@ -2488,6 +2521,112 @@ export default function InternalMarkSheet() {
                     <option value="200px">Standard (200px)</option>
                     <option value="240px">Wide (240px)</option>
                   </select>
+                </div>
+
+                {/* Table Row Size / Height Adjustment */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "700", color: "#475569" }}>
+                      Row Size / Height
+                    </label>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "800", color: "#8b5cf6" }}>
+                      {printMetrics.rowHeight}px {formData.rowHeightMode === "auto" ? "(Auto)" : ""}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <select 
+                      className="input-field" 
+                      value={formData.rowHeightMode} 
+                      onChange={e => setFormData(prev => ({ ...prev, rowHeightMode: e.target.value }))}
+                      style={{ background: "#ffffff", padding: "6px 8px", fontWeight: "600", borderColor: "#8b5cf6", flex: 1 }}
+                    >
+                      <option value="auto">Auto-Fit ({printMetrics.autoHeight}px - Dynamic)</option>
+                      <option value="compact">Compact (20px)</option>
+                      <option value="normal">Normal / Balanced (25px)</option>
+                      <option value="spacious">Spacious (30px)</option>
+                      <option value="extra">Extra Large (36px)</option>
+                      <option value="custom">✏️ Custom Height...</option>
+                    </select>
+                    {formData.rowHeightMode === "custom" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, customRowHeight: Math.max(16, (Number(prev.customRowHeight) || 25) - 2) }))}
+                          style={{ padding: "4px 8px", background: "#e2e8f0", border: "1px solid #cbd5e1", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                          title="Decrease Row Height"
+                        >-</button>
+                        <input
+                          type="number"
+                          min={16}
+                          max={60}
+                          value={formData.customRowHeight}
+                          onChange={e => setFormData(prev => ({ ...prev, customRowHeight: Math.max(16, Math.min(60, parseInt(e.target.value, 10) || 25)) }))}
+                          style={{ width: "52px", padding: "6px 2px", textAlign: "center", border: "1.5px solid #8b5cf6", borderRadius: "6px", fontWeight: "700" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, customRowHeight: Math.min(60, (Number(prev.customRowHeight) || 25) + 2) }))}
+                          style={{ padding: "4px 8px", background: "#e2e8f0", border: "1px solid #cbd5e1", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                          title="Increase Row Height"
+                        >+</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* HoD & Faculty Signature Space (Clearance) */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.3rem" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "700", color: "#475569" }}>
+                      Signature Space (HoD Clearance)
+                    </label>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "800", color: "#0ea5e9" }}>
+                      {formData.signatureSpace}px
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <select 
+                      className="input-field" 
+                      value={[35, 55, 75, 95].includes(Number(formData.signatureSpace)) ? String(formData.signatureSpace) : "custom"} 
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val !== "custom") {
+                          setFormData(prev => ({ ...prev, signatureSpace: Number(val) }));
+                        }
+                      }}
+                      style={{ background: "#ffffff", padding: "6px 8px", fontWeight: "600", borderColor: "#0ea5e9", flex: 1 }}
+                    >
+                      <option value="35">Compact (35px)</option>
+                      <option value="55">Standard (55px - Recommended)</option>
+                      <option value="75">Spacious (75px - Large Sign/Stamp)</option>
+                      <option value="95">Extra Spacious (95px)</option>
+                      <option value="custom">✏️ Custom Space...</option>
+                    </select>
+                    {(![35, 55, 75, 95].includes(Number(formData.signatureSpace)) || formData.signatureSpace === "custom") && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "3px" }}>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, signatureSpace: Math.max(25, (Number(prev.signatureSpace) || 55) - 5) }))}
+                          style={{ padding: "4px 8px", background: "#e2e8f0", border: "1px solid #cbd5e1", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                          title="Decrease Signature Space"
+                        >-</button>
+                        <input
+                          type="number"
+                          min={25}
+                          max={150}
+                          value={formData.signatureSpace}
+                          onChange={e => setFormData(prev => ({ ...prev, signatureSpace: Math.max(25, Math.min(150, parseInt(e.target.value, 10) || 55)) }))}
+                          style={{ width: "52px", padding: "6px 2px", textAlign: "center", border: "1.5px solid #0ea5e9", borderRadius: "6px", fontWeight: "700" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, signatureSpace: Math.min(150, (Number(prev.signatureSpace) || 55) + 5) }))}
+                          style={{ padding: "4px 8px", background: "#e2e8f0", border: "1px solid #cbd5e1", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                          title="Increase Signature Space"
+                        >+</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -2730,7 +2869,7 @@ export default function InternalMarkSheet() {
             color: #065f46;
           }
           .print-sheet .mec-official-table tbody tr {
-            height: 36px;
+            height: ${printMetrics.rowHeight}px;
             transition: background-color 0.12s ease;
           }
           .print-sheet .mec-official-table tbody tr:nth-child(even) {
@@ -2740,7 +2879,8 @@ export default function InternalMarkSheet() {
             background: #eef2ff;
           }
           .print-sheet .mec-official-table tbody td {
-            padding: 7px 8px;
+            padding: ${printMetrics.paddingY + 2}px 6px;
+            font-size: ${printMetrics.fontSize + 1}px;
           }
           .print-sheet .mec-official-table tbody td.col-sno {
             color: #64748b;
@@ -2891,7 +3031,7 @@ export default function InternalMarkSheet() {
             font-size: ${isPortraitMode ? "12.5pt" : "13.5pt"} !important;
           }
           .print-bottom-block {
-            margin-top: 6px !important;
+            margin-top: 8px !important;
             margin-bottom: 0 !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -2903,9 +3043,14 @@ export default function InternalMarkSheet() {
             font-size: ${isPortraitMode ? "9px" : "10px"} !important;
           }
           .print-signatures {
-            padding: ${isPortraitMode ? "10px 8px 2px 8px" : "8px 20px 2px 20px"} !important;
+            padding: 0 16px 2px 16px !important;
+            min-height: ${Number(formData.signatureSpace) || 55}px !important;
+            margin-top: 10px !important;
             margin-bottom: 2px !important;
-            font-size: ${isPortraitMode ? "9.5px" : "10px"} !important;
+            font-size: ${isPortraitMode ? "10px" : "10.5px"} !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: flex-end !important;
           }
           .mec-official-table tbody tr,
           .mec-official-table tbody tr:nth-child(even),
@@ -3363,7 +3508,9 @@ export default function InternalMarkSheet() {
                       display: "flex", 
                       justifyContent: "space-between", 
                       alignItems: "flex-end", 
-                      padding: "16px 20px 4px 20px", 
+                      minHeight: `${Number(formData.signatureSpace) || 55}px`, 
+                      padding: "0 20px 4px 20px", 
+                      marginTop: "14px", 
                       fontWeight: "bold", 
                       fontSize: "11px", 
                       fontFamily: '"Times New Roman", Times, serif' 
