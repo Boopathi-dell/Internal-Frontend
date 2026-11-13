@@ -1763,7 +1763,7 @@ export default function TimetableManager() {
       setCustomSubjectTypeText("");
     }
 
-    const PRESET_PATTERNS = ["regular", "2+2", "2+1", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3"];
+    const PRESET_PATTERNS = ["regular", "2+2", "2+2+2+2", "2+2+2", "2+1", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3"];
     const initialPattern = sub.slotPattern || (sub.isTraining ? (sub.hoursPerWeek >= 4 ? "4" : "3") : "regular");
     const isPresetPattern = PRESET_PATTERNS.includes(initialPattern);
     if (!isPresetPattern && initialPattern) {
@@ -3020,6 +3020,8 @@ export default function TimetableManager() {
                                 <option value="regular" style={{ background: "#1e1e2d", color: "#f8fafc" }}>1h Daily</option>
                                 <option value="2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h</option>
                                 <option value="2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h</option>
+                                <option value="2+2+2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h + 2h + 2h (8h)</option>
+                                <option value="2+2+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h + 2h (6h)</option>
                                 <option value="2+1+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 1h + 1h</option>
                                 <option value="3+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 1h</option>
                                 <option value="4" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h Block</option>
@@ -3028,7 +3030,7 @@ export default function TimetableManager() {
                                 <option value="2+2+1" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 2h + 2h + 1h</option>
                                 <option value="3+2" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 3h + 2h</option>
                                 <option value="4+3" style={{ background: "#1e1e2d", color: "#c084fc" }}>⚡ 4h + 3h Trainer</option>
-                                {item.slotPattern && !["regular", "2+1", "2+2", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3"].includes(item.slotPattern) && (
+                                {item.slotPattern && !["regular", "2+1", "2+2", "2+2+2+2", "2+2+2", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3"].includes(item.slotPattern) && (
                                   <option value={item.slotPattern} style={{ background: "#1e1e2d", color: "#f472b6" }}>⚡ {item.slotPattern} (Custom)</option>
                                 )}
                                 <option value="custom_prompt" style={{ background: "#1e1e2d", color: "#38bdf8" }}>✏️ Custom Pattern...</option>
@@ -4741,10 +4743,14 @@ export default function TimetableManager() {
                       } else {
                         setIsCustomSlotPattern(false);
                         setCustomSlotPatternText("");
+                        let newHours = subjectForm.hoursPerWeek;
+                        if (val === "2+2+2+2" && (!newHours || newHours < 8)) newHours = 8;
+                        if (val === "2+2+2" && (!newHours || newHours < 6)) newHours = 6;
                         setSubjectForm(prev => ({
                           ...prev,
                           slotPattern: val,
-                          isTraining: val !== "regular"
+                          isTraining: val !== "regular",
+                          hoursPerWeek: newHours
                         }));
                       }
                     }}
@@ -4759,6 +4765,8 @@ export default function TimetableManager() {
                     <option value="regular">1h Daily (Regular)</option>
                     <option value="2+1">⚡ 2h + 1h Continuous</option>
                     <option value="2+2">⚡ 2h + 2h Continuous</option>
+                    <option value="2+2+2+2">⚡ 2h + 2h + 2h + 2h (8h Trainer / Lab)</option>
+                    <option value="2+2+2">⚡ 2h + 2h + 2h (6h Trainer / Lab)</option>
                     <option value="2+1+1">⚡ 2h + 1h + 1h</option>
                     <option value="3+1">⚡ 3h + 1h</option>
                     <option value="4">⚡ 4h Half-Day Block</option>
@@ -4767,7 +4775,7 @@ export default function TimetableManager() {
                     <option value="2+2+1">⚡ 2h + 2h + 1h</option>
                     <option value="3+2">⚡ 3h + 2h</option>
                     <option value="4+3">⚡ 4h + 3h (Trainer Flip)</option>
-                    {subjectForm.slotPattern && !["regular", "2+1", "2+2", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3", "custom"].includes(subjectForm.slotPattern) && (
+                    {subjectForm.slotPattern && !["regular", "2+1", "2+2", "2+2+2+2", "2+2+2", "2+1+1", "3+1", "4", "3", "2", "2+2+1", "3+2", "4+3", "custom"].includes(subjectForm.slotPattern) && (
                       <option value={subjectForm.slotPattern}>⚡ {subjectForm.slotPattern} (Custom)</option>
                     )}
                     <option value="custom">✏️ Custom Pattern (Enter manual e.g. 2+1)...</option>
