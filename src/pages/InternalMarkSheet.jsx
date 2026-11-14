@@ -2905,22 +2905,21 @@ export default function InternalMarkSheet() {
             color: #047857;
             font-weight: 800;
           }
-          .print-sheet .mec-official-table tbody td.cell-absent {
-            color: #dc2626;
-            background: rgba(254, 226, 226, 0.45);
-            font-weight: 700;
+          .print-sheet .mec-official-table tbody td.cell-absent,
+          .print-sheet .mec-official-table tbody td.cell-fail-mark {
+            background-color: rgba(239, 68, 68, 0.45) !important;
+            background: rgba(239, 68, 68, 0.45) !important;
+            color: #000000 !important;
+            font-weight: 700 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.6) !important;
           }
           .print-sheet .mec-official-table tbody tr.row-fail-mark {
-            background: rgba(254, 242, 242, 0.72) !important;
+            background: transparent !important;
           }
           .print-sheet .mec-official-table tbody tr.row-fail-mark:hover {
-            background: rgba(254, 226, 226, 0.9) !important;
-          }
-          .print-sheet .mec-official-table tbody td.cell-fail-mark {
-            background: #fee2e2 !important;
-            color: #dc2626 !important;
-            font-weight: 800 !important;
-            box-shadow: inset 0 0 0 2px #ef4444, 0 0 14px rgba(239, 68, 68, 0.6) !important;
+            background: rgba(241, 245, 249, 0.8) !important;
           }
           .editable-cell-input {
             width: 100%;
@@ -3020,6 +3019,8 @@ export default function InternalMarkSheet() {
             border: none !important;
             background: transparent !important;
             padding: 0 !important;
+            color: inherit !important;
+            font-weight: inherit !important;
           }
           .print-sheet img.header-banner-img {
             max-height: ${isPortraitMode ? "48px" : "40px"} !important;
@@ -3070,9 +3071,7 @@ export default function InternalMarkSheet() {
           .mec-official-table tbody tr.row-fail-mark:nth-child(even),
           .mec-official-table tbody tr.row-fail-mark:hover,
           .mec-official-table tbody td.col-formula,
-          .mec-official-table tbody td.col-total,
-          .mec-official-table tbody td.cell-absent,
-          .mec-official-table tbody td.cell-fail-mark {
+          .mec-official-table tbody td.col-total {
             background: #ffffff !important;
             color: #000000 !important;
             box-shadow: none !important;
@@ -3080,6 +3079,17 @@ export default function InternalMarkSheet() {
             padding: ${printMetrics.paddingY}px 2px !important;
             font-size: ${printMetrics.fontSize}px !important;
             line-height: 1.1 !important;
+          }
+          .mec-official-table tbody td.cell-fail-mark,
+          .mec-official-table tbody td.cell-absent {
+            background-color: rgba(239, 68, 68, 0.45) !important;
+            background: rgba(239, 68, 68, 0.45) !important;
+            color: #000000 !important;
+            font-weight: bold !important;
+            box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.6) !important;
+            border: 1px solid #000000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .mec-official-table th,
           .mec-official-table thead tr:first-child th,
@@ -3370,16 +3380,28 @@ export default function InternalMarkSheet() {
                                       !isNaN(numVal) &&
                                       numVal < internalPassMark
                                     );
+                                    const isFailMark = isBelowPass || isAbsent;
                                     return (
                                       <td
                                         key={subj.code}
                                         className={`col-mark ${isBelowPass ? "cell-fail-mark" : ""} ${isAbsent ? "cell-absent" : ""}`}
+                                        style={{
+                                          backgroundColor: isFailMark ? "rgba(239, 68, 68, 0.45)" : undefined,
+                                          WebkitPrintColorAdjust: "exact",
+                                          printColorAdjust: "exact",
+                                          fontWeight: isFailMark ? "bold" : "normal",
+                                          color: isFailMark ? "#000000" : undefined
+                                        }}
                                       >
                                         {canEditInline && !st.isPlaceholder ? (
                                           <input
                                             className="editable-cell-input"
                                             value={displayVal}
                                             onChange={e => handleConsolidatedCellEdit(st.regNo, subj.code, e.target.value)}
+                                            style={{
+                                              fontWeight: isFailMark ? "bold" : "normal",
+                                              color: isFailMark ? "#000000" : undefined
+                                            }}
                                           />
                                         ) : (
                                           displayVal
@@ -3472,18 +3494,36 @@ export default function InternalMarkSheet() {
                                     }
                                     const isAbsent = String(displayVal).trim().toUpperCase() === "AB";
                                     const highlightFailBox = isTotal && isBelowPass;
+                                    const numVal = Number(displayVal);
+                                    const isColBelowPass = Boolean(
+                                      !st.isPlaceholder && (
+                                        highlightFailBox ||
+                                        (col.passMark && Number(col.passMark) > 0 && displayVal !== "" && !isNaN(numVal) && numVal < Number(col.passMark))
+                                      )
+                                    );
+                                    const isFailMark = isColBelowPass || isAbsent;
 
                                     return (
                                       <td 
                                         key={colIdx} 
-                                        className={`col-mark ${highlightFailBox ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
-                                        style={{ fontWeight: isFormula ? "bold" : "normal" }}
+                                        className={`col-mark ${isColBelowPass ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
+                                        style={{ 
+                                          fontWeight: isFormula || isFailMark ? "bold" : "normal",
+                                          backgroundColor: isFailMark ? "rgba(239, 68, 68, 0.45)" : undefined,
+                                          WebkitPrintColorAdjust: "exact",
+                                          printColorAdjust: "exact",
+                                          color: isFailMark ? "#000000" : undefined
+                                        }}
                                       >
                                         {canEditInline && !isFormula && !st.isPlaceholder ? (
                                           <input 
                                             className="editable-cell-input" 
                                             value={displayVal} 
                                             onChange={e => handleCellEdit(globalIndex, col.colKey, e.target.value)} 
+                                            style={{
+                                              fontWeight: isFailMark ? "bold" : "normal",
+                                              color: isFailMark ? "#000000" : undefined
+                                            }}
                                           />
                                         ) : (
                                           displayVal
