@@ -4,6 +4,32 @@ import { Plus, Trash, Save, Settings, FileText, Calculator, X, Sigma } from "luc
 import { Check } from "lucide-react";
 import { getCachedExamNames, mergeCachedExamNames } from "../utils/examCatalog";
 
+const SLOT_OPTIONS = [
+  { value: "none", label: "-- Empty (None) --" },
+  { value: "dept", label: "Dept (Dept: CSE)" },
+  { value: "session", label: "Session (ODD SEM NOVEMBER - 2026 - 27)" },
+  { value: "yearSemSec", label: "Year/Sem/Sec (Year/Sem/Sec: III/V/B)" },
+  { value: "subject", label: "Course Code / Name" },
+  { value: "date", label: "Date (Date: 16.11.2026)" },
+  { value: "regulation", label: "Regulation (Regulation 2023)" },
+  { value: "academicYear", label: "Academic Year (2026-27)" }
+];
+
+const getSlotPreviewText = (key) => {
+  switch (key) {
+    case "dept": return "Dept: CSE";
+    case "session": return "ODD SEM NOVEMBER - 2026 - 27";
+    case "yearSemSec": return "Year/Sem/Sec: III/V/B";
+    case "subject": return "Course Code/ Name : 23CS501 - Internet of Things";
+    case "date": return "Date: 16.11.2026";
+    case "regulation": return "Regulation: 2023";
+    case "academicYear": return "Academic Year: 2026-27";
+    case "none":
+    default:
+      return "";
+  }
+};
+
 export default function InternalMarkTemplateSetup() {
   const [templates, setTemplates] = useState([]);
   const [editingTemplate, setEditingTemplate] = useState(null);
@@ -109,6 +135,11 @@ export default function InternalMarkTemplateSetup() {
       printOrientation: "landscape",
       passMark: 20,
       isActive: false,
+      headerSubBarLayout: {
+        preset: "coe_balanced",
+        line1: { left: "dept", center: "session", right: "yearSemSec" },
+        line2: { left: "subject", center: "none", right: "date" }
+      },
       columns: [
         { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false }
       ]
@@ -124,6 +155,11 @@ export default function InternalMarkTemplateSetup() {
       printOrientation: "landscape",
       passMark: 20,
       isActive: true,
+      headerSubBarLayout: {
+        preset: "coe_balanced",
+        line1: { left: "dept", center: "session", right: "yearSemSec" },
+        line2: { left: "subject", center: "none", right: "date" }
+      },
       columns: [
         { heading: "UT-1 (30)", type: "exam", examName: "Unit Test - I", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
         { heading: "UT-2 (30)", type: "exam", examName: "Unit Test - II", formula: "", calcSources: [], calcType: "scale", calcOutof: 30, calcWeightage: 30, isHidden: false },
@@ -140,6 +176,54 @@ export default function InternalMarkTemplateSetup() {
         { heading: "MKC (5)", type: "exam", examName: "MKC", formula: "", calcSources: [], calcType: "scale", calcOutof: 5, calcWeightage: 5, isHidden: false },
         { heading: "TOTAL (40)", type: "calculation", examName: "", formula: "(#[IM (10) ::1] + #[IM (10) ::2] + #[IM (10) ::3] + #[SM (5)] + #[MKC (5)])", calcSources: ["IM (10) ::1", "IM (10) ::2", "IM (10) ::3", "SM (5)", "MKC (5)"], calcType: "sum", calcOutof: 40, calcWeightage: 40, isHidden: false }
       ]
+    });
+  };
+
+  const handleHeaderPresetChange = (preset) => {
+    let nextLayout = {
+      preset,
+      line1: { left: "dept", center: "session", right: "yearSemSec" },
+      line2: { left: "subject", center: "none", right: "date" }
+    };
+    if (preset === "classic_4in1") {
+      nextLayout = {
+        preset,
+        line1: { left: "dept", center: "yearSemSec", right: "date" },
+        line2: { left: "subject", center: "session", right: "none" }
+      };
+    } else if (preset === "custom") {
+      nextLayout = {
+        preset: "custom",
+        ...(editingTemplate?.headerSubBarLayout || {
+          line1: { left: "dept", center: "session", right: "yearSemSec" },
+          line2: { left: "subject", center: "none", right: "date" }
+        })
+      };
+    }
+    setEditingTemplate(prev => ({
+      ...prev,
+      headerSubBarLayout: nextLayout
+    }));
+  };
+
+  const handleHeaderSlotChange = (line, slot, val) => {
+    setEditingTemplate(prev => {
+      const current = prev.headerSubBarLayout || {
+        preset: "custom",
+        line1: { left: "dept", center: "session", right: "yearSemSec" },
+        line2: { left: "subject", center: "none", right: "date" }
+      };
+      return {
+        ...prev,
+        headerSubBarLayout: {
+          ...current,
+          preset: "custom",
+          [line]: {
+            ...(current[line] || {}),
+            [slot]: val
+          }
+        }
+      };
     });
   };
 
@@ -182,6 +266,11 @@ export default function InternalMarkTemplateSetup() {
       const dataToSave = {
         ...editingTemplate,
         columns: preparedColumns,
+        headerSubBarLayout: editingTemplate.headerSubBarLayout || {
+          preset: "coe_balanced",
+          line1: { left: "dept", center: "session", right: "yearSemSec" },
+          line2: { left: "subject", center: "none", right: "date" }
+        },
         passMark: editingTemplate.passMark === "" || editingTemplate.passMark === undefined
           ? 0
           : Math.max(0, Number(editingTemplate.passMark) || 0)
@@ -321,7 +410,12 @@ export default function InternalMarkTemplateSetup() {
     const cloned = {
       ...template,
       courseCategory: inferredCategory,
-      printOrientation: template.printOrientation || (inferredCategory === "Lab" ? "portrait" : "landscape")
+      printOrientation: template.printOrientation || (inferredCategory === "Lab" ? "portrait" : "landscape"),
+      headerSubBarLayout: template.headerSubBarLayout || {
+        preset: "coe_balanced",
+        line1: { left: "dept", center: "session", right: "yearSemSec" },
+        line2: { left: "subject", center: "none", right: "date" }
+      }
     };
     const normalizeParsedSources = (rawSources, colsBefore) => {
       const seenLegacy = {};
@@ -623,6 +717,166 @@ export default function InternalMarkTemplateSetup() {
                 />
                 Active for {editingTemplate.courseCategory || "Theory"} (Reg {editingTemplate.regulation || "..."})
               </label>
+            </div>
+          </div>
+
+          {/* HEADER SUB-BAR CONFIGURATION */}
+          <div style={{
+            background: "var(--bg-secondary)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "12px",
+            padding: "1.25rem 1.5rem",
+            marginBottom: "1.5rem"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "10px" }}>
+              <div>
+                <h4 style={{ margin: "0 0 4px 0", fontSize: "1.05rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>📋 Header Sub-Bar Layout (College / COE Format)</span>
+                </h4>
+                <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                  Configure what details appear below the college logo (Dept, Session, Year/Sem/Sec, Subject, Date)
+                </p>
+              </div>
+
+              {/* Preset Selector */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "0.85rem", fontWeight: "bold" }}>Layout Preset:</span>
+                <select
+                  value={editingTemplate.headerSubBarLayout?.preset || "coe_balanced"}
+                  onChange={(e) => handleHeaderPresetChange(e.target.value)}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: "8px",
+                    border: "1.5px solid var(--primary)",
+                    fontWeight: "700",
+                    fontSize: "0.85rem",
+                    background: "white"
+                  }}
+                >
+                  <option value="coe_balanced">🏛️ COE Balanced Format (Recommended - User Default)</option>
+                  <option value="classic_4in1">📄 Classic 4-in-1 Format</option>
+                  <option value="custom">✏️ Custom Slot Positions...</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Slot Dropdowns for Line 1 and Line 2 */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+              {/* Line 1 */}
+              <div style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontWeight: "700", fontSize: "0.85rem", marginBottom: "8px", color: "var(--primary)" }}>
+                  Line 1 (Top Row)
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", display: "block" }}>Left Slot</label>
+                    <select
+                      value={editingTemplate.headerSubBarLayout?.line1?.left || "dept"}
+                      onChange={(e) => handleHeaderSlotChange("line1", "left", e.target.value)}
+                      style={{ width: "100%", padding: "5px", fontSize: "0.8rem", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                    >
+                      {SLOT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", display: "block" }}>Center Slot</label>
+                    <select
+                      value={editingTemplate.headerSubBarLayout?.line1?.center || "session"}
+                      onChange={(e) => handleHeaderSlotChange("line1", "center", e.target.value)}
+                      style={{ width: "100%", padding: "5px", fontSize: "0.8rem", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                    >
+                      {SLOT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", display: "block" }}>Right Slot</label>
+                    <select
+                      value={editingTemplate.headerSubBarLayout?.line1?.right || "yearSemSec"}
+                      onChange={(e) => handleHeaderSlotChange("line1", "right", e.target.value)}
+                      style={{ width: "100%", padding: "5px", fontSize: "0.8rem", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                    >
+                      {SLOT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Line 2 */}
+              <div style={{ background: "white", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontWeight: "700", fontSize: "0.85rem", marginBottom: "8px", color: "var(--primary)" }}>
+                  Line 2 (Bottom Row)
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", display: "block" }}>Left Slot</label>
+                    <select
+                      value={editingTemplate.headerSubBarLayout?.line2?.left || "subject"}
+                      onChange={(e) => handleHeaderSlotChange("line2", "left", e.target.value)}
+                      style={{ width: "100%", padding: "5px", fontSize: "0.8rem", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                    >
+                      {SLOT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", display: "block" }}>Center Slot</label>
+                    <select
+                      value={editingTemplate.headerSubBarLayout?.line2?.center || "none"}
+                      onChange={(e) => handleHeaderSlotChange("line2", "center", e.target.value)}
+                      style={{ width: "100%", padding: "5px", fontSize: "0.8rem", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                    >
+                      {SLOT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", color: "#64748b", fontWeight: "600", display: "block" }}>Right Slot</label>
+                    <select
+                      value={editingTemplate.headerSubBarLayout?.line2?.right || "date"}
+                      onChange={(e) => handleHeaderSlotChange("line2", "right", e.target.value)}
+                      style={{ width: "100%", padding: "5px", fontSize: "0.8rem", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                    >
+                      {SLOT_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Visual Print Preview */}
+            <div style={{
+              background: "#ffffff",
+              border: "1.5px dashed #94a3b8",
+              borderRadius: "8px",
+              padding: "10px 16px",
+              fontFamily: '"Times New Roman", Times, serif',
+              fontSize: "10pt",
+              fontWeight: "bold",
+              color: "#000000"
+            }}>
+              <div style={{ fontSize: "0.72rem", fontFamily: "sans-serif", color: "#64748b", marginBottom: "4px", fontWeight: "bold" }}>
+                🖨️ LIVE PRINT PREVIEW (Below College Banner):
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 0" }}>
+                <div style={{ flex: 1, textAlign: "left" }}>
+                  {getSlotPreviewText(editingTemplate.headerSubBarLayout?.line1?.left || "dept")}
+                </div>
+                <div style={{ flex: 1.5, textAlign: "center" }}>
+                  {getSlotPreviewText(editingTemplate.headerSubBarLayout?.line1?.center || "session")}
+                </div>
+                <div style={{ flex: 1, textAlign: "right" }}>
+                  {getSlotPreviewText(editingTemplate.headerSubBarLayout?.line1?.right || "yearSemSec")}
+                </div>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 0" }}>
+                <div style={{ flex: 1, textAlign: "left" }}>
+                  {getSlotPreviewText(editingTemplate.headerSubBarLayout?.line2?.left || "subject")}
+                </div>
+                <div style={{ flex: 1.5, textAlign: "center" }}>
+                  {getSlotPreviewText(editingTemplate.headerSubBarLayout?.line2?.center || "none")}
+                </div>
+                <div style={{ flex: 1, textAlign: "right" }}>
+                  {getSlotPreviewText(editingTemplate.headerSubBarLayout?.line2?.right || "date")}
+                </div>
+              </div>
             </div>
           </div>
 

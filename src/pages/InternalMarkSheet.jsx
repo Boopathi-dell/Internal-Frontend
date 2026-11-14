@@ -1278,6 +1278,87 @@ export default function InternalMarkSheet() {
     return found ? `${found.code} - ${found.name}` : (formData.selectedSubject || "Course");
   };
 
+  // Render content for dynamic Header Sub-Bar slots (Admin Template Configured)
+  const renderHeaderSlotContent = (slotKey) => {
+    switch (slotKey) {
+      case "dept":
+        return <span>Dept: {formData.department}</span>;
+      case "yearSemSec":
+        return <span>Year/Sem/Sec: {formData.year}/{formData.semester}/{formData.section}</span>;
+      case "session":
+        return <span style={{ letterSpacing: "0.5px" }}>{formData.semesterSession}</span>;
+      case "date":
+        return <span>Date: {formData.date}</span>;
+      case "subject":
+        return isConsolidatedView ? (
+          <span>Consolidated {selectedCategory} Internal Marks</span>
+        ) : (
+          <span>Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span></span>
+        );
+      case "regulation":
+        return <span>Regulation: {formData.regulation}</span>;
+      case "academicYear":
+        return <span>Academic Year: {formData.academicYear}</span>;
+      case "none":
+      default:
+        return null;
+    }
+  };
+
+  const renderHeaderLine = (lineObj, lineIndex) => {
+    if (!lineObj) return null;
+    const leftContent = renderHeaderSlotContent(lineObj.left);
+    const centerContent = renderHeaderSlotContent(lineObj.center);
+    const rightContent = renderHeaderSlotContent(lineObj.right);
+
+    if (!leftContent && !centerContent && !rightContent) return null;
+
+    return (
+      <div 
+        key={`hdr-line-${lineIndex}`}
+        className={`print-metadata-row print-metadata-row-${lineIndex}`}
+        style={{ 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "center", 
+          fontSize: "10pt", 
+          fontWeight: "bold", 
+          margin: lineIndex === 1 ? "4px 0 2px 0" : "2px 0 5px 0", 
+          fontFamily: '"Times New Roman", Times, serif', 
+          color: "#000000" 
+        }}
+      >
+        <div style={{ flex: "1", textAlign: "left", whiteSpace: "nowrap" }}>
+          {leftContent}
+        </div>
+        <div style={{ flex: centerContent ? "1.5" : "0", textAlign: "center", whiteSpace: "nowrap" }}>
+          {centerContent}
+        </div>
+        <div style={{ flex: "1", textAlign: "right", whiteSpace: "nowrap" }}>
+          {rightContent}
+        </div>
+      </div>
+    );
+  };
+
+  const renderHeaderSubBar = (templateLayout) => {
+    const defaultLayout = {
+      preset: "coe_balanced",
+      line1: { left: "dept", center: "session", right: "yearSemSec" },
+      line2: { left: "subject", center: "none", right: "date" }
+    };
+    const activeLayout = templateLayout || defaultLayout;
+    const l1 = activeLayout?.line1 || defaultLayout.line1;
+    const l2 = activeLayout?.line2 || defaultLayout.line2;
+
+    return (
+      <div className="print-header-subbar" style={{ margin: "4px 0 5px 0", color: "#000000", fontFamily: '"Times New Roman", Times, serif' }}>
+        {renderHeaderLine(l1, 1)}
+        {renderHeaderLine(l2, 2)}
+      </div>
+    );
+  };
+
   // Columns definition helper (with unique colKeys)
   const currentColumns = useMemo(() => {
     const rawCols = (activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0)
@@ -1670,13 +1751,13 @@ export default function InternalMarkSheet() {
 
     const meta1Row = new Array(totalCols).fill("");
     meta1Row[0] = `Dept: ${formData.department}`;
-    meta1Row[2] = `Year/Sem/Sec: ${formData.year}/${formData.semester}/${formData.section}`;
-    meta1Row[Math.min(Math.max(3, Math.floor(totalCols * 0.45)), Math.max(3, lastColIdx - 2))] = formData.semesterSession;
-    meta1Row[Math.max(0, lastColIdx - 1)] = `Date: ${formData.date}`;
+    meta1Row[Math.max(2, Math.floor(totalCols * 0.35))] = formData.semesterSession;
+    meta1Row[Math.max(3, lastColIdx - 1)] = `Year/Sem/Sec: ${formData.year}/${formData.semester}/${formData.section}`;
     rows.push(meta1Row);
 
     const meta2Row = new Array(totalCols).fill("");
     meta2Row[0] = `Course Code/ Name : ${subjectDisplay}`;
+    meta2Row[Math.max(3, lastColIdx - 1)] = `Date: ${formData.date}`;
     rows.push(meta2Row);
     rows.push([]);
 
@@ -3578,20 +3659,8 @@ export default function InternalMarkSheet() {
                         </div>
                       )}
 
-                      {/* Metadata Row 1 (Image 1 Format) */}
-                      <div className="print-metadata-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10pt", fontWeight: "bold", margin: "4px 0 3px 0", fontFamily: '"Times New Roman", Times, serif', color: "#000000" }}>
-                        <div style={{ flex: "1", textAlign: "left" }}>Dept: {formData.department}</div>
-                        <div style={{ flex: "1.2", textAlign: "center" }}>Year/Sem/Sec: {formData.year}/{formData.semester}/{formData.section}</div>
-                        <div style={{ flex: "2", textAlign: "center", letterSpacing: "0.5px" }}>{formData.semesterSession}</div>
-                        <div style={{ flex: "1", textAlign: "right" }}>Date: {formData.date}</div>
-                      </div>
-
-                      {/* Metadata Row 2 (Only in Subject-wise mode) */}
-                      {!isConsolidatedView && (
-                        <div style={{ fontSize: "10pt", fontWeight: "bold", margin: "2px 0 5px 0", fontFamily: '"Times New Roman", Times, serif', textAlign: "left", color: "#000000" }}>
-                          Course Code/ Name : <span style={{ fontWeight: "normal" }}>{getDisplaySubject()}</span>
-                        </div>
-                      )}
+                      {/* Dynamic Header Sub-Bar configured by Admin Template */}
+                      {renderHeaderSubBar(activeTemplate?.headerSubBarLayout)}
                     </div>
                   ) : (
                     /* PAGE 2 HEADER */
