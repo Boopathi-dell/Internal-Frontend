@@ -3,14 +3,14 @@ import API from "../api";
 import * as XLSX from "xlsx";
 import headerLogo from "../assets/logo image.jpg";
 import { formatExamOptionLabel } from "../utils/examCatalog";
-
-
+import { normStr, normalizeExam } from "../utils/examMatchUtils";
 
 export default function ResultAnalysis() {
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [classData, setClassData] = useState(null);
   const [isEditingProgress, setIsEditingProgress] = useState(false);
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
   const [progressData, setProgressData] = useState({});
   const [filters, setFilters] = useState({ year: "I", semester: "I", section: "A", exam: "Unit Test - I" });
   const [filteredClasses, setFilteredClasses] = useState([]);
@@ -62,9 +62,15 @@ export default function ResultAnalysis() {
 
   const applyFilters = (allClasses, f) => {
     const targetYSS = `${f.year}/${f.semester}/${f.section}`;
-    const filtered = allClasses.filter(c => c.yearSemSec === targetYSS && c.examName === f.exam);
+    const filtered = (allClasses || []).filter(c => {
+      const yssMatch = normStr(c.yearSemSec) === normStr(targetYSS) || c.yearSemSec === targetYSS;
+      const examMatch = c.examName === f.exam ||
+        (normalizeExam(c.examName) && normalizeExam(f.exam) && normalizeExam(c.examName) === normalizeExam(f.exam)) ||
+        normStr(c.examName) === normStr(f.exam);
+      return yssMatch && examMatch;
+    });
     setFilteredClasses(filtered);
-    if (filtered.length === 1) {
+    if (filtered.length >= 1) {
       const firstClassName = filtered[0].className;
       setSelectedClassId(firstClassName);
       loadSpecificClassData(firstClassName);
@@ -254,66 +260,96 @@ export default function ResultAnalysis() {
     }
   };
 
-  const autoFillCurrentExam = () => {
-    // Find all classes in the same cohort
-    const cohortClasses = classes.filter(c => 
-      c.yearSemSec === classData.yearSemSec && 
-      (c.department === classData.department || (!c.department && !classData.department))
-    );
+  const autoFillCurrentExam = async () => {
+    if (!classData) return;
+    setIsAutoFilling(true);
 
-    const newProgress = { ...progressData };
+    try {
+      // 1. Fetch all classes for this cohort with full student marks data (without summary=true)
+      const res = await API.get("/api/classes", {
+        params: {
+          department: classData.department || "CSE",
+          yearSemSec: classData.yearSemSec,
+          _ts: Date.now()
+        }
+      });
+      const cohortClassesWithStudents = Array.isArray(res.data) ? res.data : [];
 
-    let currentTargetKey = classData.examName;
-    if (classData.examName === "CIA - I") currentTargetKey = "CIA-1";
-    if (classData.examName === "CIA - II") currentTargetKey = "CIA-II";
-    if (classData.examName === "CIA - III") currentTargetKey = "CIA-III";
-    if (classData.examName === "Model Exam") currentTargetKey = "MKC";
-    if (classData.examName === "Unit Test - I") currentTargetKey = "U1";
-    if (classData.examName === "Unit Test - II") currentTargetKey = "U2";
-    if (classData.examName === "Unit Test - III") currentTargetKey = "U3";
-    if (classData.examName === "Unit Test - IV") currentTargetKey = "U4";
-    if (classData.examName === "Unit Test - V") currentTargetKey = "U5";
-    
-    const currentIndex = progressKeys.indexOf(currentTargetKey);
+      // Include currently loaded classData if not already in list
+      const classMap = new Map();
+      cohortClassesWithStudents.forEach(c => {
+        if (c.className) classMap.set(c.className, c);
+      });
+      if (classData && classData.className) {
+        classMap.set(classData.className, classData);
+      }
+      const classesToProcess = Array.from(classMap.values());
 
-    cohortClasses.forEach(c => {
-      let targetKey = c.examName;
-      if (c.examName === "CIA - I") targetKey = "CIA-1";
-      if (c.examName === "CIA - II") targetKey = "CIA-II";
-      if (c.examName === "CIA - III") targetKey = "CIA-III";
-      if (c.examName === "Model Exam") targetKey = "MKC";
-      if (c.examName === "Unit Test - I") targetKey = "U1";
-      if (c.examName === "Unit Test - II") targetKey = "U2";
-      if (c.examName === "Unit Test - III") targetKey = "U3";
-      if (c.examName === "Unit Test - IV") targetKey = "U4";
-      if (c.examName === "Unit Test - V") targetKey = "U5";
+      const newProgress = { ...progressData };
+      let filledCount = 0;
+      const filledExams = [];
 
-      if (progressKeys.includes(targetKey)) {
-        const targetIndex = progressKeys.indexOf(targetKey);
-        
-        // Only autofill if this exam comes BEFORE or IS the current exam
-        if (currentIndex === -1 || targetIndex <= currentIndex) {
-        const isESE = c.examName === "ESE";
+      classesToProcess.forEach(c => {
+        const rawExam = String(c.examName || "").trim();
+        const norm = normalizeExam(rawExam);
+
+        let targetKey = null;
+        if (norm === "cia1" || /^cia\s*[-_]?\s*1$/i.test(rawExam) || /^cia\s*[-_]?\s*i$/i.test(rawExam)) {
+          targetKey = "CIA-1";
+        } else if (norm === "cia2" || /^cia\s*[-_]?\s*2$/i.test(rawExam) || /^cia\s*[-_]?\s*ii$/i.test(rawExam)) {
+          targetKey = "CIA-II";
+        } else if (norm === "cia3" || /^cia\s*[-_]?\s*3$/i.test(rawExam) || /^cia\s*[-_]?\s*iii$/i.test(rawExam)) {
+          targetKey = "CIA-III";
+        } else if (norm === "cia3_model" || /^model/i.test(rawExam) || /^mkc/i.test(rawExam)) {
+          targetKey = "MKC";
+        } else if (norm === "ut1" || /^u(nit\s*test)?\s*[-_]?\s*1$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*i$/i.test(rawExam)) {
+          targetKey = "U1";
+        } else if (norm === "ut2" || /^u(nit\s*test)?\s*[-_]?\s*2$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*ii$/i.test(rawExam)) {
+          targetKey = "U2";
+        } else if (norm === "ut3" || /^u(nit\s*test)?\s*[-_]?\s*3$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*iii$/i.test(rawExam)) {
+          targetKey = "U3";
+        } else if (norm === "ut4" || /^u(nit\s*test)?\s*[-_]?\s*4$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*iv$/i.test(rawExam)) {
+          targetKey = "U4";
+        } else if (norm === "ut5" || /^u(nit\s*test)?\s*[-_]?\s*5$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*v$/i.test(rawExam)) {
+          targetKey = "U5";
+        } else if (norm === "sm" || /^seminar/i.test(rawExam)) {
+          targetKey = "Seminar";
+        } else if (norm === "ese" || /^end\s*sem/i.test(rawExam) || /^ese$/i.test(rawExam)) {
+          targetKey = "ESE";
+        } else if (progressKeys.includes(rawExam)) {
+          targetKey = rawExam;
+        }
+
+        if (!targetKey || !progressKeys.includes(targetKey)) return;
+
+        const isESE = c.examName === "ESE" || targetKey === "ESE";
+        const studentsList = c.students || [];
+        if (studentsList.length === 0) return;
+
         let cTotal = 0;
         let cPass = 0;
 
-        (c.students || []).forEach(s => {
+        studentsList.forEach(s => {
           cTotal++;
           let fail = false;
           let hasAbsent = false;
 
           (s.marks || []).forEach(val => {
-            const markStr = String(val || "").toUpperCase().trim();
+            const markStr = String(val !== undefined && val !== null ? val : "").toUpperCase().trim();
             if (isESE) {
               if (markStr === "AB" || markStr === "U*") hasAbsent = true;
-              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "RA" || markStr === "SA" || markStr === "W" || markStr === "") fail = true;
+              if (markStr === "AB" || markStr === "U" || markStr === "U*" || markStr === "FAIL" || markStr === "RA" || markStr === "SA" || markStr === "W" || markStr === "") {
+                fail = true;
+              }
             } else {
               if (markStr === "AB" || markStr === "A") {
                 fail = true;
                 hasAbsent = true;
               } else {
                 const numVal = Number(markStr || 0);
-                if (numVal < c.passMark) fail = true;
+                if (numVal < (c.passMark ?? 25)) {
+                  fail = true;
+                }
               }
             }
           });
@@ -325,18 +361,30 @@ export default function ResultAnalysis() {
           if (res === "Pass") cPass++;
         });
 
-        const pct = cTotal > 0 ? Math.round((cPass / cTotal) * 100) : 0;
-
-        newProgress[targetKey] = {
-          total: cTotal.toString(),
-          pass: cPass.toString(),
-          percentage: pct.toString()
-        };
+        if (cTotal > 0) {
+          const pct = Math.round((cPass / cTotal) * 100);
+          newProgress[targetKey] = {
+            total: cTotal.toString(),
+            pass: cPass.toString(),
+            percentage: pct.toString()
+          };
+          filledCount++;
+          filledExams.push(targetKey);
         }
-      }
-    });
+      });
 
-    setProgressData(newProgress);
+      setProgressData(newProgress);
+      if (filledCount > 0) {
+        alert(`Successfully fetched & calculated Semester Progress for: ${filledExams.join(", ")}! Click "Save Progress" to persist.`);
+      } else {
+        alert(`No student marks found in database for cohort ${classData.yearSemSec}. Please ensure classes and marks are set up in Admin Panel and Mark Entry.`);
+      }
+    } catch (err) {
+      console.error("Auto-fill error:", err);
+      alert("Failed to auto-fill progress: " + err.message);
+    } finally {
+      setIsAutoFilling(false);
+    }
   };
 
   if (!classData) {
@@ -746,9 +794,21 @@ export default function ResultAnalysis() {
         {isEditingProgress && (
           <button 
             onClick={autoFillCurrentExam}
-            style={{ padding: "10px 20px", background: "#17a2b8", color: "white", border: "none", cursor: "pointer", borderRadius: "6px" }}
+            disabled={isAutoFilling}
+            style={{ 
+              padding: "10px 20px", 
+              background: isAutoFilling ? "#64748b" : "#0284c7", 
+              color: "white", 
+              border: "none", 
+              cursor: isAutoFilling ? "not-allowed" : "pointer", 
+              borderRadius: "6px",
+              fontWeight: "bold",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px"
+            }}
           >
-            🔄 Auto-fill {classData.examName === "ESE" ? "End Semester Examination" : classData.examName}
+            {isAutoFilling ? "⏳ Fetching Cohort Marks..." : `🔄 Auto-fill All Exams (${classData.yearSemSec})`}
           </button>
         )}
       </div>
