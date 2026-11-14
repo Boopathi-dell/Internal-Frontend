@@ -45,6 +45,29 @@ export default function ResultAnalysis() {
 
   const progressKeys = ["U1", "U2", "CIA-1", "U3", "U4", "CIA-II", "U5", "CIA-III", "MKC", "Seminar", "ESE"];
 
+  const getProgressKeyForExam = (examName) => {
+    if (!examName) return null;
+    const raw = String(examName).trim();
+    const norm = normalizeExam(raw);
+
+    if (norm === "cia1" || /^cia\s*[-_]?\s*1$/i.test(raw) || /^cia\s*[-_]?\s*i$/i.test(raw)) return "CIA-1";
+    if (norm === "cia2" || /^cia\s*[-_]?\s*2$/i.test(raw) || /^cia\s*[-_]?\s*ii$/i.test(raw)) return "CIA-II";
+    if (norm === "cia3" || /^cia\s*[-_]?\s*3$/i.test(raw) || /^cia\s*[-_]?\s*iii$/i.test(raw)) return "CIA-III";
+    if (norm === "cia3_model" || /^model/i.test(raw) || /^mkc/i.test(raw)) return "MKC";
+    if (norm === "ut1" || /^u(nit\s*test)?\s*[-_]?\s*1$/i.test(raw) || /^u(nit\s*test)?\s*[-_]?\s*i$/i.test(raw)) return "U1";
+    if (norm === "ut2" || /^u(nit\s*test)?\s*[-_]?\s*2$/i.test(raw) || /^u(nit\s*test)?\s*[-_]?\s*ii$/i.test(raw)) return "U2";
+    if (norm === "ut3" || /^u(nit\s*test)?\s*[-_]?\s*3$/i.test(raw) || /^u(nit\s*test)?\s*[-_]?\s*iii$/i.test(raw)) return "U3";
+    if (norm === "ut4" || /^u(nit\s*test)?\s*[-_]?\s*4$/i.test(raw) || /^u(nit\s*test)?\s*[-_]?\s*iv$/i.test(raw)) return "U4";
+    if (norm === "ut5" || /^u(nit\s*test)?\s*[-_]?\s*5$/i.test(raw) || /^u(nit\s*test)?\s*[-_]?\s*v$/i.test(raw)) return "U5";
+    if (norm === "sm" || /^seminar/i.test(raw)) return "Seminar";
+    if (norm === "ese" || /^end\s*sem/i.test(raw) || /^ese$/i.test(raw)) return "ESE";
+    if (progressKeys.includes(raw)) return raw;
+    return null;
+  };
+
+  const currentTargetKey = getProgressKeyForExam(classData?.examName);
+  const currentIndex = progressKeys.indexOf(currentTargetKey);
+
   const getSemOptionsForYear = (year) => {
     switch (year) {
       case "I":
@@ -247,14 +270,22 @@ export default function ResultAnalysis() {
 
   const saveProgress = async () => {
     try {
+      const cleanedProgress = { ...progressData };
+      progressKeys.forEach((key, idx) => {
+        if (currentIndex !== -1 && idx > currentIndex) {
+          cleanedProgress[key] = { total: "", pass: "", percentage: "" };
+        }
+      });
+
       await API.post(`/api/classes/${encodeURIComponent(classData.className)}/progress`, {
-        semesterProgress: progressData
+        semesterProgress: cleanedProgress
       });
       alert("Semester progress saved successfully!");
       setIsEditingProgress(false);
       // Refresh data
       const res = await API.get(`/api/classes/${encodeURIComponent(classData.className)}`);
       setClassData(res.data);
+      setProgressData(res.data.semesterProgress || {});
     } catch (err) {
       alert("Failed to save progress: " + err.message);
     }
@@ -286,46 +317,40 @@ export default function ResultAnalysis() {
       const classesToProcess = Array.from(classMap.values());
 
       const newProgress = { ...progressData };
+
+      // Reset any columns after currentIndex so future exams never stay populated
+      progressKeys.forEach((key, idx) => {
+        if (currentIndex !== -1 && idx > currentIndex) {
+          newProgress[key] = { total: "", pass: "", percentage: "" };
+        }
+      });
+
       let filledCount = 0;
       const filledExams = [];
 
       classesToProcess.forEach(c => {
-        const rawExam = String(c.examName || "").trim();
-        const norm = normalizeExam(rawExam);
-
-        let targetKey = null;
-        if (norm === "cia1" || /^cia\s*[-_]?\s*1$/i.test(rawExam) || /^cia\s*[-_]?\s*i$/i.test(rawExam)) {
-          targetKey = "CIA-1";
-        } else if (norm === "cia2" || /^cia\s*[-_]?\s*2$/i.test(rawExam) || /^cia\s*[-_]?\s*ii$/i.test(rawExam)) {
-          targetKey = "CIA-II";
-        } else if (norm === "cia3" || /^cia\s*[-_]?\s*3$/i.test(rawExam) || /^cia\s*[-_]?\s*iii$/i.test(rawExam)) {
-          targetKey = "CIA-III";
-        } else if (norm === "cia3_model" || /^model/i.test(rawExam) || /^mkc/i.test(rawExam)) {
-          targetKey = "MKC";
-        } else if (norm === "ut1" || /^u(nit\s*test)?\s*[-_]?\s*1$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*i$/i.test(rawExam)) {
-          targetKey = "U1";
-        } else if (norm === "ut2" || /^u(nit\s*test)?\s*[-_]?\s*2$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*ii$/i.test(rawExam)) {
-          targetKey = "U2";
-        } else if (norm === "ut3" || /^u(nit\s*test)?\s*[-_]?\s*3$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*iii$/i.test(rawExam)) {
-          targetKey = "U3";
-        } else if (norm === "ut4" || /^u(nit\s*test)?\s*[-_]?\s*4$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*iv$/i.test(rawExam)) {
-          targetKey = "U4";
-        } else if (norm === "ut5" || /^u(nit\s*test)?\s*[-_]?\s*5$/i.test(rawExam) || /^u(nit\s*test)?\s*[-_]?\s*v$/i.test(rawExam)) {
-          targetKey = "U5";
-        } else if (norm === "sm" || /^seminar/i.test(rawExam)) {
-          targetKey = "Seminar";
-        } else if (norm === "ese" || /^end\s*sem/i.test(rawExam) || /^ese$/i.test(rawExam)) {
-          targetKey = "ESE";
-        } else if (progressKeys.includes(rawExam)) {
-          targetKey = rawExam;
-        }
-
+        const targetKey = getProgressKeyForExam(c.examName);
         if (!targetKey || !progressKeys.includes(targetKey)) return;
 
-        const isESE = c.examName === "ESE" || targetKey === "ESE";
+        const targetIndex = progressKeys.indexOf(targetKey);
+        // Only autofill if this exam comes BEFORE or IS the current exam
+        if (currentIndex !== -1 && targetIndex > currentIndex) return;
+
         const studentsList = c.students || [];
         if (studentsList.length === 0) return;
 
+        // Check if there are actual student marks entered in this class
+        let hasAnyMarks = false;
+        studentsList.forEach(s => {
+          (s.marks || []).forEach(val => {
+            if (val !== undefined && val !== null && String(val).trim() !== "") {
+              hasAnyMarks = true;
+            }
+          });
+        });
+        if (!hasAnyMarks) return;
+
+        const isESE = c.examName === "ESE" || targetKey === "ESE";
         let cTotal = 0;
         let cPass = 0;
 
@@ -377,7 +402,7 @@ export default function ResultAnalysis() {
       if (filledCount > 0) {
         alert(`Successfully fetched & calculated Semester Progress for: ${filledExams.join(", ")}! Click "Save Progress" to persist.`);
       } else {
-        alert(`No student marks found in database for cohort ${classData.yearSemSec}. Please ensure classes and marks are set up in Admin Panel and Mark Entry.`);
+        alert(`No student marks found in database for completed exams in cohort ${classData.yearSemSec}. Please ensure classes and marks are set up in Admin Panel and Mark Entry.`);
       }
     } catch (err) {
       console.error("Auto-fill error:", err);
@@ -808,7 +833,7 @@ export default function ResultAnalysis() {
               gap: "6px"
             }}
           >
-            {isAutoFilling ? "⏳ Fetching Cohort Marks..." : `🔄 Auto-fill All Exams (${classData.yearSemSec})`}
+            {isAutoFilling ? "⏳ Fetching Marks..." : `🔄 Auto-fill ${classData.examName === "ESE" ? "End Semester Examination" : classData.examName}`}
           </button>
         )}
       </div>
@@ -852,56 +877,72 @@ export default function ResultAnalysis() {
             <tr>
               <td style={tdStyle}>1</td>
               <td style={{ ...tdStyle, textAlign: "left", paddingLeft: "8px" }}>Total No. of Students (A)</td>
-              {progressKeys.map(k => (
-                <td key={k} style={tdStyle}>
-                  {isEditingProgress ? (
-                    <input 
-                      type="text" 
-                      value={progressData[k]?.total || ""} 
-                      onChange={e => handleProgressChange(k, "total", e.target.value)}
-                      style={{ width: "100%", border: "none", textAlign: "center", background: "#fff9c4" }}
-                    />
-                  ) : (
-                    progressData[k]?.total || ""
-                  )}
-                </td>
-              ))}
+              {progressKeys.map((k, idx) => {
+                const isFuture = currentIndex !== -1 && idx > currentIndex;
+                return (
+                  <td key={k} style={tdStyle}>
+                    {isEditingProgress ? (
+                      <input 
+                        type="text" 
+                        value={isFuture ? "" : (progressData[k]?.total || "")} 
+                        onChange={e => handleProgressChange(k, "total", e.target.value)}
+                        disabled={isFuture}
+                        style={{ width: "100%", border: "none", textAlign: "center", background: isFuture ? "#f1f5f9" : "#fff9c4", cursor: isFuture ? "not-allowed" : "text" }}
+                      />
+                    ) : (
+                      isFuture ? "" : (progressData[k]?.total || "")
+                    )}
+                  </td>
+                );
+              })}
             </tr>
             <tr>
               <td style={tdStyle}>2</td>
               <td style={{ ...tdStyle, textAlign: "left", paddingLeft: "8px" }}>No. of Students Pass (B)</td>
-              {progressKeys.map(k => (
-                <td key={k} style={tdStyle}>
-                  {isEditingProgress ? (
-                    <input 
-                      type="text" 
-                      value={progressData[k]?.pass || ""} 
-                      onChange={e => handleProgressChange(k, "pass", e.target.value)}
-                      style={{ width: "100%", border: "none", textAlign: "center", background: "#fff9c4" }}
-                    />
-                  ) : (
-                    progressData[k]?.pass || ""
-                  )}
-                </td>
-              ))}
+              {progressKeys.map((k, idx) => {
+                const isFuture = currentIndex !== -1 && idx > currentIndex;
+                return (
+                  <td key={k} style={tdStyle}>
+                    {isEditingProgress ? (
+                      <input 
+                        type="text" 
+                        value={isFuture ? "" : (progressData[k]?.pass || "")} 
+                        onChange={e => handleProgressChange(k, "pass", e.target.value)}
+                        disabled={isFuture}
+                        style={{ width: "100%", border: "none", textAlign: "center", background: isFuture ? "#f1f5f9" : "#fff9c4", cursor: isFuture ? "not-allowed" : "text" }}
+                      />
+                    ) : (
+                      isFuture ? "" : (progressData[k]?.pass || "")
+                    )}
+                  </td>
+                );
+              })}
             </tr>
             <tr>
               <td style={tdStyle}>3</td>
               <td style={{ ...tdStyle, textAlign: "left", paddingLeft: "8px" }}>Pass % (B/A) × 100</td>
-              {progressKeys.map(k => (
-                <td key={k} style={tdStyle}>
-                  {isEditingProgress ? (
-                    <input 
-                      type="text" 
-                      value={progressData[k]?.percentage || ""} 
-                      onChange={e => handleProgressChange(k, "percentage", e.target.value)}
-                      style={{ width: "100%", border: "none", textAlign: "center", background: "#fff9c4" }}
-                    />
-                  ) : (
-                    progressData[k]?.percentage ? (String(progressData[k].percentage).includes("%") ? progressData[k].percentage : `${progressData[k].percentage} %`) : ""
-                  )}
-                </td>
-              ))}
+              {progressKeys.map((k, idx) => {
+                const isFuture = currentIndex !== -1 && idx > currentIndex;
+                return (
+                  <td key={k} style={tdStyle}>
+                    {isEditingProgress ? (
+                      <input 
+                        type="text" 
+                        value={isFuture ? "" : (progressData[k]?.percentage || "")} 
+                        onChange={e => handleProgressChange(k, "percentage", e.target.value)}
+                        disabled={isFuture}
+                        style={{ width: "100%", border: "none", textAlign: "center", background: isFuture ? "#f1f5f9" : "#fff9c4", cursor: isFuture ? "not-allowed" : "text" }}
+                      />
+                    ) : (
+                      isFuture ? "" : (
+                        progressData[k]?.percentage 
+                          ? (String(progressData[k].percentage).includes("%") ? progressData[k].percentage : `${progressData[k].percentage} %`) 
+                          : ""
+                      )
+                    )}
+                  </td>
+                );
+              })}
             </tr>
           </tbody>
         </table>
