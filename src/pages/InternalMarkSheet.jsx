@@ -3323,7 +3323,7 @@ export default function InternalMarkSheet() {
         @media print {
           @page {
             size: ${isPortraitMode ? "A4 portrait" : "A4 landscape"};
-            margin: ${isPortraitMode ? "6mm 7mm 11mm 7mm" : "5mm 7mm 11mm 7mm"};
+            margin: ${isPortraitMode ? "6mm 8mm 11mm 8mm" : "5mm 8mm 11mm 8mm"};
             @bottom-center {
               content: "Page " counter(page) " of " counter(pages);
               font-size: 10px;
@@ -3379,7 +3379,7 @@ export default function InternalMarkSheet() {
             border: none !important;
             outline: none !important;
             border-radius: 0 !important;
-            padding: 0 !important;
+            padding: 0 1px !important;
             margin: 0 auto !important;
             box-shadow: none !important;
             page-break-inside: avoid !important;
@@ -3503,7 +3503,34 @@ export default function InternalMarkSheet() {
             border: none !important;
             border-radius: 0 !important;
             margin: 0 !important;
+            padding: 0 1px 0 0 !important;
             overflow: visible !important;
+            box-sizing: border-box !important;
+          }
+          .mec-official-table {
+            border-collapse: collapse !important;
+            box-sizing: border-box !important;
+            width: calc(100% - 2px) !important;
+            margin: 0 auto !important;
+            border: 1.5px solid #000000 !important;
+          }
+          .mec-official-table th:first-child,
+          .mec-official-table td:first-child,
+          .mec-official-table thead tr th:first-child,
+          .mec-official-table tbody tr td:first-child {
+            border-left: 1.8px solid #000000 !important;
+          }
+          .mec-official-table th:last-child,
+          .mec-official-table td:last-child,
+          .mec-official-table thead tr th:last-child,
+          .mec-official-table tbody tr td:last-child {
+            border-right: 2px solid #000000 !important;
+          }
+          .mec-official-table thead tr:first-child th {
+            border-top: 1.8px solid #000000 !important;
+          }
+          .mec-official-table tbody tr:last-child td {
+            border-bottom: 1.8px solid #000000 !important;
           }
           .mec-official-table tbody td {
             font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
@@ -3522,6 +3549,7 @@ export default function InternalMarkSheet() {
           font-size: 11px;
           color: #000000;
           table-layout: fixed;
+          border: 1.5px solid #000000;
         }
         .mec-official-table.auto-fit-table {
           width: auto !important;
@@ -3534,6 +3562,14 @@ export default function InternalMarkSheet() {
         .mec-official-table th, .mec-official-table td {
           border: 1px solid #000000;
           vertical-align: middle;
+        }
+        .mec-official-table th:first-child,
+        .mec-official-table td:first-child {
+          border-left: 1.8px solid #000000;
+        }
+        .mec-official-table th:last-child,
+        .mec-official-table td:last-child {
+          border-right: 2px solid #000000 !important;
         }
         .mec-official-table th {
           font-weight: bold;
