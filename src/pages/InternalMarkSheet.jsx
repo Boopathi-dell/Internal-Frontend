@@ -7,6 +7,7 @@ import {
   normalizeRegNo,
   normalizeExam,
   findMatchingClassesForExam,
+  findSubjectIndexInClass,
   findExamMarkForStudent
 } from "../utils/examMatchUtils";
 import { 
@@ -139,6 +140,8 @@ export default function InternalMarkSheet() {
   const [shortNameOverrides, setShortNameOverrides] = useState({});
   const [consolidatedEdits, setConsolidatedEdits] = useState({});
   const excelMenuRef = useRef(null);
+  const syncDebounceTimersRef = useRef({});
+  const [inlineSyncStatus, setInlineSyncStatus] = useState("");
 
   const getConsolidatedPrefsKey = (dept, year, sem, category) =>
     `internalMarkConsolidatedPrefs_${dept || "dept"}_${year || "yr"}_${sem || "sem"}_${category || "Theory"}`;
@@ -992,8 +995,72 @@ export default function InternalMarkSheet() {
     activeTemplate
   ]);
 
-  // Handle cell edit on screen
+  // Sync individual mark back to source ClassData (Mark Statement in MongoDB)
+  const syncMarkToSourceClass = async (student, targetCol, value) => {
+    if (!targetCol || targetCol.type !== "exam") return;
+    const targetReg = student?.regNo;
+    if (!targetReg) return;
+
+    const targetSubjCode = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
+    const foundSubj = subjects.find(s => s.code === targetSubjCode);
+    const targetSubjName = foundSubj ? foundSubj.name : "";
+    const targetSubjShort = foundSubj ? foundSubj.shortName : "";
+
+    const candidateExam = targetCol.examName || targetCol.title || targetCol.heading;
+    const matches = findMatchingClassesForExam(allFetchedClasses, candidateExam, targetCol.title || targetCol.heading);
+    const matchedCls = matches[0]?.cls;
+
+    try {
+      setInlineSyncStatus(`⏳ Saving ${targetReg} = ${value} to ${matchedCls?.examName || candidateExam}...`);
+      const payload = {
+        className: matchedCls?.className,
+        department: formData.department,
+        yearSemSec: `${formData.year}/${formData.semester}/${formData.section}`,
+        examName: matchedCls?.examName || candidateExam,
+        candidateExamNames: [targetCol.examName, targetCol.title, targetCol.heading].filter(Boolean),
+        regNo: targetReg,
+        subjectCode: targetSubjCode,
+        subjectName: targetSubjName,
+        mark: value,
+        isAdmin: true
+      };
+
+      const res = await API.post("/api/classes/sync-student-mark", payload);
+
+      if (res.data?.success) {
+        setInlineSyncStatus(`✓ Saved ${targetReg} = ${value} to ${res.data.examName} Mark Statement`);
+
+        // Update in-memory allFetchedClasses so subsequent operations have the new mark immediately
+        if (matchedCls && Array.isArray(matchedCls.students)) {
+          const normR = normalizeRegNo(targetReg);
+          const stIdx = matchedCls.students.findIndex(s => normalizeRegNo(s.regNo) === normR);
+          if (stIdx !== -1) {
+            const sIdxInClass = findSubjectIndexInClass(matchedCls, targetSubjCode, targetSubjName, targetSubjShort);
+            if (sIdxInClass !== -1) {
+              const updatedMarks = [...(matchedCls.students[stIdx].marks || [])];
+              while (updatedMarks.length <= sIdxInClass) updatedMarks.push("");
+              updatedMarks[sIdxInClass] = String(value !== undefined && value !== null ? value : "").trim();
+              matchedCls.students[stIdx].marks = updatedMarks;
+              setAllFetchedClasses(prev => prev.map(c => c._id === matchedCls._id ? { ...matchedCls } : c));
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync student mark to source class:", err);
+      setInlineSyncStatus(`⚠️ Sync warning: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setTimeout(() => {
+        setInlineSyncStatus(prev => prev.startsWith("✓") ? "" : prev);
+      }, 4000);
+    }
+  };
+
+  // Handle cell edit on screen with auto-sync to Mark Statement
   const handleCellEdit = (studentIndex, colKeyOrHeading, value) => {
+    let targetStudent = null;
+    let targetCol = null;
+
     setStudentsData(prev => {
       if (!prev[studentIndex]) return prev;
       const updated = [...prev];
@@ -1013,8 +1080,39 @@ export default function InternalMarkSheet() {
       evaluateRowFormulas(row, columnsToUse, hasAdminTemplate);
 
       updated[studentIndex] = row;
+      targetStudent = row;
+      targetCol = matchedCol;
       return updated;
     });
+
+    // Debounced auto-save to source Mark Statement (500ms)
+    if (targetCol && targetCol.type === "exam") {
+      const cellTimerKey = `${studentIndex}_${colKeyOrHeading}`;
+      if (syncDebounceTimersRef.current[cellTimerKey]) {
+        clearTimeout(syncDebounceTimersRef.current[cellTimerKey]);
+      }
+      syncDebounceTimersRef.current[cellTimerKey] = setTimeout(() => {
+        syncMarkToSourceClass(targetStudent, targetCol, value);
+        delete syncDebounceTimersRef.current[cellTimerKey];
+      }, 500);
+    }
+  };
+
+  // Immediate save on blur (leaving the input)
+  const handleCellBlur = (studentIndex, colKeyOrHeading, value) => {
+    const cellTimerKey = `${studentIndex}_${colKeyOrHeading}`;
+    if (syncDebounceTimersRef.current[cellTimerKey]) {
+      clearTimeout(syncDebounceTimersRef.current[cellTimerKey]);
+      delete syncDebounceTimersRef.current[cellTimerKey];
+    }
+    const student = studentsData[studentIndex];
+    const columnsToUse = getColumnsWithKeys(
+      Boolean(activeTemplate?.columns?.length) ? activeTemplate.columns : defaultMecColumns
+    );
+    const matchedCol = columnsToUse.find(c => c.colKey === colKeyOrHeading || c.heading === colKeyOrHeading);
+    if (student && matchedCol && matchedCol.type === "exam") {
+      syncMarkToSourceClass(student, matchedCol, value);
+    }
   };
 
   // Get Clean Formatted Course Code and Name automatically
@@ -1735,14 +1833,35 @@ export default function InternalMarkSheet() {
             </button>
 
             {isAdmin && (
-              <button
-                onClick={() => setIsEditingMarks(!isEditingMarks)}
-                className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
-                style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
-                title="Toggle inline mark editing"
-              >
-                <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
-              </button>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  onClick={() => setIsEditingMarks(!isEditingMarks)}
+                  className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
+                  style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
+                  title="Toggle inline mark editing"
+                >
+                  <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
+                </button>
+                {inlineSyncStatus && (
+                  <span
+                    style={{
+                      fontSize: "0.78rem",
+                      fontWeight: "700",
+                      padding: "4px 10px",
+                      borderRadius: "8px",
+                      background: inlineSyncStatus.startsWith("✓") ? "rgba(16, 185, 129, 0.15)" : inlineSyncStatus.startsWith("⏳") ? "rgba(59, 130, 246, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                      color: inlineSyncStatus.startsWith("✓") ? "#047857" : inlineSyncStatus.startsWith("⏳") ? "#1d4ed8" : "#b45309",
+                      border: inlineSyncStatus.startsWith("✓") ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(59, 130, 246, 0.3)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {inlineSyncStatus}
+                  </span>
+                )}
+              </div>
             )}
 
             <div ref={excelMenuRef} style={{ position: "relative" }}>
@@ -3231,7 +3350,7 @@ export default function InternalMarkSheet() {
                       {canEditInline
                         ? isConsolidatedView
                           ? "Inline Consolidated Editing Mode"
-                          : "Inline Editing Mode • Changes recalculate automatically"
+                          : "Inline Editing Mode • Changes auto-save directly to source Mark Statement"
                         : `Screen Preview • Prints in Official A4 ${isPortraitMode ? "Portrait" : "Landscape"} Format`}
                     </span>
                   </div>
@@ -3520,6 +3639,7 @@ export default function InternalMarkSheet() {
                                             className="editable-cell-input" 
                                             value={displayVal} 
                                             onChange={e => handleCellEdit(globalIndex, col.colKey, e.target.value)} 
+                                            onBlur={e => handleCellBlur(globalIndex, col.colKey, e.target.value)}
                                             style={{
                                               fontWeight: isFailMark ? "bold" : "normal",
                                               color: isFailMark ? "#000000" : undefined
