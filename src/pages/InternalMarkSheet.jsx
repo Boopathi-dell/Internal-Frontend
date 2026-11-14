@@ -141,7 +141,9 @@ export default function InternalMarkSheet() {
   const [consolidatedEdits, setConsolidatedEdits] = useState({});
   const excelMenuRef = useRef(null);
   const syncDebounceTimersRef = useRef({});
+  const editedCellsRef = useRef(new Map());
   const [inlineSyncStatus, setInlineSyncStatus] = useState("");
+  const [isSavingMarks, setIsSavingMarks] = useState(false);
 
   const getConsolidatedPrefsKey = (dept, year, sem, category) =>
     `internalMarkConsolidatedPrefs_${dept || "dept"}_${year || "yr"}_${sem || "sem"}_${category || "Theory"}`;
@@ -1085,9 +1087,17 @@ export default function InternalMarkSheet() {
       return updated;
     });
 
-    // Debounced auto-save to source Mark Statement (500ms)
+    // Record edit for manual "Save Marks" & trigger background debounced auto-save
     if (targetCol && targetCol.type === "exam") {
       const cellTimerKey = `${studentIndex}_${colKeyOrHeading}`;
+      editedCellsRef.current.set(cellTimerKey, {
+        student: targetStudent,
+        studentIndex,
+        colKeyOrHeading,
+        targetCol,
+        value
+      });
+
       if (syncDebounceTimersRef.current[cellTimerKey]) {
         clearTimeout(syncDebounceTimersRef.current[cellTimerKey]);
       }
@@ -1111,7 +1121,153 @@ export default function InternalMarkSheet() {
     );
     const matchedCol = columnsToUse.find(c => c.colKey === colKeyOrHeading || c.heading === colKeyOrHeading);
     if (student && matchedCol && matchedCol.type === "exam") {
+      editedCellsRef.current.set(cellTimerKey, {
+        student,
+        studentIndex,
+        colKeyOrHeading,
+        targetCol: matchedCol,
+        value
+      });
       syncMarkToSourceClass(student, matchedCol, value);
+    }
+  };
+
+  // Explicit Save Marks handler for saving all inline edits to MongoDB & Mark Statement
+  const handleSaveAllMarks = async () => {
+    // Clear all pending debounce timers
+    Object.keys(syncDebounceTimersRef.current).forEach(k => {
+      clearTimeout(syncDebounceTimersRef.current[k]);
+      delete syncDebounceTimersRef.current[k];
+    });
+
+    setIsSavingMarks(true);
+    setInlineSyncStatus("⏳ Saving marks to database & Mark Statement...");
+
+    try {
+      const targetSubjCode = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
+      const foundSubj = subjects.find(s => s.code === targetSubjCode);
+      const targetSubjName = foundSubj ? foundSubj.name : "";
+      const targetSubjShort = foundSubj ? foundSubj.shortName : "";
+
+      const columnsToUse = getColumnsWithKeys(
+        Boolean(activeTemplate?.columns?.length) ? activeTemplate.columns : defaultMecColumns
+      );
+      const examCols = columnsToUse.filter(c => c.type === "exam");
+
+      const itemsToSync = [];
+
+      if (editedCellsRef.current.size > 0) {
+        for (const item of editedCellsRef.current.values()) {
+          const st = studentsData[item.studentIndex] || item.student;
+          const regNo = st?.regNo;
+          const targetCol = item.targetCol;
+          const val = (st && targetCol) ? (st[targetCol.colKey] ?? st[targetCol.heading] ?? item.value) : item.value;
+          if (regNo && targetCol) {
+            itemsToSync.push({
+              student: st,
+              targetCol,
+              value: val,
+              regNo,
+              candidateExam: targetCol.examName || targetCol.title || targetCol.heading,
+              candidateExamNames: [targetCol.examName, targetCol.title, targetCol.heading].filter(Boolean),
+              subjectCode: targetSubjCode,
+              subjectName: targetSubjName,
+              subjectShort: targetSubjShort,
+              mark: val
+            });
+          }
+        }
+      } else {
+        // If user clicks Save Marks without pending edits, sync all valid exam marks currently on sheet
+        studentsData.forEach(st => {
+          examCols.forEach(col => {
+            const val = st[col.colKey] ?? st[col.heading];
+            if (val !== undefined && val !== null && String(val).trim() !== "") {
+              itemsToSync.push({
+                student: st,
+                targetCol: col,
+                value: val,
+                regNo: st.regNo,
+                candidateExam: col.examName || col.title || col.heading,
+                candidateExamNames: [col.examName, col.title, col.heading].filter(Boolean),
+                subjectCode: targetSubjCode,
+                subjectName: targetSubjName,
+                subjectShort: targetSubjShort,
+                mark: val
+              });
+            }
+          });
+        });
+      }
+
+      if (itemsToSync.length === 0) {
+        setInlineSyncStatus("✓ Marks are up to date!");
+        alert("All marks are already up to date in Database!");
+        return;
+      }
+
+      // 1. Try batch sync endpoint first
+      let batchSuccess = false;
+      try {
+        const batchPayload = {
+          updates: itemsToSync.map(i => ({
+            regNo: i.regNo,
+            examName: i.candidateExam,
+            candidateExamNames: i.candidateExamNames,
+            subjectCode: i.subjectCode,
+            subjectName: i.subjectName,
+            mark: i.mark
+          })),
+          department: formData.department,
+          yearSemSec: `${formData.year}/${formData.semester}/${formData.section}`,
+          isAdmin: true
+        };
+        const batchRes = await API.post("/api/classes/sync-batch-marks", batchPayload);
+        if (batchRes.data?.success) {
+          batchSuccess = true;
+          // Update in-memory allFetchedClasses so everything reflects instantly
+          itemsToSync.forEach(item => {
+            const matches = findMatchingClassesForExam(allFetchedClasses, item.candidateExam, item.targetCol?.title || item.targetCol?.heading);
+            const matchedCls = matches[0]?.cls;
+            if (matchedCls && Array.isArray(matchedCls.students)) {
+              const normR = normalizeRegNo(item.regNo);
+              const stIdx = matchedCls.students.findIndex(s => normalizeRegNo(s.regNo) === normR);
+              if (stIdx !== -1) {
+                const sIdxInClass = findSubjectIndexInClass(matchedCls, item.subjectCode, item.subjectName, item.subjectShort);
+                if (sIdxInClass !== -1) {
+                  const updatedMarks = [...(matchedCls.students[stIdx].marks || [])];
+                  while (updatedMarks.length <= sIdxInClass) updatedMarks.push("");
+                  updatedMarks[sIdxInClass] = String(item.value !== undefined && item.value !== null ? item.value : "").trim();
+                  matchedCls.students[stIdx].marks = updatedMarks;
+                }
+              }
+            }
+          });
+          setAllFetchedClasses([...allFetchedClasses]);
+        }
+      } catch (batchErr) {
+        console.warn("Batch sync endpoint failed, falling back to sequential sync:", batchErr);
+      }
+
+      // 2. Fallback to individual sync if batch wasn't available
+      if (!batchSuccess) {
+        for (const item of itemsToSync) {
+          await syncMarkToSourceClass(item.student, item.targetCol, item.value);
+        }
+      }
+
+      editedCellsRef.current.clear();
+      setInlineSyncStatus("✓ All marks saved successfully to Database & Mark Statement!");
+      alert("✅ All marks saved successfully to Database & original Mark Statement!");
+    } catch (err) {
+      console.error("Save all marks error:", err);
+      setInlineSyncStatus(`⚠️ Error saving marks: ${err.message}`);
+      alert("⚠️ Error saving marks: " + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSavingMarks(false);
+      setTimeout(() => {
+        setInlineSyncStatus(prev => prev.startsWith("✓") ? "" : prev);
+      }, 5000);
     }
   };
 
@@ -1842,6 +1998,31 @@ export default function InternalMarkSheet() {
                 >
                   <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
                 </button>
+                {isEditingMarks && (
+                  <button
+                    onClick={handleSaveAllMarks}
+                    disabled={isSavingMarks}
+                    className="btn btn-success"
+                    style={{
+                      height: "40px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "7px",
+                      fontWeight: "700",
+                      fontSize: "0.85rem",
+                      padding: "0 1.1rem",
+                      borderRadius: "10px",
+                      background: "#10b981",
+                      color: "white",
+                      border: "none",
+                      cursor: isSavingMarks ? "not-allowed" : "pointer",
+                      boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)"
+                    }}
+                    title="Save all edited marks to MongoDB Database and original Mark Statement"
+                  >
+                    <Save size={16} /> {isSavingMarks ? "Saving..." : "Save Marks"}
+                  </button>
+                )}
                 {inlineSyncStatus && (
                   <span
                     style={{
