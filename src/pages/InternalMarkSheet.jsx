@@ -138,6 +138,28 @@ export default function InternalMarkSheet() {
   const [showExcelMenu, setShowExcelMenu] = useState(false);
   const [hiddenConsolidatedSubjects, setHiddenConsolidatedSubjects] = useState([]);
   const [shortNameOverrides, setShortNameOverrides] = useState({});
+
+  // Red shadow / highlight toggle for Fail and Absent marks (persists in localStorage)
+  const [highlightFailInPrint, setHighlightFailInPrint] = useState(() => {
+    try {
+      const saved = localStorage.getItem("internal_mark_highlight_fail");
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleHighlightFailInPrint = () => {
+    setHighlightFailInPrint(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("internal_mark_highlight_fail", JSON.stringify(next));
+      } catch (e) {
+        console.error("Failed to save fail highlight preference:", e);
+      }
+      return next;
+    });
+  };
   const [consolidatedEdits, setConsolidatedEdits] = useState({});
   const excelMenuRef = useRef(null);
   const syncDebounceTimersRef = useRef({});
@@ -1385,6 +1407,88 @@ export default function InternalMarkSheet() {
     return visibleColumns.some(c => c.maxMark || (c.heading && c.heading.includes("(") && c.heading.includes(")")));
   }, [visibleColumns]);
 
+  // Editable columns in Subject View (excludes formula and calculation columns)
+  const editableColumns = useMemo(() => {
+    return visibleColumns.filter(c => c.type !== "formula" && c.type !== "calculation");
+  }, [visibleColumns]);
+
+  // Excel-like Arrow Key (Up, Down, Left, Right, Enter, Tab) Navigation across editable mark inputs
+  const handleCellKeyDown = (e, rowIndex, colIndex, totalCols) => {
+    const input = e.target;
+    const val = input.value || "";
+    const isTextSelected = input.selectionStart === 0 && input.selectionEnd === val.length;
+    const isAtStart = input.selectionStart === 0 && input.selectionEnd === 0;
+    const isAtEnd = input.selectionStart === val.length;
+
+    let targetRow = null;
+    let targetCol = null;
+
+    if (e.key === "ArrowDown" || (e.key === "Enter" && !e.shiftKey)) {
+      e.preventDefault();
+      targetRow = rowIndex + 1;
+      targetCol = colIndex;
+    } else if (e.key === "ArrowUp" || (e.key === "Enter" && e.shiftKey)) {
+      e.preventDefault();
+      targetRow = rowIndex - 1;
+      targetCol = colIndex;
+    } else if (e.key === "ArrowRight") {
+      // Navigate right if cell is fully selected, cursor is at end of text, or empty
+      if (isTextSelected || isAtEnd || val === "") {
+        e.preventDefault();
+        if (colIndex + 1 < totalCols) {
+          targetRow = rowIndex;
+          targetCol = colIndex + 1;
+        } else {
+          // Wrap to next student row, first editable column
+          targetRow = rowIndex + 1;
+          targetCol = 0;
+        }
+      }
+    } else if (e.key === "ArrowLeft") {
+      // Navigate left if cell is fully selected, cursor is at start of text, or empty
+      if (isTextSelected || isAtStart || val === "") {
+        e.preventDefault();
+        if (colIndex - 1 >= 0) {
+          targetRow = rowIndex;
+          targetCol = colIndex - 1;
+        } else {
+          // Wrap to previous student row, last editable column
+          targetRow = rowIndex - 1;
+          targetCol = totalCols - 1;
+        }
+      }
+    } else if (e.key === "Tab") {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        if (colIndex + 1 < totalCols) {
+          targetRow = rowIndex;
+          targetCol = colIndex + 1;
+        } else {
+          targetRow = rowIndex + 1;
+          targetCol = 0;
+        }
+      } else {
+        e.preventDefault();
+        if (colIndex - 1 >= 0) {
+          targetRow = rowIndex;
+          targetCol = colIndex - 1;
+        } else {
+          targetRow = rowIndex - 1;
+          targetCol = totalCols - 1;
+        }
+      }
+    }
+
+    if (targetRow !== null && targetCol !== null) {
+      const nextInput = document.querySelector(`input[data-mark-row="${targetRow}"][data-mark-col="${targetCol}"]`);
+      if (nextInput) {
+        nextInput.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        nextInput.focus();
+        nextInput.select();
+      }
+    }
+  };
+
   // Diagnostic mapping status showing which Exam class feeds each exam column
   const examLinksStatus = useMemo(() => {
     const targetCode = formData.isCustomSubject ? formData.customSubject : formData.selectedSubject;
@@ -2232,6 +2336,40 @@ export default function InternalMarkSheet() {
               )}
             </div>
 
+            {/* Toggle Red Shadow for Fail / AB in Print & Screen */}
+            <button
+              type="button"
+              onClick={toggleHighlightFailInPrint}
+              className="btn"
+              style={{
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontWeight: "700",
+                fontSize: "0.82rem",
+                padding: "0 0.9rem",
+                borderRadius: "10px",
+                border: highlightFailInPrint ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                background: highlightFailInPrint ? "rgba(239, 68, 68, 0.1)" : "#f8fafc",
+                color: highlightFailInPrint ? "#dc2626" : "#64748b",
+                cursor: "pointer",
+                boxShadow: highlightFailInPrint ? "0 2px 8px rgba(239, 68, 68, 0.2)" : "none",
+                transition: "all 0.15s ease"
+              }}
+              title="Click to toggle Red Shadow / Highlight on Fail (Below Pass) and AB (Absent) marks when printing"
+            >
+              <span style={{
+                width: "10px",
+                height: "10px",
+                borderRadius: "50%",
+                background: highlightFailInPrint ? "#ef4444" : "#94a3b8",
+                boxShadow: highlightFailInPrint ? "0 0 6px rgba(239, 68, 68, 0.8)" : "none",
+                display: "inline-block"
+              }} />
+              <span>Fail / AB Red Shadow: <strong>{highlightFailInPrint ? "ON" : "OFF"}</strong></span>
+            </button>
+
             <button
               onClick={handlePrint}
               className="btn btn-primary"
@@ -2797,6 +2935,8 @@ export default function InternalMarkSheet() {
               <span>Row Size: <strong style={{ color: "#8b5cf6" }}>{formData.rowHeightMode === "auto" ? `Auto (${printMetrics.rowHeight}px)` : `${printMetrics.rowHeight}px`}</strong></span>
               <span>•</span>
               <span>Sign Space: <strong style={{ color: "#0ea5e9" }}>{formData.signatureSpace}px</strong></span>
+              <span>•</span>
+              <span>Fail Shadow: <strong style={{ color: highlightFailInPrint ? "#dc2626" : "#64748b" }}>{highlightFailInPrint ? "ON (Red)" : "OFF"}</strong></span>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
@@ -3008,6 +3148,43 @@ export default function InternalMarkSheet() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Fail / AB Red Shadow on Print Toggle */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Fail / AB Red Shadow in Print
+                  </label>
+                  <button
+                    type="button"
+                    onClick={toggleHighlightFailInPrint}
+                    style={{
+                      width: "100%",
+                      padding: "7px 12px",
+                      borderRadius: "8px",
+                      fontSize: "0.82rem",
+                      fontWeight: "700",
+                      border: highlightFailInPrint ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                      background: highlightFailInPrint ? "rgba(239, 68, 68, 0.12)" : "#ffffff",
+                      color: highlightFailInPrint ? "#dc2626" : "#64748b",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between"
+                    }}
+                  >
+                    <span>Highlight Fail / AB:</span>
+                    <span style={{
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      background: highlightFailInPrint ? "#ef4444" : "#e2e8f0",
+                      color: highlightFailInPrint ? "#ffffff" : "#475569",
+                      fontWeight: "800",
+                      fontSize: "0.75rem"
+                    }}>
+                      {highlightFailInPrint ? "ON (Red)" : "OFF"}
+                    </span>
+                  </button>
                 </div>
 
                 <div>
@@ -3286,6 +3463,7 @@ export default function InternalMarkSheet() {
             color: #047857;
             font-weight: 800;
           }
+          ${highlightFailInPrint ? `
           .print-sheet .mec-official-table tbody td.cell-absent,
           .print-sheet .mec-official-table tbody td.cell-fail-mark {
             background-color: rgba(239, 68, 68, 0.45) !important;
@@ -3296,6 +3474,15 @@ export default function InternalMarkSheet() {
             print-color-adjust: exact !important;
             box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.6) !important;
           }
+          ` : `
+          .print-sheet .mec-official-table tbody td.cell-absent,
+          .print-sheet .mec-official-table tbody td.cell-fail-mark {
+            background: transparent !important;
+            background-color: transparent !important;
+            box-shadow: none !important;
+            color: #000000 !important;
+          }
+          `}
           .print-sheet .mec-official-table tbody tr.row-fail-mark {
             background: transparent !important;
           }
@@ -3316,7 +3503,9 @@ export default function InternalMarkSheet() {
             outline: none;
           }
           .editable-cell-input:focus {
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            border-color: #4f46e5;
+            background: #eef2ff;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35);
           }
         }
 
@@ -3461,6 +3650,7 @@ export default function InternalMarkSheet() {
             font-size: ${printMetrics.fontSize}px !important;
             line-height: 1.1 !important;
           }
+          ${highlightFailInPrint ? `
           .mec-official-table tbody td.cell-fail-mark,
           .mec-official-table tbody td.cell-absent {
             background-color: rgba(239, 68, 68, 0.45) !important;
@@ -3472,6 +3662,16 @@ export default function InternalMarkSheet() {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
+          ` : `
+          .mec-official-table tbody td.cell-fail-mark,
+          .mec-official-table tbody td.cell-absent {
+            background: transparent !important;
+            background-color: transparent !important;
+            box-shadow: none !important;
+            color: #000000 !important;
+            border: 1px solid #000000 !important;
+          }
+          `}
           .mec-official-table th,
           .mec-official-table thead tr:first-child th,
           .mec-official-table thead tr.max-mark-row th,
@@ -3758,6 +3958,7 @@ export default function InternalMarkSheet() {
                           <tbody>
                             {pageStudents.map((st, i) => {
                               const sNo = st.sNo || (startSno + i);
+                              const globalIndex = startSno - 1 + i;
                               return (
                                 <tr key={st.regNo || i}>
                                   <td className="col-sno">{sNo}</td>
@@ -3773,7 +3974,7 @@ export default function InternalMarkSheet() {
                                     {st.name || ""}
                                   </td>
 
-                                  {visibleConsolidatedSubjects.map(subj => {
+                                  {visibleConsolidatedSubjects.map((subj, subjIdx) => {
                                     const rawVal = st[subj.code];
                                     const displayVal = rawVal !== undefined && rawVal !== null ? rawVal : "";
                                     const numVal = Number(displayVal);
@@ -3789,23 +3990,27 @@ export default function InternalMarkSheet() {
                                     return (
                                       <td
                                         key={subj.code}
-                                        className={`col-mark ${isBelowPass ? "cell-fail-mark" : ""} ${isAbsent ? "cell-absent" : ""}`}
+                                        className={`col-mark ${highlightFailInPrint && isBelowPass ? "cell-fail-mark" : ""} ${highlightFailInPrint && isAbsent ? "cell-absent" : ""}`}
                                         style={{
-                                          backgroundColor: isFailMark ? "rgba(239, 68, 68, 0.45)" : undefined,
+                                          backgroundColor: (highlightFailInPrint && isFailMark) ? "rgba(239, 68, 68, 0.45)" : undefined,
                                           WebkitPrintColorAdjust: "exact",
                                           printColorAdjust: "exact",
                                           fontWeight: isFailMark ? "bold" : "normal",
-                                          color: isFailMark ? "#000000" : undefined
+                                          color: (highlightFailInPrint && isFailMark) ? "#000000" : undefined
                                         }}
                                       >
                                         {canEditInline && !st.isPlaceholder ? (
                                           <input
                                             className="editable-cell-input"
+                                            data-mark-row={globalIndex}
+                                            data-mark-col={subjIdx}
                                             value={displayVal}
                                             onChange={e => handleConsolidatedCellEdit(st.regNo, subj.code, e.target.value)}
+                                            onFocus={e => e.target.select()}
+                                            onKeyDown={e => handleCellKeyDown(e, globalIndex, subjIdx, visibleConsolidatedSubjects.length)}
                                             style={{
                                               fontWeight: isFailMark ? "bold" : "normal",
-                                              color: isFailMark ? "#000000" : undefined
+                                              color: "#000000"
                                             }}
                                           />
                                         ) : (
@@ -3872,7 +4077,7 @@ export default function InternalMarkSheet() {
                               const isBelowPass = Boolean(!st.isPlaceholder && internalPassMark > 0 && !isNaN(finalScoreVal) && finalScoreVal < internalPassMark);
 
                               return (
-                                <tr key={st.regNo || i} className={isBelowPass ? "row-fail-mark" : ""}>
+                                <tr key={st.regNo || i} className={(highlightFailInPrint && isBelowPass) ? "row-fail-mark" : ""}>
                                   <td className="col-sno">{sNo}</td>
                                   <td className="col-reg">{st.regNo || ""}</td>
                                   <td 
@@ -3907,28 +4112,33 @@ export default function InternalMarkSheet() {
                                       )
                                     );
                                     const isFailMark = isColBelowPass || isAbsent;
+                                    const editableColIdx = !isFormula ? editableColumns.findIndex(c => c.colKey === col.colKey) : -1;
 
                                     return (
                                       <td 
                                         key={colIdx} 
-                                        className={`col-mark ${isColBelowPass ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${isAbsent ? "cell-absent" : ""}`}
+                                        className={`col-mark ${highlightFailInPrint && isColBelowPass ? "cell-fail-mark" : isTotal ? "col-total" : isFormula ? "col-formula" : ""} ${highlightFailInPrint && isAbsent ? "cell-absent" : ""}`}
                                         style={{ 
                                           fontWeight: isFormula || isFailMark ? "bold" : "normal",
-                                          backgroundColor: isFailMark ? "rgba(239, 68, 68, 0.45)" : undefined,
+                                          backgroundColor: (highlightFailInPrint && isFailMark) ? "rgba(239, 68, 68, 0.45)" : undefined,
                                           WebkitPrintColorAdjust: "exact",
                                           printColorAdjust: "exact",
-                                          color: isFailMark ? "#000000" : undefined
+                                          color: (highlightFailInPrint && isFailMark) ? "#000000" : undefined
                                         }}
                                       >
                                         {canEditInline && !isFormula && !st.isPlaceholder ? (
                                           <input 
                                             className="editable-cell-input" 
+                                            data-mark-row={globalIndex}
+                                            data-mark-col={editableColIdx}
                                             value={displayVal} 
                                             onChange={e => handleCellEdit(globalIndex, col.colKey, e.target.value)} 
                                             onBlur={e => handleCellBlur(globalIndex, col.colKey, e.target.value)}
+                                            onFocus={e => e.target.select()}
+                                            onKeyDown={e => handleCellKeyDown(e, globalIndex, editableColIdx, editableColumns.length)}
                                             style={{
                                               fontWeight: isFailMark ? "bold" : "normal",
-                                              color: isFailMark ? "#000000" : undefined
+                                              color: "#000000"
                                             }}
                                           />
                                         ) : (
