@@ -398,6 +398,23 @@ export default function TimetableManager() {
     "Lab Assistant"
   ];
 
+  const PRESET_DEPARTMENTS = [
+    "CSE",
+    "TAPC",
+    "MATHS",
+    "SCIENCE & HUMANITIES",
+    "IT",
+    "ECE",
+    "EEE",
+    "MECH",
+    "CIVIL",
+    "AIDS",
+    "AIML",
+    "CSBS",
+    "MCA",
+    "MBA"
+  ];
+
   const PRESET_SUBJECT_TYPES = [
     "Theory",
     "Laboratory",
@@ -416,6 +433,9 @@ export default function TimetableManager() {
   const [workloadStatusFilter, setWorkloadStatusFilter] = useState("all"); // "all", "active", "unassigned"
   const [isCustomDesignation, setIsCustomDesignation] = useState(false);
   const [customDesignationText, setCustomDesignationText] = useState("");
+  const [isCustomDepartment, setIsCustomDepartment] = useState(false);
+  const [customDepartmentText, setCustomDepartmentText] = useState("");
+  const [staffDeptFilter, setStaffDeptFilter] = useState("ALL");
 
   const [editingSubject, setEditingSubject] = useState(null); // { masterId, originalCode, batch, year, semester }
 
@@ -518,10 +538,10 @@ export default function TimetableManager() {
     setTimeout(() => setAlertMessage(null), 4000);
   };
 
-  // 1. Fetch Staff List
+  // 1. Fetch Staff List (fetches all faculty across departments: CSE, TAPC, MATHS, S&H, etc.)
   const fetchStaff = async () => {
     try {
-      const res = await API.get(`/api/timetable/staff?department=${department}`);
+      const res = await API.get("/api/timetable/staff");
       setStaffList(res.data);
       if (res.data.length > 0 && !selectedFacultyView) {
         setSelectedFacultyView(res.data[0].name);
@@ -1128,6 +1148,22 @@ export default function TimetableManager() {
     return map;
   }, [staffList, allocations, department, semesterType]);
 
+  // Available departments in staff master list for quick filtering
+  const availableStaffDepartments = useMemo(() => {
+    const counts = {};
+    (staffList || []).forEach(s => {
+      const d = (s && s.department ? s.department : "CSE").toUpperCase();
+      counts[d] = (counts[d] || 0) + 1;
+    });
+    return Object.keys(counts).sort().map(name => ({ name, count: counts[name] }));
+  }, [staffList]);
+
+  // Displayed staff list based on department filter in Tab 3
+  const displayedStaffList = useMemo(() => {
+    if (staffDeptFilter === "ALL") return staffList;
+    return (staffList || []).filter(s => ((s && s.department) || "CSE").toUpperCase() === staffDeptFilter);
+  }, [staffList, staffDeptFilter]);
+
   // Robust fuzzy lookup for faculty workload stats (handles prefixes like Mr, Mrs, Dr, S., etc.)
   const getFacultyStats = (name) => {
     if (!name) return {};
@@ -1577,14 +1613,20 @@ export default function TimetableManager() {
   const handleStartEditStaff = (staff) => {
     setEditingStaffId(staff._id);
     setInlineEditingStaffId(null);
-    const isPreset = PRESET_DESIGNATIONS.includes(staff.designation);
-    setIsCustomDesignation(!isPreset);
-    setCustomDesignationText(!isPreset ? staff.designation : "");
+    const isPresetDesig = PRESET_DESIGNATIONS.includes(staff.designation);
+    setIsCustomDesignation(!isPresetDesig);
+    setCustomDesignationText(!isPresetDesig ? staff.designation : "");
+
+    const staffDept = (staff.department || department || "CSE").toUpperCase();
+    const isPresetDept = PRESET_DEPARTMENTS.includes(staffDept);
+    setIsCustomDepartment(!isPresetDept);
+    setCustomDepartmentText(!isPresetDept ? staffDept : "");
+
     setNewStaff({
       name: staff.name,
       staffCode: staff.staffCode || "",
-      designation: isPreset ? staff.designation : "custom",
-      department: staff.department || department,
+      designation: isPresetDesig ? staff.designation : "custom",
+      department: isPresetDept ? staffDept : "custom",
       maxHoursPerWeek: staff.maxHoursPerWeek || 18,
       maxTheory: staff.maxTheory || 2,
       maxLab: staff.maxLab || 2
@@ -1598,11 +1640,13 @@ export default function TimetableManager() {
     setEditingStaffId(null);
     setIsCustomDesignation(false);
     setCustomDesignationText("");
+    setIsCustomDepartment(false);
+    setCustomDepartmentText("");
     setNewStaff({
       name: "",
       staffCode: "",
       designation: "Assistant Professor",
-      department,
+      department: department || "CSE",
       maxHoursPerWeek: 18,
       maxTheory: 2,
       maxLab: 2
@@ -1654,10 +1698,15 @@ export default function TimetableManager() {
       ? customDesignationText.trim() 
       : (newStaff.designation === "custom" ? customDesignationText.trim() : newStaff.designation)) || "Teaching Assistant";
 
+    const finalDepartment = (isCustomDepartment
+      ? customDepartmentText.trim().toUpperCase()
+      : (newStaff.department === "custom" ? customDepartmentText.trim().toUpperCase() : (newStaff.department || department || "CSE"))).toUpperCase();
+
     const payload = {
       ...newStaff,
       name: newStaff.name.trim(),
-      designation: finalDesignation
+      designation: finalDesignation,
+      department: finalDepartment
     };
 
     try {
@@ -1687,13 +1736,15 @@ export default function TimetableManager() {
         name: "",
         staffCode: "",
         designation: "Assistant Professor",
-        department,
+        department: department || "CSE",
         maxHoursPerWeek: 18,
         maxTheory: 2,
         maxLab: 2
       });
       setIsCustomDesignation(false);
       setCustomDesignationText("");
+      setIsCustomDepartment(false);
+      setCustomDepartmentText("");
 
       await fetchStaff();
       await fetchSubjectsAndAllocations();
@@ -4007,7 +4058,7 @@ export default function TimetableManager() {
                                 <option value="">-- Choose Class Advisor --</option>
                                 {staffList.map(st => (
                                   <option key={st._id} value={st.name}>
-                                    {st.name} ({st.designation})
+                                    {st.name} ({st.department && st.department !== "CSE" ? `${st.department} · ` : ""}{st.designation})
                                   </option>
                                 ))}
                               </select>
@@ -4245,9 +4296,37 @@ export default function TimetableManager() {
                 </div>
               </div>
 
-              {/* Designation selector with Custom option */}
-              <div style={{ display: "grid", gridTemplateColumns: isCustomDesignation ? "1fr 1fr" : "1fr", gap: "8px" }}>
+              {/* Row 2: Department and Designation Dropdowns */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                 <div>
+                  <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginBottom: "3px", fontWeight: "600" }}>
+                    DEPARTMENT:
+                  </label>
+                  <select 
+                    className="select-input" 
+                    value={isCustomDepartment ? "custom" : (newStaff.department || "CSE")} 
+                    onChange={e => {
+                      if (e.target.value === "custom") {
+                        setIsCustomDepartment(true);
+                        setNewStaff({ ...newStaff, department: "custom" });
+                      } else {
+                        setIsCustomDepartment(false);
+                        setNewStaff({ ...newStaff, department: e.target.value });
+                      }
+                    }}
+                    style={{ fontSize: "0.85rem", width: "100%" }}
+                  >
+                    {PRESET_DEPARTMENTS.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                    <option value="custom">✍️ + Add Custom Dept...</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "block", marginBottom: "3px", fontWeight: "600" }}>
+                    DESIGNATION:
+                  </label>
                   <select 
                     className="select-input" 
                     value={isCustomDesignation ? "custom" : newStaff.designation} 
@@ -4260,33 +4339,49 @@ export default function TimetableManager() {
                         setNewStaff({ ...newStaff, designation: e.target.value });
                       }
                     }}
-                    style={{ fontSize: "0.85rem" }}
+                    style={{ fontSize: "0.85rem", width: "100%" }}
                   >
-                    <option value="Assistant Professor">Assistant Professor</option>
-                    <option value="Associate Professor">Associate Professor</option>
-                    <option value="Professor">Professor</option>
-                    <option value="Professor & Head">Professor & Head</option>
-                    <option value="Teaching Assistant (TA)">Teaching Assistant (TA)</option>
-                    <option value="Lab Assistant">Lab Assistant</option>
+                    {PRESET_DESIGNATIONS.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
                     <option value="custom">✍️ Custom / Type Manually...</option>
                   </select>
                 </div>
-
-                {isCustomDesignation && (
-                  <div>
-                    <input 
-                      type="text" 
-                      className="text-input" 
-                      placeholder="Type Designation (e.g. TA, Guest Lecturer)" 
-                      value={customDesignationText} 
-                      onChange={e => setCustomDesignationText(e.target.value)}
-                      required={isCustomDesignation}
-                      style={{ fontSize: "0.85rem", borderColor: "#a855f7" }}
-                      autoFocus
-                    />
-                  </div>
-                )}
               </div>
+
+              {/* Custom Department and/or Custom Designation Inputs */}
+              {(isCustomDepartment || isCustomDesignation) && (
+                <div style={{ display: "grid", gridTemplateColumns: (isCustomDepartment && isCustomDesignation) ? "1fr 1fr" : "1fr", gap: "8px" }}>
+                  {isCustomDepartment && (
+                    <div>
+                      <input 
+                        type="text" 
+                        className="text-input" 
+                        placeholder="Type Custom Dept (e.g. TAPC, MATHS, S&H)" 
+                        value={customDepartmentText} 
+                        onChange={e => setCustomDepartmentText(e.target.value.toUpperCase())}
+                        required={isCustomDepartment}
+                        style={{ fontSize: "0.85rem", borderColor: "#a855f7", width: "100%" }}
+                        autoFocus
+                      />
+                    </div>
+                  )}
+                  {isCustomDesignation && (
+                    <div>
+                      <input 
+                        type="text" 
+                        className="text-input" 
+                        placeholder="Type Designation (e.g. Guest Lecturer, Trainer)" 
+                        value={customDesignationText} 
+                        onChange={e => setCustomDesignationText(e.target.value)}
+                        required={isCustomDesignation}
+                        style={{ fontSize: "0.85rem", borderColor: "#a855f7", width: "100%" }}
+                        autoFocus={!isCustomDepartment}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
                 <button 
@@ -4320,18 +4415,59 @@ export default function TimetableManager() {
               </div>
             </form>
 
+            {/* Department Filter Pills */}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "0.75rem", alignItems: "center" }}>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: "600" }}>Dept:</span>
+              <button
+                type="button"
+                onClick={() => setStaffDeptFilter("ALL")}
+                style={{
+                  border: staffDeptFilter === "ALL" ? "1px solid #6366f1" : "1px solid var(--border-color)",
+                  background: staffDeptFilter === "ALL" ? "rgba(99, 102, 241, 0.2)" : "rgba(255,255,255,0.04)",
+                  color: staffDeptFilter === "ALL" ? "#818cf8" : "var(--text-muted)",
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  fontSize: "0.72rem",
+                  cursor: "pointer",
+                  fontWeight: staffDeptFilter === "ALL" ? "700" : "500"
+                }}
+              >
+                All ({staffList.length})
+              </button>
+              {availableStaffDepartments.map(d => (
+                <button
+                  key={d.name}
+                  type="button"
+                  onClick={() => setStaffDeptFilter(d.name)}
+                  style={{
+                    border: staffDeptFilter === d.name ? "1px solid #6366f1" : "1px solid var(--border-color)",
+                    background: staffDeptFilter === d.name ? "rgba(99, 102, 241, 0.2)" : "rgba(255,255,255,0.04)",
+                    color: staffDeptFilter === d.name ? "#818cf8" : "var(--text-muted)",
+                    padding: "2px 8px",
+                    borderRadius: "12px",
+                    fontSize: "0.72rem",
+                    cursor: "pointer",
+                    fontWeight: staffDeptFilter === d.name ? "700" : "500"
+                  }}
+                >
+                  {d.name} ({d.count})
+                </button>
+              ))}
+            </div>
+
             {/* Staff List Table with Edit and Delete options */}
             <div style={{ maxHeight: "350px", overflowY: "auto" }}>
               <table className="admin-table">
                 <thead>
                   <tr>
                     <th>Faculty Name</th>
+                    <th>Dept</th>
                     <th>Designation</th>
                     <th style={{ width: "90px", textAlign: "center" }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {staffList.map(s => (
+                  {displayedStaffList.map(s => (
                     <tr key={s._id} style={{ background: (editingStaffId === s._id || inlineEditingStaffId === s._id) ? "rgba(99, 102, 241, 0.1)" : undefined }}>
                       <td>
                         {inlineEditingStaffId === s._id ? (
@@ -4406,6 +4542,19 @@ export default function TimetableManager() {
                             {s.staffCode && <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Code: {s.staffCode}</div>}
                           </div>
                         )}
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: "0.72rem",
+                          fontWeight: "700",
+                          padding: "2px 7px",
+                          borderRadius: "5px",
+                          background: s.department === "CSE" ? "rgba(59, 130, 246, 0.15)" : s.department === "TAPC" ? "rgba(168, 85, 247, 0.15)" : s.department === "MATHS" ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                          color: s.department === "CSE" ? "#60a5fa" : s.department === "TAPC" ? "#c084fc" : s.department === "MATHS" ? "#34d399" : "#fbbf24",
+                          border: s.department === "CSE" ? "1px solid rgba(59, 130, 246, 0.3)" : s.department === "TAPC" ? "1px solid rgba(168, 85, 247, 0.3)" : s.department === "MATHS" ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)"
+                        }}>
+                          {s.department || "CSE"}
+                        </span>
                       </td>
                       <td>
                         <span style={{
@@ -5245,7 +5394,7 @@ export default function TimetableManager() {
                       <option value="">-- No Faculty / Self Study --</option>
                       {staffList.map(st => (
                         <option key={st._id} value={st.name}>
-                          {st.name} ({st.designation})
+                          {st.name} ({st.department && st.department !== "CSE" ? `${st.department} · ` : ""}{st.designation})
                         </option>
                       ))}
                     </select>
