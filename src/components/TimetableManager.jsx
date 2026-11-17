@@ -1455,12 +1455,24 @@ export default function TimetableManager() {
     }
   };
 
+  // Helper to calculate 3 continuous periods for Lab or CDS blocks
+  const get3PeriodRange = (period) => {
+    const p = Number(period);
+    if (p <= 2) return [1, 2, 3];
+    if (p === 3 || p === 4) return [2, 3, 4];
+    return [5, 6, 7];
+  };
+
   // Open slot edit modal
   const handleOpenSlotEdit = (classKey, day, slot) => {
     if (timetableSchedule?.isLocked) {
       return showAlert("🔒 Timetable is LOCKED (Finalized)! Unlock it first to edit slots.", "error");
     }
     const isFree = !slot || slot.type === "Free" || slot.subjectCode === "FREE" || (slot.shortName || "").toUpperCase() === "FREE" || (slot.shortName || "").toUpperCase() === "TUT";
+    const slotType = slot?.type || "Theory";
+    const normalizedType = (slotType === "Laboratory" || slotType === "Lab") ? "Lab" : slotType;
+    const isMulti = normalizedType === "Lab" || (slot?.shortName || "").toUpperCase().includes("CDS") || (slot?.subjectName || "").toUpperCase().includes("DEVELOPMENT");
+
     setSlotEditModal({
       isOpen: true,
       classKey,
@@ -1471,18 +1483,23 @@ export default function TimetableManager() {
       subjectName: isFree ? "Free Period" : slot.subjectName,
       shortName: isFree ? "Free" : (slot.shortName || ""),
       facultyName: isFree || slot.facultyName === "-" ? "" : slot.facultyName,
-      type: isFree ? "Free" : (slot.type || "Theory"),
-      room: isFree ? "-" : (slot.room || "LH-1"),
-      isPinned: !!slot.isPinned
+      type: isFree ? "Free" : normalizedType,
+      room: isFree ? "-" : (slot.room || (normalizedType === "Lab" ? "Lab" : "LH-1")),
+      isPinned: !!slot.isPinned,
+      applyRange: isMulti ? "3periods" : "single"
     });
   };
 
   // Save edited slot (Manual Override saved to DB permanently)
   const handleSaveSlotEdit = async () => {
     if (!slotEditModal) return;
-    const { classKey, day, period, time, subjectCode, subjectName, shortName, facultyName, type, room, isPinned } = slotEditModal;
+    const { classKey, day, period, time, subjectCode, subjectName, shortName, facultyName, type, room, isPinned, applyRange } = slotEditModal;
 
     const isFree = !subjectCode || subjectCode === "FREE";
+    const targetPeriods = (applyRange === "3periods" && !isFree)
+      ? get3PeriodRange(period)
+      : [Number(period)];
+
     const updatedSlot = {
       period,
       time,
@@ -1492,7 +1509,7 @@ export default function TimetableManager() {
       facultyName: isFree ? "-" : (facultyName || "").trim(),
       facultyNames: (!isFree && facultyName) ? [facultyName.trim()] : [],
       type: isFree ? "Free" : type,
-      room: isFree ? "-" : (room || (type === "Lab" ? "Lab" : "LH-1")),
+      room: isFree ? "-" : (room || (type === "Lab" || type === "Laboratory" ? "Lab" : "LH-1")),
       isPinned: !isFree && !!isPinned
     };
 
@@ -1505,20 +1522,28 @@ export default function TimetableManager() {
         classKey,
         day,
         period,
+        periods: targetPeriods,
         updatedSlot
       });
 
       if (res.data.success) {
-        // Update local schedule state
+        // Update local schedule state across all targeted periods
         setTimetableSchedule(prev => {
           if (!prev || !prev.classes) return prev;
           const updatedClasses = prev.classes.map(cls => {
             if (cls.classKey !== classKey) return cls;
             const daySlots = [...(cls.days[day] || [])];
-            const pIdx = daySlots.findIndex(s => s.period === period);
-            if (pIdx !== -1) {
-              daySlots[pIdx] = { ...daySlots[pIdx], ...updatedSlot };
-            }
+            targetPeriods.forEach(pNum => {
+              const pIdx = daySlots.findIndex(s => s.period === pNum);
+              if (pIdx !== -1) {
+                daySlots[pIdx] = { 
+                  ...daySlots[pIdx], 
+                  ...updatedSlot,
+                  period: pNum,
+                  time: daySlots[pIdx].time || updatedSlot.time
+                };
+              }
+            });
             return {
               ...cls,
               days: {
@@ -1535,7 +1560,10 @@ export default function TimetableManager() {
           setFacultySchedules(res.data.facultySchedules);
         }
 
-        showAlert(`Updated ${classKey} [${day} Period ${period}] successfully! Saved to database.`);
+        const msg = targetPeriods.length > 1
+          ? `Updated ${classKey} [${day} Periods ${targetPeriods.join(", ")}] successfully! ${updatedSlot.isPinned ? "📌 Locked & Pinned to database." : "Saved to database."}`
+          : `Updated ${classKey} [${day} Period ${period}] successfully! ${updatedSlot.isPinned ? "📌 Locked & Pinned to database." : "Saved to database."}`;
+        showAlert(msg);
         setSlotEditModal(null);
       }
     } catch (err) {
@@ -5130,14 +5158,17 @@ export default function TimetableManager() {
                         `${a.year}-${a.section}` === slotEditModal.classKey && a.subjectCode.toUpperCase() === code.toUpperCase()
                       );
                       if (matched) {
+                        const mType = (matched.type === "Laboratory" || matched.type === "Lab") ? "Lab" : (matched.type || "Theory");
+                        const isCdsOrLab = mType === "Lab" || (matched.shortName || "").toUpperCase().includes("CDS") || (matched.subjectName || "").toUpperCase().includes("DEVELOPMENT") || (matched.hoursPerWeek >= 2);
                         setSlotEditModal(prev => ({
                           ...prev,
                           subjectCode: matched.subjectCode,
                           subjectName: matched.subjectName,
                           shortName: matched.shortName || matched.subjectCode,
                           facultyName: (matched.facultyNames && matched.facultyNames[0]) || "",
-                          type: matched.type || "Theory",
-                          room: matched.type === "Lab" ? "Lab" : (matched.type === "Seminar" ? "Seminar Hall" : "LH-1")
+                          type: mType,
+                          room: mType === "Lab" ? "Lab" : (matched.type === "Seminar" ? "Seminar Hall" : "LH-1"),
+                          applyRange: isCdsOrLab ? "3periods" : (prev.applyRange || "single")
                         }));
                       }
                     }
@@ -5227,7 +5258,7 @@ export default function TimetableManager() {
                       </label>
                       <select
                         className="select-input"
-                        value={slotEditModal.type}
+                        value={slotEditModal.type === "Laboratory" ? "Lab" : slotEditModal.type}
                         onChange={e => setSlotEditModal({ ...slotEditModal, type: e.target.value })}
                         style={{ width: "100%", padding: "0.45rem 0.65rem", fontSize: "0.85rem" }}
                       >
@@ -5253,14 +5284,48 @@ export default function TimetableManager() {
                     </div>
                   </div>
 
+                  {/* Period Span / Multi-Period Range (for 3-Period CDS or Lab blocks) */}
+                  <div style={{ padding: "8px 12px", borderRadius: "8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                    <label style={{ fontSize: "0.75rem", fontWeight: "700", color: "#a5b4fc", display: "block", marginBottom: "6px" }}>
+                      ⏱️ APPLY TO PERIOD(S):
+                    </label>
+                    <div style={{ display: "flex", gap: "15px", alignItems: "center", flexWrap: "wrap" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.82rem", color: slotEditModal.applyRange === "single" ? "#ffffff" : "var(--text-muted)" }}>
+                        <input 
+                          type="radio"
+                          name="slotEditApplyRange"
+                          checked={slotEditModal.applyRange === "single"}
+                          onChange={() => setSlotEditModal({ ...slotEditModal, applyRange: "single" })}
+                          style={{ cursor: "pointer", accentColor: "#6366f1" }}
+                        />
+                        Single Period ({slotEditModal.period})
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.82rem", color: slotEditModal.applyRange === "3periods" ? "#c084fc" : "var(--text-muted)", fontWeight: "700" }}>
+                        <input 
+                          type="radio"
+                          name="slotEditApplyRange"
+                          checked={slotEditModal.applyRange === "3periods"}
+                          onChange={() => setSlotEditModal({ ...slotEditModal, applyRange: "3periods" })}
+                          style={{ cursor: "pointer", accentColor: "#a855f7" }}
+                        />
+                        <span>Continuous 3 Periods (Periods {get3PeriodRange(slotEditModal.period).join(", ")})</span>
+                      </label>
+                    </div>
+                    {slotEditModal.applyRange === "3periods" && (
+                      <div style={{ fontSize: "0.72rem", color: "#e9d5ff", marginTop: "4px" }}>
+                        💡 Locks all 3 continuous periods ({get3PeriodRange(slotEditModal.period).join(", ")}) together (e.g. for CDS / Lab block).
+                      </div>
+                    )}
+                  </div>
+
                   {/* Pin / Fixed Institutional Slot Option (Option 3) */}
-                  <div style={{ marginTop: "12px", padding: "10px 12px", borderRadius: "8px", background: "rgba(168, 85, 247, 0.12)", border: "1px solid rgba(168, 85, 247, 0.35)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ marginTop: "8px", padding: "10px 12px", borderRadius: "8px", background: slotEditModal.isPinned ? "rgba(168, 85, 247, 0.22)" : "rgba(168, 85, 247, 0.12)", border: slotEditModal.isPinned ? "1px solid #a855f7" : "1px solid rgba(168, 85, 247, 0.35)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
-                      <div style={{ fontWeight: "700", fontSize: "0.85rem", color: "#c084fc", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ fontWeight: "700", fontSize: "0.85rem", color: slotEditModal.isPinned ? "#d8b4fe" : "#c084fc", display: "flex", alignItems: "center", gap: "6px" }}>
                         📌 Pin / Lock This Slot (Institutional Fixed Hour)
                       </div>
                       <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                        Locks this period permanently. Re-generating timetable will NEVER overwrite or move this slot!
+                        Locks {slotEditModal.applyRange === "3periods" ? "these 3 periods" : "this period"} permanently. Re-generating timetable will NEVER overwrite or move {slotEditModal.applyRange === "3periods" ? "them" : "it"}!
                       </div>
                     </div>
                     <label style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: "6px" }}>
@@ -5271,7 +5336,7 @@ export default function TimetableManager() {
                         style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#a855f7" }}
                       />
                       <span style={{ fontSize: "0.82rem", fontWeight: "700", color: slotEditModal.isPinned ? "#c084fc" : "var(--text-muted)" }}>
-                        {slotEditModal.isPinned ? "PINNED" : "UNPINNED"}
+                        {slotEditModal.isPinned ? "📌 PINNED & LOCKED" : "UNPINNED"}
                       </span>
                     </label>
                   </div>
