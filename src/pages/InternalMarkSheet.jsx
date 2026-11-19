@@ -31,7 +31,9 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Save
+  Save,
+  Lock,
+  Unlock
 } from "lucide-react";
 
 const getDefaultShortName = (subj) => {
@@ -128,7 +130,50 @@ export default function InternalMarkSheet() {
   const [allFetchedClasses, setAllFetchedClasses] = useState([]);
   const isAdmin = safeGetSession("role").toLowerCase() === "admin";
   const [isEditingMarks, setIsEditingMarks] = useState(false);
-  const canEditInline = isAdmin && isEditingMarks;
+  const [allowStaffInlineEdit, setAllowStaffInlineEdit] = useState(false);
+  const [togglingStaffAccess, setTogglingStaffAccess] = useState(false);
+
+  // Sync staff edit permission with active template
+  useEffect(() => {
+    if (activeTemplate) {
+      setAllowStaffInlineEdit(Boolean(activeTemplate.allowStaffInlineEdit));
+    }
+  }, [activeTemplate]);
+
+  const canStaffEdit = Boolean(activeTemplate?.allowStaffInlineEdit || allowStaffInlineEdit);
+  const canUserEditMarks = isAdmin || canStaffEdit;
+  const canEditInline = canUserEditMarks && isEditingMarks;
+
+  // Admin toggles staff inline editing permission and persists to backend
+  const handleToggleStaffInlineEdit = async () => {
+    if (!isAdmin) return;
+    const nextVal = !canStaffEdit;
+    setTogglingStaffAccess(true);
+    try {
+      setInlineSyncStatus("⏳ Updating staff inline edit access...");
+      const res = await API.post("/api/internal-marks/toggle-staff-inline-edit", {
+        templateId: activeTemplate?._id,
+        allowStaffInlineEdit: nextVal,
+        applyToAll: true
+      });
+      if (res.data?.success) {
+        setAllowStaffInlineEdit(nextVal);
+        if (activeTemplate) {
+          const updatedT = { ...activeTemplate, allowStaffInlineEdit: nextVal };
+          setActiveTemplate(updatedT);
+          allTemplatesRef.current = allTemplatesRef.current.map(t => (t._id === updatedT._id ? updatedT : t));
+        }
+        setInlineSyncStatus(nextVal ? "✓ Staff Inline Editing is now ALLOWED" : "🔒 Staff Inline Editing is now LOCKED (Admin only)");
+        setTimeout(() => setInlineSyncStatus(""), 4000);
+      }
+    } catch (err) {
+      console.error("Failed to toggle staff inline edit access:", err);
+      alert("Failed to update staff access: " + (err.response?.data?.error || err.message));
+      setInlineSyncStatus("");
+    } finally {
+      setTogglingStaffAccess(false);
+    }
+  };
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [userHiddenColumns, setUserHiddenColumns] = useState([]);
   const [showColumnManager, setShowColumnManager] = useState(false);
@@ -1046,7 +1091,8 @@ export default function InternalMarkSheet() {
         subjectCode: targetSubjCode,
         subjectName: targetSubjName,
         mark: value,
-        isAdmin: true
+        isAdmin: Boolean(isAdmin),
+        allowStaffInlineEdit: Boolean(canStaffEdit)
       };
 
       const res = await API.post("/api/classes/sync-student-mark", payload);
@@ -1242,7 +1288,8 @@ export default function InternalMarkSheet() {
           })),
           department: formData.department,
           yearSemSec: `${formData.year}/${formData.semester}/${formData.section}`,
-          isAdmin: true
+          isAdmin: Boolean(isAdmin),
+          allowStaffInlineEdit: Boolean(canStaffEdit)
         };
         const batchRes = await API.post("/api/classes/sync-batch-marks", batchPayload);
         if (batchRes.data?.success) {
@@ -2173,62 +2220,137 @@ export default function InternalMarkSheet() {
                 : `Columns${userHiddenColumns.length > 0 ? ` (${userHiddenColumns.length} Hidden)` : ""}`}
             </button>
 
-            {isAdmin && (
-              <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-                <button
-                  onClick={() => setIsEditingMarks(!isEditingMarks)}
-                  className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
-                  style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
-                  title="Toggle inline mark editing"
-                >
-                  <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
-                </button>
-                {isEditingMarks && (
+            {/* Inline Mark Editing Group for Admin and Allowed Staff */}
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+              {canUserEditMarks ? (
+                <>
                   <button
-                    onClick={handleSaveAllMarks}
-                    disabled={isSavingMarks}
-                    className="btn btn-success"
-                    style={{
-                      height: "40px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "7px",
-                      fontWeight: "700",
-                      fontSize: "0.85rem",
-                      padding: "0 1.1rem",
-                      borderRadius: "10px",
-                      background: "#10b981",
-                      color: "white",
-                      border: "none",
-                      cursor: isSavingMarks ? "not-allowed" : "pointer",
-                      boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)"
-                    }}
-                    title="Save all edited marks to MongoDB Database and original Mark Statement"
+                    onClick={() => setIsEditingMarks(!isEditingMarks)}
+                    className={`btn ${isEditingMarks ? "btn-warning" : "btn-secondary"}`}
+                    style={{ height: "40px", display: "flex", alignItems: "center", gap: "7px", fontWeight: "600", fontSize: "0.85rem", padding: "0 1rem", borderRadius: "10px" }}
+                    title={isEditingMarks ? "Lock inline mark editing" : "Enable inline mark editing"}
                   >
-                    <Save size={16} /> {isSavingMarks ? "Saving..." : "Save Marks"}
+                    <Edit3 size={16} /> {isEditingMarks ? "Lock Editing" : "Edit Inline"}
                   </button>
-                )}
-                {inlineSyncStatus && (
-                  <span
-                    style={{
-                      fontSize: "0.78rem",
-                      fontWeight: "700",
-                      padding: "4px 10px",
-                      borderRadius: "8px",
-                      background: inlineSyncStatus.startsWith("✓") ? "rgba(16, 185, 129, 0.15)" : inlineSyncStatus.startsWith("⏳") ? "rgba(59, 130, 246, 0.15)" : "rgba(245, 158, 11, 0.15)",
-                      color: inlineSyncStatus.startsWith("✓") ? "#047857" : inlineSyncStatus.startsWith("⏳") ? "#1d4ed8" : "#b45309",
-                      border: inlineSyncStatus.startsWith("✓") ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(59, 130, 246, 0.3)",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "5px",
-                      whiteSpace: "nowrap"
-                    }}
-                  >
-                    {inlineSyncStatus}
-                  </span>
-                )}
-              </div>
-            )}
+                  {isEditingMarks && (
+                    <button
+                      onClick={handleSaveAllMarks}
+                      disabled={isSavingMarks}
+                      className="btn btn-success"
+                      style={{
+                        height: "40px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "7px",
+                        fontWeight: "700",
+                        fontSize: "0.85rem",
+                        padding: "0 1.1rem",
+                        borderRadius: "10px",
+                        background: "#10b981",
+                        color: "white",
+                        border: "none",
+                        cursor: isSavingMarks ? "not-allowed" : "pointer",
+                        boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)"
+                      }}
+                      title="Save all edited marks to MongoDB Database and original Mark Statement"
+                    >
+                      <Save size={16} /> {isSavingMarks ? "Saving..." : "Save Marks"}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div
+                  style={{
+                    height: "40px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "7px",
+                    fontWeight: "600",
+                    fontSize: "0.82rem",
+                    padding: "0 0.9rem",
+                    borderRadius: "10px",
+                    background: "#f1f5f9",
+                    color: "#64748b",
+                    border: "1px solid #cbd5e1",
+                    cursor: "not-allowed"
+                  }}
+                  title="Inline mark editing is locked by Administrator. Contact Admin to enable editing."
+                >
+                  <Lock size={15} color="#94a3b8" />
+                  <span>Inline Edit: <strong>Locked by Admin</strong></span>
+                </div>
+              )}
+
+              {/* Admin Toggle Button for Staff Inline Editing Access */}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleToggleStaffInlineEdit}
+                  disabled={togglingStaffAccess}
+                  className="btn"
+                  style={{
+                    height: "40px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "7px",
+                    fontWeight: "700",
+                    fontSize: "0.82rem",
+                    padding: "0 0.9rem",
+                    borderRadius: "10px",
+                    background: canStaffEdit ? "rgba(16, 185, 129, 0.12)" : "rgba(100, 116, 139, 0.1)",
+                    color: canStaffEdit ? "#047857" : "#475569",
+                    border: canStaffEdit ? "1.5px solid #10b981" : "1.5px solid #cbd5e1",
+                    cursor: togglingStaffAccess ? "wait" : "pointer",
+                    transition: "all 0.2s ease"
+                  }}
+                  title={canStaffEdit ? "Click to lock staff inline editing" : "Click to allow staff inline editing"}
+                >
+                  {canStaffEdit ? <Unlock size={15} color="#047857" /> : <Lock size={15} color="#64748b" />}
+                  <span>Staff Edit: <strong>{canStaffEdit ? "Allowed ✓" : "Locked 🔒"}</strong></span>
+                </button>
+              )}
+
+              {/* Staff Edit Active Status Badge for Non-Admin */}
+              {!isAdmin && canStaffEdit && (
+                <span
+                  style={{
+                    fontSize: "0.78rem",
+                    fontWeight: "700",
+                    padding: "4px 9px",
+                    borderRadius: "8px",
+                    background: "rgba(16, 185, 129, 0.12)",
+                    color: "#047857",
+                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}
+                  title="Administrator has enabled inline mark editing for staff"
+                >
+                  ✓ Staff Edit Allowed
+                </span>
+              )}
+
+              {inlineSyncStatus && (
+                <span
+                  style={{
+                    fontSize: "0.78rem",
+                    fontWeight: "700",
+                    padding: "4px 10px",
+                    borderRadius: "8px",
+                    background: inlineSyncStatus.startsWith("✓") ? "rgba(16, 185, 129, 0.15)" : inlineSyncStatus.startsWith("⏳") ? "rgba(59, 130, 246, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                    color: inlineSyncStatus.startsWith("✓") ? "#047857" : inlineSyncStatus.startsWith("⏳") ? "#1d4ed8" : "#b45309",
+                    border: inlineSyncStatus.startsWith("✓") ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(59, 130, 246, 0.3)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    whiteSpace: "nowrap"
+                  }}
+                >
+                  {inlineSyncStatus}
+                </span>
+              )}
+            </div>
 
             <div ref={excelMenuRef} style={{ position: "relative" }}>
               <button
@@ -3185,6 +3307,63 @@ export default function InternalMarkSheet() {
                       {highlightFailInPrint ? "ON (Red)" : "OFF"}
                     </span>
                   </button>
+                </div>
+
+                {/* Staff Inline Edit Permission (Admin Configurable) */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", marginBottom: "0.3rem", color: "#475569" }}>
+                    Staff Inline Edit Permission
+                  </label>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={handleToggleStaffInlineEdit}
+                      disabled={togglingStaffAccess}
+                      style={{
+                        width: "100%",
+                        padding: "7px 12px",
+                        borderRadius: "8px",
+                        fontSize: "0.82rem",
+                        fontWeight: "700",
+                        border: canStaffEdit ? "1.5px solid #10b981" : "1.5px solid #cbd5e1",
+                        background: canStaffEdit ? "rgba(16, 185, 129, 0.12)" : "#ffffff",
+                        color: canStaffEdit ? "#047857" : "#64748b",
+                        cursor: togglingStaffAccess ? "wait" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between"
+                      }}
+                      title="Toggle whether non-admin faculty/staff can edit marks directly inline"
+                    >
+                      <span>Staff Mark Edit:</span>
+                      <span style={{
+                        padding: "2px 8px",
+                        borderRadius: "6px",
+                        background: canStaffEdit ? "#10b981" : "#e2e8f0",
+                        color: canStaffEdit ? "#ffffff" : "#64748b",
+                        fontWeight: "800",
+                        fontSize: "0.75rem"
+                      }}>
+                        {canStaffEdit ? "ALLOWED ✓" : "LOCKED 🔒"}
+                      </span>
+                    </button>
+                  ) : (
+                    <div style={{
+                      padding: "7px 12px",
+                      borderRadius: "8px",
+                      fontSize: "0.82rem",
+                      fontWeight: "700",
+                      background: canStaffEdit ? "rgba(16, 185, 129, 0.1)" : "#f1f5f9",
+                      color: canStaffEdit ? "#047857" : "#64748b",
+                      border: canStaffEdit ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid #cbd5e1",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between"
+                    }}>
+                      <span>Status:</span>
+                      <span>{canStaffEdit ? "Allowed by Admin ✓" : "Locked by Admin 🔒"}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div>

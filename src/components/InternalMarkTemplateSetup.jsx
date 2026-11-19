@@ -565,6 +565,7 @@ export default function InternalMarkTemplateSetup() {
                 <th>Type &amp; Print</th>
                 <th>Pass Mark</th>
                 <th>Status</th>
+                <th>Staff Edit</th>
                 <th>Columns</th>
                 <th>Actions</th>
               </tr>
@@ -614,6 +615,17 @@ export default function InternalMarkTemplateSetup() {
                     {t.isActive ? 
                       <span style={{ background: "rgba(34, 197, 94, 0.2)", color: "#16a34a", padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", fontSize: "0.8rem" }}>Active</span> 
                       : <span style={{ color: "var(--text-muted)" }}>Inactive</span>}
+                  </td>
+                  <td>
+                    {t.allowStaffInlineEdit ? (
+                      <span style={{ background: "rgba(16, 185, 129, 0.15)", color: "#047857", padding: "3px 8px", borderRadius: "6px", fontWeight: "700", fontSize: "0.75rem" }}>
+                        Allowed ✓
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>
+                        Admin Only
+                      </span>
+                    )}
                   </td>
                   <td>{t.columns.length} columns</td>
                   <td>
@@ -708,15 +720,37 @@ export default function InternalMarkTemplateSetup() {
                   Students below this highlight red on screen (Print remains B&amp;W)
                 </div>
               </div>
-              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "rgba(99, 102, 241, 0.1)", padding: "10px 15px", borderRadius: "8px", cursor: "pointer", border: "1px solid var(--primary)", color: "var(--primary)", fontWeight: "bold", marginTop: "24px" }}>
-                <input 
-                  type="checkbox" 
-                  checked={editingTemplate.isActive} 
-                  onChange={(e) => setEditingTemplate({ ...editingTemplate, isActive: e.target.checked })}
-                  style={{ width: "20px", height: "20px" }}
-                />
-                Active for {editingTemplate.courseCategory || "Theory"} (Reg {editingTemplate.regulation || "..."})
-              </label>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap", marginTop: "24px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "rgba(99, 102, 241, 0.1)", padding: "10px 15px", borderRadius: "8px", cursor: "pointer", border: "1px solid var(--primary)", color: "var(--primary)", fontWeight: "bold" }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editingTemplate.isActive} 
+                    onChange={(e) => setEditingTemplate({ ...editingTemplate, isActive: e.target.checked })}
+                    style={{ width: "20px", height: "20px" }}
+                  />
+                  Active for {editingTemplate.courseCategory || "Theory"} (Reg {editingTemplate.regulation || "..."})
+                </label>
+                <label style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  background: editingTemplate.allowStaffInlineEdit ? "rgba(16, 185, 129, 0.12)" : "rgba(100, 116, 139, 0.08)",
+                  padding: "10px 15px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  border: editingTemplate.allowStaffInlineEdit ? "1px solid #10b981" : "1px solid #cbd5e1",
+                  color: editingTemplate.allowStaffInlineEdit ? "#047857" : "#475569",
+                  fontWeight: "bold"
+                }}>
+                  <input 
+                    type="checkbox" 
+                    checked={Boolean(editingTemplate.allowStaffInlineEdit)} 
+                    onChange={(e) => setEditingTemplate({ ...editingTemplate, allowStaffInlineEdit: e.target.checked })}
+                    style={{ width: "20px", height: "20px" }}
+                  />
+                  Allow Faculty/Staff Inline Edit
+                </label>
+              </div>
             </div>
           </div>
 
