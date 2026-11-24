@@ -10,6 +10,9 @@ import {
 import headerLogo from "../assets/logo image.jpg";
 import { DEFAULT_PERIOD_TIMINGS } from "../constants/timetableDefaults";
 
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const PERIODS = [1, 2, 3, 4, 5, 6, 7];
+
 export default function TimetableManager() {
   // Navigation sub-tabs
   const [activeSubTab, setActiveSubTab] = useState("allocation"); // "allocation", "schedule", "master"
