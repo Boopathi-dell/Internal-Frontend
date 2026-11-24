@@ -1227,6 +1227,51 @@ export default function TimetableManager() {
     };
   }, [facultySchedules, timetableSchedule, periodTimings]);
 
+  // Live faculty workload statistics computed directly from active timetable schedule grid
+  // (with seamless fallback to allocation-based stats)
+  const getLiveFacultyStats = useCallback((facName) => {
+    if (!facName) return { theoryCount: 0, labCount: 0, trainingCount: 0, trainingHours: 0, totalHours: 0 };
+
+    let totalHours = 0;
+    const theorySubjects = new Set();
+    const labSubjects = new Set();
+    const trainingSubjects = new Set();
+    let trainingHours = 0;
+
+    DAYS.forEach(day => {
+      PERIODS.forEach(pr => {
+        const slot = getFacultySlot(facName, day, pr);
+        if (slot && slot.occupied && slot.type !== "Free" && slot.subjectCode !== "FREE") {
+          totalHours++;
+          const t = (slot.type || "").toLowerCase();
+          const subjKey = `${slot.subjectCode || slot.shortName || "SUBJ"}_${slot.classKey || ""}`;
+          if (t.includes("lab") || t.includes("practical") || t.includes("project")) {
+            labSubjects.add(subjKey);
+          } else if (t.includes("training") || t.includes("trainer") || slot.isTraining) {
+            trainingSubjects.add(subjKey);
+            trainingHours++;
+          } else {
+            theorySubjects.add(subjKey);
+          }
+        }
+      });
+    });
+
+    if (totalHours > 0) {
+      return {
+        name: facName,
+        theoryCount: theorySubjects.size,
+        labCount: labSubjects.size,
+        trainingCount: trainingSubjects.size,
+        trainingHours,
+        totalHours,
+        isLive: true
+      };
+    }
+
+    return getFacultyStats(facName);
+  }, [getFacultySlot, getFacultyStats]);
+
   // Handle Faculty Assignment Change for a Subject
   const handleAssignFaculty = (allocId, facultyName, isMulti = false) => {
     setAllocations(prev => prev.map(item => {
@@ -3321,12 +3366,12 @@ export default function TimetableManager() {
                       style={{ padding: "0.45rem 1rem", fontSize: "0.85rem", fontWeight: "700" }}
                     >
                       {staffList.map(s => {
-                        const stats = staffWorkloadMap[s.name] || {};
+                        const stats = getLiveFacultyStats(s.name);
                         const parts = [];
                         if ((stats.theoryCount || 0) > 0) parts.push(`${stats.theoryCount} Theory`);
                         if ((stats.labCount || 0) > 0) parts.push(`${stats.labCount} Lab`);
                         if ((stats.trainingCount || 0) > 0) parts.push(`${stats.trainingCount} Training (${stats.trainingHours}h)`);
-                        const loadStr = parts.length > 0 ? parts.join(", ") : "0 Load";
+                        const loadStr = parts.length > 0 ? `${parts.join(", ")} • ${stats.totalHours || 0}h` : "0 Load";
                         return (
                           <option key={s._id} value={s.name}>
                             {s.name} - {loadStr}
@@ -3719,18 +3764,18 @@ export default function TimetableManager() {
                   </h2>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "0.35rem" }}>
                     <span style={{ fontSize: "0.85rem", color: "#818cf8", fontWeight: "700" }}>
-                      📘 Theory: {getFacultyStats(selectedFacultyView)?.theoryCount || 0}
+                      📘 Theory: {getLiveFacultyStats(selectedFacultyView)?.theoryCount || 0}
                     </span>
                     <span style={{ fontSize: "0.85rem", color: "#c084fc", fontWeight: "700" }}>
-                      🔬 Lab: {getFacultyStats(selectedFacultyView)?.labCount || 0}
+                      🔬 Lab: {getLiveFacultyStats(selectedFacultyView)?.labCount || 0}
                     </span>
-                    {(getFacultyStats(selectedFacultyView)?.trainingCount || 0) > 0 && (
+                    {(getLiveFacultyStats(selectedFacultyView)?.trainingCount || 0) > 0 && (
                       <span style={{ fontSize: "0.85rem", color: "#f59e0b", fontWeight: "700" }}>
-                        🎯 Training: {getFacultyStats(selectedFacultyView)?.trainingCount} ({getFacultyStats(selectedFacultyView)?.trainingHours}h)
+                        🎯 Training: {getLiveFacultyStats(selectedFacultyView)?.trainingCount} ({getLiveFacultyStats(selectedFacultyView)?.trainingHours}h)
                       </span>
                     )}
                     <span style={{ fontSize: "0.85rem", color: "#10b981", fontWeight: "700" }}>
-                      ⏱️ Total Workload: {getFacultyStats(selectedFacultyView)?.totalHours || 0} Hours/Week
+                      ⏱️ Total Workload: {getLiveFacultyStats(selectedFacultyView)?.totalHours || 0} Hours/Week
                     </span>
                   </div>
                 </div>
@@ -6516,7 +6561,7 @@ export default function TimetableManager() {
                   <option value="ALL_STAFF">📋 All Registered Staff ({staffList.length})</option>
                   <optgroup label="Single Faculty Member">
                     {staffList.map(s => {
-                      const load = staffWorkloadMap[s.name]?.totalHours;
+                      const load = getLiveFacultyStats(s.name)?.totalHours;
                       return (
                         <option key={s._id || s.name} value={s.name}>
                           {s.name} {load ? `(${load}h)` : "(0h)"}
@@ -6624,7 +6669,36 @@ export default function TimetableManager() {
             }}
           >
             {facultyListToPrint.map((facName, fIdx) => {
-              const facAllocs = allocations.filter(a => a.facultyNames && a.facultyNames.some(fn => isSameFacultyName(fn, facName)));
+              let facAllocs = allocations.filter(a => a.facultyNames && a.facultyNames.some(fn => isSameFacultyName(fn, facName)));
+              // Dynamic fallback: extract assigned subjects directly from live timetable grid if allocations empty
+              if (facAllocs.length === 0 && timetableSchedule?.classes) {
+                const extractedMap = {};
+                timetableSchedule.classes.forEach(cls => {
+                  DAYS.forEach(d => {
+                    (cls.days?.[d] || []).forEach(slot => {
+                      if (!slot || slot.type === "Free" || slot.subjectCode === "FREE") return;
+                      const facs = slot.facultyNames && slot.facultyNames.length > 0 ? slot.facultyNames : (slot.facultyName ? [slot.facultyName] : []);
+                      if (facs.some(fn => isSameFacultyName(fn, facName))) {
+                        const key = `${cls.classKey}_${slot.subjectCode}`;
+                        if (!extractedMap[key]) {
+                          extractedMap[key] = {
+                            year: cls.year,
+                            section: cls.section,
+                            subjectCode: slot.subjectCode,
+                            subjectName: slot.subjectName || slot.shortName,
+                            shortName: slot.shortName,
+                            type: slot.type || "Theory",
+                            hoursPerWeek: 0,
+                            facultyNames: [facName]
+                          };
+                        }
+                        extractedMap[key].hoursPerWeek++;
+                      }
+                    });
+                  });
+                });
+                facAllocs = Object.values(extractedMap);
+              }
               const theoryList = facAllocs.filter(a => !(a.type || "").toLowerCase().includes("lab"));
               const labList = facAllocs.filter(a => (a.type || "").toLowerCase().includes("lab"));
               const rowCount = Math.max(theoryList.length, labList.length, 1);
