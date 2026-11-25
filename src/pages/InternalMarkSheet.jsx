@@ -717,6 +717,27 @@ export default function InternalMarkSheet() {
     });
   };
 
+  // Robust helper to extract the maximum allowed mark for any exam column
+  const getColMaxMark = (col) => {
+    if (!col) return null;
+    if (col.maxMark !== undefined && col.maxMark !== null && col.maxMark !== "" && !isNaN(Number(col.maxMark)) && Number(col.maxMark) > 0) {
+      return Number(col.maxMark);
+    }
+    const parsed = parseHeading(col.heading || "");
+    if (parsed.maxMark && !isNaN(Number(parsed.maxMark)) && Number(parsed.maxMark) > 0) {
+      return Number(parsed.maxMark);
+    }
+    if (col.calcOutof && !isNaN(Number(col.calcOutof)) && Number(col.calcOutof) > 0) {
+      return Number(col.calcOutof);
+    }
+    const candidateExam = col.examName || col.title || col.heading;
+    const matches = findMatchingClassesForExam(allFetchedClasses, candidateExam, col.title || col.heading);
+    if (matches[0]?.cls?.markPerSubject && !isNaN(Number(matches[0].cls.markPerSubject)) && Number(matches[0].cls.markPerSubject) > 0) {
+      return Number(matches[0].cls.markPerSubject);
+    }
+    return null;
+  };
+
   // Helper: Resolve effective formula string & detect broken/unlinked calculation columns in a template
   const stripTrailingImLabel = (text) =>
     String(text || "")
@@ -1012,7 +1033,7 @@ export default function InternalMarkSheet() {
 
       columnsToUse.forEach(col => {
         if (col.type === "exam") {
-          const mark = findExamMarkForStudent(
+          let mark = findExamMarkForStudent(
             student,
             col.examName || col.title || col.heading,
             targetSubject,
@@ -1021,6 +1042,14 @@ export default function InternalMarkSheet() {
             targetSubjShortName,
             col.title || col.heading
           );
+          const colMax = getColMaxMark(col);
+          if (colMax !== null && mark !== "" && mark !== "AB" && mark !== "A") {
+            const numMark = Number(mark);
+            if (!isNaN(numMark)) {
+              if (numMark < 0) mark = "0";
+              else if (numMark > colMax) mark = String(colMax); // Clamp to maxMark
+            }
+          }
           row[col.colKey] = mark;
           row[col.heading] = mark;
         }
@@ -1079,6 +1108,21 @@ export default function InternalMarkSheet() {
     const matches = findMatchingClassesForExam(allFetchedClasses, candidateExam, targetCol.title || targetCol.heading);
     const matchedCls = matches[0]?.cls;
 
+    // Validate mark value against column & matched class maximum mark before saving
+    const colMax = getColMaxMark(targetCol);
+    const strVal = String(value ?? "").trim();
+    if (strVal !== "" && strVal.toUpperCase() !== "A" && strVal.toUpperCase() !== "AB") {
+      const numVal = Number(strVal);
+      if (isNaN(numVal) || numVal < 0) {
+        setInlineSyncStatus(`⚠️ Invalid mark "${strVal}". Must be non-negative, A, or AB.`);
+        return;
+      }
+      if (colMax !== null && numVal > colMax) {
+        setInlineSyncStatus(`⚠️ Max mark for ${targetCol.title || targetCol.heading} is ${colMax}! Cannot save '${strVal}'.`);
+        return; // Block save if exceeds max mark!
+      }
+    }
+
     try {
       setInlineSyncStatus(`⏳ Saving ${targetReg} = ${value} to ${matchedCls?.examName || candidateExam}...`);
       const payload = {
@@ -1131,16 +1175,36 @@ export default function InternalMarkSheet() {
     let targetStudent = null;
     let targetCol = null;
 
+    const hasAdminTemplate = Boolean(activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0);
+    const rawCols = hasAdminTemplate
+      ? activeTemplate.columns
+      : defaultMecColumns;
+    const columnsToUse = getColumnsWithKeys(rawCols);
+
+    const matchedCol = columnsToUse.find(c => c.colKey === colKeyOrHeading || c.heading === colKeyOrHeading);
+
+    // Hard Max Mark validation: NEVER allow marks exceeding column maximum mark or negative values!
+    if (matchedCol && matchedCol.type === "exam") {
+      const colMax = getColMaxMark(matchedCol);
+      const strVal = String(value ?? "").trim();
+      if (strVal !== "" && strVal.toUpperCase() !== "A" && strVal.toUpperCase() !== "AB") {
+        const numVal = Number(strVal);
+        if (!isNaN(numVal)) {
+          if (numVal < 0) {
+            setInlineSyncStatus(`⚠️ Mark cannot be negative! (Allowed: 0 to ${colMax || "max"})`);
+            return; // Block negative
+          }
+          if (colMax !== null && numVal > colMax) {
+            setInlineSyncStatus(`⚠️ Max mark for ${matchedCol.title || matchedCol.heading} is ${colMax}! Value '${strVal}' exceeds limit.`);
+            return; // Block values exceeding maximum mark!
+          }
+        }
+      }
+    }
+
     setStudentsData(prev => {
       if (!prev[studentIndex]) return prev;
       const updated = [...prev];
-      const hasAdminTemplate = Boolean(activeTemplate && activeTemplate.columns && activeTemplate.columns.length > 0);
-      const rawCols = hasAdminTemplate
-        ? activeTemplate.columns
-        : defaultMecColumns;
-      const columnsToUse = getColumnsWithKeys(rawCols);
-
-      const matchedCol = columnsToUse.find(c => c.colKey === colKeyOrHeading || c.heading === colKeyOrHeading);
       const row = { ...updated[studentIndex], [colKeyOrHeading]: value };
       if (matchedCol) {
         row[matchedCol.colKey] = value;
@@ -1156,13 +1220,13 @@ export default function InternalMarkSheet() {
     });
 
     // Record edit for manual "Save Marks" & trigger background debounced auto-save
-    if (targetCol && targetCol.type === "exam") {
+    if (matchedCol && matchedCol.type === "exam") {
       const cellTimerKey = `${studentIndex}_${colKeyOrHeading}`;
       editedCellsRef.current.set(cellTimerKey, {
         student: targetStudent,
         studentIndex,
         colKeyOrHeading,
-        targetCol,
+        targetCol: matchedCol,
         value
       });
 
@@ -1170,7 +1234,7 @@ export default function InternalMarkSheet() {
         clearTimeout(syncDebounceTimersRef.current[cellTimerKey]);
       }
       syncDebounceTimersRef.current[cellTimerKey] = setTimeout(() => {
-        syncMarkToSourceClass(targetStudent, targetCol, value);
+        syncMarkToSourceClass(targetStudent, matchedCol, value);
         delete syncDebounceTimersRef.current[cellTimerKey];
       }, 500);
     }
@@ -1189,14 +1253,28 @@ export default function InternalMarkSheet() {
     );
     const matchedCol = columnsToUse.find(c => c.colKey === colKeyOrHeading || c.heading === colKeyOrHeading);
     if (student && matchedCol && matchedCol.type === "exam") {
+      let finalVal = value;
+      const colMax = getColMaxMark(matchedCol);
+      const strVal = String(value ?? "").trim();
+      if (strVal !== "" && strVal.toUpperCase() !== "A" && strVal.toUpperCase() !== "AB") {
+        const numVal = Number(strVal);
+        if (!isNaN(numVal)) {
+          if (numVal < 0) finalVal = "0";
+          else if (colMax !== null && numVal > colMax) {
+            finalVal = String(colMax);
+            setInlineSyncStatus(`⚠️ Value capped to maximum mark: ${colMax}`);
+          }
+        }
+      }
+
       editedCellsRef.current.set(cellTimerKey, {
         student,
         studentIndex,
         colKeyOrHeading,
         targetCol: matchedCol,
-        value
+        value: finalVal
       });
-      syncMarkToSourceClass(student, matchedCol, value);
+      syncMarkToSourceClass(student, matchedCol, finalVal);
     }
   };
 
@@ -1273,6 +1351,24 @@ export default function InternalMarkSheet() {
         alert("All marks are already up to date in Database!");
         return;
       }
+
+      // Sanitize itemsToSync so none exceeds colMax or is negative
+      itemsToSync.forEach(item => {
+        const colMax = getColMaxMark(item.targetCol);
+        const strVal = String(item.value ?? "").trim();
+        if (strVal !== "" && strVal.toUpperCase() !== "A" && strVal.toUpperCase() !== "AB") {
+          const numVal = Number(strVal);
+          if (!isNaN(numVal)) {
+            if (numVal < 0) {
+              item.value = "0";
+              item.mark = "0";
+            } else if (colMax !== null && numVal > colMax) {
+              item.value = String(colMax);
+              item.mark = String(colMax);
+            }
+          }
+        }
+      });
 
       // 1. Try batch sync endpoint first
       let batchSuccess = false;
@@ -4315,6 +4411,9 @@ export default function InternalMarkSheet() {
                                             onBlur={e => handleCellBlur(globalIndex, col.colKey, e.target.value)}
                                             onFocus={e => e.target.select()}
                                             onKeyDown={e => handleCellKeyDown(e, globalIndex, editableColIdx, editableColumns.length)}
+                                            min="0"
+                                            max={getColMaxMark(col) || undefined}
+                                            title={getColMaxMark(col) ? `Max mark: ${getColMaxMark(col)}` : undefined}
                                             style={{
                                               fontWeight: isFailMark ? "bold" : "normal",
                                               color: "#000000"

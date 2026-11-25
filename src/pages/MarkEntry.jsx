@@ -956,6 +956,8 @@ export default function MarkEntry() {
 
         const newStudents = [...classData.students];
         let matchCount = 0;
+        let exceededCount = 0;
+        let invalidCount = 0;
 
         newStudents.forEach(s => {
           const regNo = (s.regNo || "").toString().trim().toLowerCase();
@@ -988,7 +990,18 @@ export default function MarkEntry() {
                   if (markVal !== "A" && markVal !== "AB") {
                     let numVal = Number(markVal);
                     if (!isNaN(numVal)) {
+                      const maxMark = Number(classData.markPerSubject);
+                      if (numVal < 0) {
+                        numVal = 0;
+                        invalidCount++;
+                      } else if (maxMark && numVal > maxMark) {
+                        numVal = maxMark; // STRICT CAPPING TO MAX MARK!
+                        exceededCount++;
+                      }
                       markVal = Math.round(numVal).toString();
+                    } else {
+                      markVal = s.marks[subIdx]; // preserve if invalid
+                      invalidCount++;
                     }
                   }
                 }
@@ -1003,7 +1016,13 @@ export default function MarkEntry() {
         setUnsavedChanges(true);
         
         let msg = `Successfully imported marks for ${matchCount} students from Excel.`;
-        if (isFallback) msg += " (Mapped marks by column order as course codes were not found in header)";
+        if (exceededCount > 0) {
+          msg += `\n\n⚠️ Notice: ${exceededCount} mark(s) exceeded the maximum allowed mark of ${classData.markPerSubject} and were strictly capped to ${classData.markPerSubject}.`;
+        }
+        if (invalidCount > 0) {
+          msg += `\n⚠️ Notice: ${invalidCount} invalid or negative mark(s) were corrected or preserved.`;
+        }
+        if (isFallback) msg += "\n(Mapped marks by column order as course codes were not found in header)";
         msg += "\n\nPlease click 'Save Marks' to save these changes to the database.";
         
         alert(msg);
