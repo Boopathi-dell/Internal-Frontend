@@ -554,21 +554,14 @@ export default function TimetableManager() {
     }
   };
 
-  // Sync staff from registered Users
-  const handleSyncUsers = async () => {
+  // Refresh Staff List from database
+  const handleRefreshStaff = async () => {
     try {
       setLoading(true);
-      await API.get("/api/users"); // fallback check
-    } catch {
-      // Proceed to sync endpoint directly
-    }
-
-    try {
-      const res = await API.post("/api/timetable/staff/sync-users");
-      showAlert(res.data.message || "Synced approved faculty successfully!");
-      fetchStaff();
+      await fetchStaff();
+      showAlert("Faculty list refreshed!");
     } catch (err) {
-      showAlert("Failed to sync faculty: " + (err.response?.data?.error || err.message), "error");
+      showAlert("Failed to refresh faculty: " + (err.response?.data?.error || err.message), "error");
     } finally {
       setLoading(false);
     }
@@ -4279,17 +4272,19 @@ export default function TimetableManager() {
               <div>
                 <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "700" }}>Faculty Master List</h3>
                 <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                  Total {staffList.length} faculty registered in {department}
+                  Total {staffList.length} faculty registered
                 </span>
               </div>
               <button 
+                type="button"
                 className="btn btn-secondary" 
-                onClick={handleSyncUsers} 
+                onClick={handleRefreshStaff} 
                 disabled={loading}
                 style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", display: "flex", alignItems: "center", gap: "6px" }}
+                title="Refresh faculty list"
               >
                 <RefreshCw size={14} />
-                <span>Sync from Users</span>
+                <span>Refresh List</span>
               </button>
             </div>
 
